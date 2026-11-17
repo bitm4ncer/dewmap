@@ -42,7 +42,7 @@ import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
-import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "./ui/icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon } from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
@@ -1705,7 +1705,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   }, [routesMode]);
   const [sheetState, setSheetState] = useState<SheetState>(() => {
     if (typeof window === "undefined") return "half";
-    return window.matchMedia("(max-width: 767px)").matches ? "peek" : "half";
+    return "half";
   });
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1736,7 +1736,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     wasMobileRef.current = isMobile;
     // Crossing the phone/tablet breakpoint must not leave a "full" sheet
     // state on desktop or a closed drawer on a phone.
-    setSheetState(isMobile ? "peek" : "half");
+    setSheetState("half");
   }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
@@ -1774,41 +1774,19 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
   }, []));
 
-  // Remember whether the user prefers the sheet at half or full when it
-  // opens from peek. Persisted to localStorage so reopening the app at
-  // a later session also restores the chosen size.
-  const [preferredOpen, setPreferredOpen] = useState<"half" | "full">(() => {
-    if (typeof window === "undefined") return "half";
-    const stored = window.localStorage.getItem("biosphere.preferredOpen");
-    return stored === "full" ? "full" : "half";
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("biosphere.preferredOpen", preferredOpen);
-  }, [preferredOpen]);
-
-  // Tab tap handling — like Apple/Google Maps. Tapping the active tab
-  // collapses the sheet to peek; tapping the other switches pane and
-  // ensures the sheet is open at the user's preferred size.
+  // Half is the default: map and panel are visible together so changes
+  // land on the map immediately. Full is an explicit option; peek is the
+  // collapsed state reached by the close button or a downward drag.
   const selectPane = (pane: SidebarPane) => {
     if (pane === activePane) {
-      snapTo(sheetState === "peek" ? preferredOpen : "peek");
+      snapTo(sheetState === "peek" ? "half" : "peek");
       return;
     }
     setActivePane(pane);
-    if (sheetState === "peek") snapTo(preferredOpen);
+    if (sheetState === "peek") snapTo("half");
   };
 
-  const toggleExpand = () => {
-    if (sheetState === "full") {
-      setPreferredOpen("half");
-      snapTo("half");
-    } else {
-      setPreferredOpen("full");
-      snapTo("full");
-    }
-  };
-
+  const toggleFull = () => snapTo(sheetState === "full" ? "half" : "full");
   const collapseToPeek = useCallback(() => snapTo("peek"), [snapTo]);
 
   useEffect(() => {
@@ -3423,7 +3401,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         <button
           type="button"
           className="hud-drawer-open"
-          onClick={() => snapTo(preferredOpen)}
+          onClick={() => snapTo("half")}
           aria-label="Open panel"
           aria-expanded={false}
         >
@@ -3489,6 +3467,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           ))}
           <button
             type="button"
+            onClick={toggleFull}
+            aria-label={sheetState === "full" ? "Shrink panel" : "Expand panel"}
+            className="sheet-expand hud-icon-btn"
+          >
+            {sheetState === "full" ? <ChevronDownIcon size={18} /> : <ChevronUpIcon size={18} />}
+          </button>
+          <button
+            type="button"
             onClick={collapseToPeek}
             aria-label="Close panel"
             className="sheet-close hud-icon-btn"
@@ -3537,44 +3523,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     : "Map"}
             </h2>
             <div className="flex items-center gap-1">
-              {isMobile && (
-                <button
-                  type="button"
-                  onClick={toggleExpand}
-                  aria-label={
-                    sheetState === "full" ? "Shrink panel" : "Expand panel"
-                  }
-                  className="hud-icon-btn"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    {sheetState === "full" ? (
-                      <>
-                        <path d="M6 2 L6 6 L2 6" />
-                        <path d="M10 2 L10 6 L14 6" />
-                        <path d="M6 14 L6 10 L2 10" />
-                        <path d="M10 14 L10 10 L14 10" />
-                      </>
-                    ) : (
-                      <>
-                        <path d="M2 6 L2 2 L6 2" />
-                        <path d="M14 6 L14 2 L10 2" />
-                        <path d="M2 10 L2 14 L6 14" />
-                        <path d="M14 10 L14 14 L10 14" />
-                      </>
-                    )}
-                  </svg>
-                </button>
-              )}
               <button
                 type="button"
                 onClick={collapseToPeek}

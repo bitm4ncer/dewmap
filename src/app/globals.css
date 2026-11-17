@@ -457,17 +457,20 @@ body {
 .hud-sheet-tab[data-active="true"] svg { color: var(--accent); }
 
 /* Compact close target inside the mobile tab row. */
-.sheet-close {
+.sheet-close,
+.sheet-expand {
   flex: 0 0 40px;
   width: 40px;
   height: 40px;
   border-radius: 11px;
   color: var(--ink-mute);
 }
-.sheet-close:hover { color: var(--ink); background: var(--surf-2); }
+.sheet-close:hover,
+.sheet-expand:hover { color: var(--ink); background: var(--surf-2); }
 
 @media (max-width: 767px) {
-  .hud-bottom-sheet[data-sheet-state="peek"] .sheet-close { display: none; }
+  .hud-bottom-sheet[data-sheet-state="peek"] .sheet-close,
+  .hud-bottom-sheet[data-sheet-state="peek"] .sheet-expand { display: none; }
   /* A full-sheet panel owns the screen; the search bar would sit
      half-behind its top edge. */
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .ui-topbar {
