@@ -45,7 +45,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     const vh = window.visualViewport?.height ?? window.innerHeight;
     const topbar =
       document.querySelector<HTMLElement>(".ui-topbar")?.offsetHeight ?? 56;
-    const peek = 110;
+    const peek = 78;
     return {
       peek,
       half: Math.round(vh * 0.48),

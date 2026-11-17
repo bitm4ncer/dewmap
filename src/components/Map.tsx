@@ -3494,8 +3494,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           inert={!sidebarOpen}
           aria-hidden={!sidebarOpen}
         >
-          {/* Pane signature tape — a 3px identity mark, not a theme. */}
-          <div className="px-4 pt-3">
+          {/* Pane signature tape — desktop only; phones use the tab tint. */}
+          <div className="hidden px-4 pt-3 md:block">
             <div className="pane-tape" aria-hidden />
           </div>
 
@@ -3517,7 +3517,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             </nav>
           </div>
 
-          <div className="ui-panel-header">
+          <div className="ui-panel-header hidden md:flex">
             <h2 className="ui-panel-title">
               {activePane === "hiking"
                 ? "Routes"
