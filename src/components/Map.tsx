@@ -42,7 +42,7 @@ import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
-import { ChevronLeftIcon, ChevronRightIcon } from "./ui/icons";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
@@ -3487,6 +3487,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               {p.icon}
             </PaneToggle>
           ))}
+          <button
+            type="button"
+            onClick={collapseToPeek}
+            aria-label="Close panel"
+            className="sheet-close hud-icon-btn"
+          >
+            <CloseIcon size={18} />
+          </button>
         </nav>
 
         {/* Panel body — on desktop this is the full-height drawer. */}

@@ -382,7 +382,12 @@ body {
 
   .hud-bottom-sheet[data-sheet-state="peek"] { height: var(--hud-peek-h); }
   .hud-bottom-sheet[data-sheet-state="half"] { height: 48dvh; }
-  .hud-bottom-sheet[data-sheet-state="full"] { height: calc(min(100dvh, var(--app-vh, 100dvh)) - var(--topbar-h)); }
+  .hud-bottom-sheet[data-sheet-state="full"] {
+    height: 100dvh;
+    padding-top: var(--safe-top);
+    border: 0;
+    border-radius: 0;
+  }
 
   .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
 }
@@ -450,6 +455,27 @@ body {
 }
 
 .hud-sheet-tab[data-active="true"] svg { color: var(--accent); }
+
+/* Compact close target inside the mobile tab row. */
+.sheet-close {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  color: var(--ink-mute);
+}
+.sheet-close:hover { color: var(--ink); background: var(--surf-2); }
+
+@media (max-width: 767px) {
+  .hud-bottom-sheet[data-sheet-state="peek"] .sheet-close { display: none; }
+  /* A full-sheet panel owns the screen; the search bar would sit
+     half-behind its top edge. */
+  body:has(.hud-bottom-sheet[data-sheet-state="full"]) .ui-topbar {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
 
 /* Desktop panel tab row — same content, horizontal pill shape. */
 .hud-panel-tabs {
