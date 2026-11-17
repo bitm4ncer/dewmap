@@ -14,10 +14,10 @@ import {
 export type RoutesMode = "walk" | "bike" | "car" | "transit";
 
 const MODES: { id: RoutesMode; label: string }[] = [
+  { id: "transit", label: "Train" },
   { id: "walk", label: "Walk" },
   { id: "bike", label: "Bike" },
   { id: "car", label: "Car" },
-  { id: "transit", label: "Train" },
 ];
 
 function defaultProfileFor(mode: "walk" | "bike"): BrouterProfile {
