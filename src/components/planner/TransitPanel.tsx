@@ -31,6 +31,7 @@ export function TransitPanel({ mapRef }: Props) {
   const arriveBy = useTransit((s) => s.arriveBy);
   const maxTransfers = useTransit((s) => s.maxTransfers);
   const wheelchair = useTransit((s) => s.wheelchair);
+  const cityFilter = useTransit((s) => s.cityFilter);
   const journeys = useTransit((s) => s.journeys);
   const selectedId = useTransit((s) => s.selectedId);
   const phase = useTransit((s) => s.phase);
@@ -42,6 +43,7 @@ export function TransitPanel({ mapRef }: Props) {
   const setArriveBy = useTransit((s) => s.setArriveBy);
   const setMaxTransfers = useTransit((s) => s.setMaxTransfers);
   const setWheelchair = useTransit((s) => s.setWheelchair);
+  const setCityFilter = useTransit((s) => s.setCityFilter);
   const setJourneys = useTransit((s) => s.setJourneys);
   const selectJourney = useTransit((s) => s.selectJourney);
   const setPhase = useTransit((s) => s.setPhase);
@@ -59,6 +61,9 @@ export function TransitPanel({ mapRef }: Props) {
     lat: p.lat,
     lon: p.lon,
     id: p.id,
+    city: p.city,
+    kind: p.kind,
+    station: p.station,
   });
 
   const search = useCallback(async () => {
@@ -143,8 +148,11 @@ export function TransitPanel({ mapRef }: Props) {
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <PlacePicker
                 placeholder="From station or address"
-                kind="stop"
-                selectedLabel={from?.name}
+                kind="transit"
+                cityFilter={cityFilter}
+                selectedLabel={
+                  from ? `${from.name}${from.city ? ` · ${from.city}` : ""}` : undefined
+                }
                 onPick={(p) => setFrom(toPlace(p))}
                 getNearby={() => {
                   const m = mapRef.current;
@@ -155,8 +163,11 @@ export function TransitPanel({ mapRef }: Props) {
               />
               <PlacePicker
                 placeholder="To station or address"
-                kind="stop"
-                selectedLabel={to?.name}
+                kind="transit"
+                cityFilter={cityFilter}
+                selectedLabel={
+                  to ? `${to.name}${to.city ? ` · ${to.city}` : ""}` : undefined
+                }
                 onPick={(p) => setTo(toPlace(p))}
                 getNearby={() => {
                   const m = mapRef.current;
@@ -176,14 +187,63 @@ export function TransitPanel({ mapRef }: Props) {
             </button>
           </div>
 
+          <div className="flex items-center gap-2">
+            <span className="hud-label w-10 shrink-0">Stadt</span>
+            <input
+              type="text"
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              placeholder="Stadt filtern (optional)"
+              aria-label="Filter results by city"
+              className="ui-input !min-h-10"
+              spellCheck={false}
+            />
+          </div>
+
           {(from || to) && (
-            <div className="flex flex-wrap gap-2 text-[11.5px]">
+            <div className="flex flex-col gap-1.5 text-[11.5px]">
               {from && (
-                <span className="ui-badge" data-tone="accent">
-                  A · {from.name}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="ui-badge" data-tone="accent">
+                    A · {from.name}
+                  </span>
+                  {from.city && <span className="ui-badge">{from.city}</span>}
+                  {from.kind === "address" && from.station && (
+                    <span className="text-[color:var(--ink-dim)]">
+                      Nearest station: {from.station.name}
+                      {from.station.city ? `, ${from.station.city}` : ""}
+                      {from.station.distanceM != null
+                        ? ` (${from.station.distanceM} m)`
+                        : ""}
+                    </span>
+                  )}
+                  {from.kind === "address" && !from.station && (
+                    <span className="text-[color:var(--warn)]">
+                      No station found nearby; routing from the address.
+                    </span>
+                  )}
+                </div>
               )}
-              {to && <span className="ui-badge">B · {to.name}</span>}
+              {to && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="ui-badge">B · {to.name}</span>
+                  {to.city && <span className="ui-badge">{to.city}</span>}
+                  {to.kind === "address" && to.station && (
+                    <span className="text-[color:var(--ink-dim)]">
+                      Nearest station: {to.station.name}
+                      {to.station.city ? `, ${to.station.city}` : ""}
+                      {to.station.distanceM != null
+                        ? ` (${to.station.distanceM} m)`
+                        : ""}
+                    </span>
+                  )}
+                  {to.kind === "address" && !to.station && (
+                    <span className="text-[color:var(--warn)]">
+                      No station found nearby; routing to the address.
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -463,11 +523,13 @@ function JourneyDetail({ journey }: { journey: RoutePlan }) {
                   </div>
                   <div className="truncate text-[11.5px] text-[color:var(--ink-dim)]">
                     {leg.from.name}
+                    {leg.from.city ? `, ${leg.from.city}` : ""}
                     {leg.from.platform ? ` · ${leg.from.platform}` : ""}
                   </div>
                   {leg.mode !== "walk" && (
                     <div className="truncate text-[11.5px] text-[color:var(--ink-dim)]">
                       to {leg.to.name}
+                      {leg.to.city ? `, ${leg.to.city}` : ""}
                       {leg.to.platform ? ` · ${leg.to.platform}` : ""}
                       {leg.headsign ? ` · ${leg.headsign}` : ""}
                     </div>

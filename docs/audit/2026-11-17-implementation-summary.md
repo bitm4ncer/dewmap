@@ -17,7 +17,9 @@ BiosphereOne is now a mobile-first navigation and exploration app:
 - **Train / local transit** — Transitous/MOTIS 2 routing with depart/arrive
   times, transfers, platforms, line/agency/headsign, intermediate stops,
   real-time flags, delays and cancellations where the operator publishes
-  them.
+  them. Address search is supported: a geocoded address resolves to the
+  nearest MOTIS stop and shows the walking distance. Every stop result and
+  leg carries its city; an optional city field filters stop/address search.
 - **Navigation mode** — live GPS or simulation, next maneuver, ETA,
   remaining time/distance, voice guidance, off-route warning, wake lock,
   course/north follow, transit leg guidance.

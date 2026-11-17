@@ -6,6 +6,9 @@ export interface GeocodeResult {
   extent?: [number, number, number, number];
   type?: string;
   category?: string;
+  city?: string;
+  country?: string;
+  postcode?: string;
 }
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
@@ -99,6 +102,9 @@ export async function geocode(
       extent: p.extent,
       type: p.type,
       category: p.osm_value ?? p.osm_key,
+      city: p.city ?? p.district,
+      country: p.country,
+      postcode: p.postcode,
     } satisfies GeocodeResult;
   });
 }

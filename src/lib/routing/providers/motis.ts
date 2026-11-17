@@ -36,6 +36,7 @@ export interface MotisStop {
   modes: string[];
   country?: string;
   areas: string[];
+  city?: string;
 }
 
 function degreeDistance(a: [number, number], b: LatLng): number {
@@ -111,12 +112,23 @@ function platformOf(stop: Record<string, unknown> | undefined): string | undefin
     ?? stringOrNumber(stop.platform);
 }
 
+function cityOf(record: Record<string, unknown> | undefined): string | undefined {
+  if (!record) return undefined;
+  const areas = readArray(record, "areas").filter(isRecord);
+  const preferred =
+    areas.find((a) => a.default === true && readString(a, "name")) ??
+    areas.find((a) => readNumber(a, "adminLevel") === 8 && readString(a, "name")) ??
+    areas.find((a) => readNumber(a, "adminLevel") === 6 && readString(a, "name"));
+  return preferred ? readString(preferred, "name") : undefined;
+}
+
 function parseStop(value: unknown): TransitStopRef {
   const stop = isRecord(value) ? value : undefined;
   return {
     name: readString(stop, "name") ?? "Unknown stop",
     lat: readNumber(stop, "lat") ?? 0,
     lon: readNumber(stop, "lon") ?? 0,
+    ...(cityOf(stop) ? { city: cityOf(stop) } : {}),
     ...(platformOf(stop) ? { platform: platformOf(stop) } : {}),
     ...(readString(stop, "stopId")
       ? { stopId: readString(stop, "stopId") }
@@ -497,6 +509,7 @@ export async function geocodeStops(
       lon,
       type,
       modes,
+      ...(cityOf(value) ? { city: cityOf(value) } : {}),
       ...(readString(value, "country")
         ? { country: readString(value, "country") }
         : {}),

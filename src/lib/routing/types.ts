@@ -60,6 +60,8 @@ export interface TransitStopRef {
   name: string;
   lat: number;
   lon: number;
+  /** City / municipality for disambiguating similarly named stops. */
+  city?: string;
   platform?: string;
   stopId?: string;
 }

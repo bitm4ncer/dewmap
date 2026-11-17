@@ -10,6 +10,18 @@ export interface TransitPlace {
   lat: number;
   lon: number;
   id?: string;
+  city?: string;
+  /** "address" means lat/lon belongs to an address; the nearest stop is
+   * resolved separately and shown in the UI. */
+  kind?: "address" | "stop";
+  /** Nearest stop for an address origin/destination. */
+  station?: {
+    name: string;
+    lat: number;
+    lon: number;
+    city?: string;
+    distanceM?: number;
+  };
 }
 
 interface TransitState {
@@ -20,6 +32,7 @@ interface TransitState {
   arriveBy: boolean;
   maxTransfers: number;
   wheelchair: boolean;
+  cityFilter: string;
   journeys: RoutePlan[];
   selectedId: string | null;
   phase: PlannerPhase;
@@ -32,6 +45,7 @@ interface TransitState {
   setArriveBy: (v: boolean) => void;
   setMaxTransfers: (n: number) => void;
   setWheelchair: (v: boolean) => void;
+  setCityFilter: (v: string) => void;
   setJourneys: (j: RoutePlan[]) => void;
   selectJourney: (id: string | null) => void;
   setPhase: (p: PlannerPhase) => void;
@@ -57,6 +71,7 @@ export const useTransit = create<TransitState>()(
       arriveBy: false,
       maxTransfers: 3,
       wheelchair: false,
+      cityFilter: "",
       journeys: [],
       selectedId: null,
       phase: { kind: "idle" },
@@ -79,6 +94,7 @@ export const useTransit = create<TransitState>()(
       setMaxTransfers: (maxTransfers) =>
         set({ maxTransfers: Math.max(0, Math.min(5, Math.round(maxTransfers))) }),
       setWheelchair: (wheelchair) => set({ wheelchair }),
+      setCityFilter: (cityFilter) => set({ cityFilter }),
       setJourneys: (journeys) =>
         set((s) => {
           const keep =
@@ -114,6 +130,7 @@ export const useTransit = create<TransitState>()(
         arriveBy: s.arriveBy,
         maxTransfers: s.maxTransfers,
         wheelchair: s.wheelchair,
+        cityFilter: s.cityFilter,
       }),
     },
   ),

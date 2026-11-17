@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { geocode, prettyCategory } from "@/lib/geocode";
 import { geocodeStops, type MotisStop } from "@/lib/routing";
+import { findNearestStation } from "@/lib/planner/nearestStation";
 
 export interface PickedPlace {
   name: string;
@@ -10,19 +11,37 @@ export interface PickedPlace {
   lon: number;
   id?: string;
   sub?: string;
+  city?: string;
+  kind?: "address" | "stop";
+  station?: {
+    name: string;
+    lat: number;
+    lon: number;
+    city?: string;
+    distanceM?: number;
+  };
 }
 
 interface Props {
   placeholder: string;
-  kind: "address" | "stop";
+  kind: "address" | "stop" | "transit";
   onPick: (place: PickedPlace) => void;
   getNearby?: () => [number, number] | undefined;
   autoFocus?: boolean;
   /** Controlled display label for an already-picked place. */
   selectedLabel?: string;
+  /** Optional free-text city filter applied to every result. */
+  cityFilter?: string;
 }
 
 type Result = PickedPlace;
+
+function normalize(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
 
 export function PlacePicker({
   placeholder,
@@ -31,6 +50,7 @@ export function PlacePicker({
   getNearby,
   autoFocus,
   selectedLabel,
+  cityFilter,
 }: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
@@ -41,10 +61,17 @@ export function PlacePicker({
   const abortRef = useRef<AbortController | null>(null);
   const skipSearchRef = useRef(false);
   const lastSelectedRef = useRef<string | undefined>(undefined);
+  const mountedRef = useRef(true);
   const getNearbyRef = useRef(getNearby);
   useEffect(() => {
     getNearbyRef.current = getNearby;
   }, [getNearby]);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (skipSearchRef.current) {
@@ -65,37 +92,73 @@ export function PlacePicker({
     abortRef.current?.abort();
     abortRef.current = ctrl;
     setBusy(true);
+    const cityQuery = cityFilter?.trim() ?? "";
+    const query = cityQuery ? `${text} ${cityQuery}` : text;
     const timer = window.setTimeout(async () => {
       try {
-        if (kind === "stop") {
-          const stops = await geocodeStops(text, ctrl.signal, 8);
-          if (ctrl.signal.aborted) return;
-          setResults(
-            stops.map((s: MotisStop) => ({
-              name: s.name,
-              lat: s.lat,
-              lon: s.lon,
-              id: s.id,
-              sub: s.modes?.slice(0, 3).join(" · "),
-            })),
-          );
-        } else {
-          const places = await geocode(text, {
-            limit: 8,
-            signal: ctrl.signal,
-            nearby: getNearbyRef.current?.(),
-          });
-          if (ctrl.signal.aborted) return;
-          setResults(
-            places.map((p) => ({
-              name: p.name || p.label,
-              lat: p.coordinates[1],
-              lon: p.coordinates[0],
-              id: p.id,
-              sub: prettyCategory(p.category) ?? p.label,
-            })),
-          );
-        }
+        const [stopRes, placeRes] = await Promise.allSettled([
+          kind === "address"
+            ? Promise.resolve<MotisStop[]>([])
+            : geocodeStops(query, ctrl.signal, 8),
+          kind === "stop"
+            ? Promise.resolve([])
+            : geocode(query, {
+                limit: 8,
+                signal: ctrl.signal,
+                nearby: getNearbyRef.current?.(),
+              }),
+        ]);
+        if (ctrl.signal.aborted) return;
+
+        const stops: Result[] =
+          stopRes.status === "fulfilled"
+            ? stopRes.value.map((s) => ({
+                name: s.name,
+                lat: s.lat,
+                lon: s.lon,
+                id: s.id,
+                city: s.city,
+                kind: "stop" as const,
+                sub: s.modes?.slice(0, 3).join(" · "),
+              }))
+            : [];
+
+        const addresses: Result[] =
+          placeRes.status === "fulfilled"
+            ? placeRes.value.map((p) => ({
+                name: p.name || p.label,
+                lat: p.coordinates[1],
+                lon: p.coordinates[0],
+                id: p.id,
+                city: p.city,
+                kind: "address" as const,
+                sub: prettyCategory(p.category) ?? p.label,
+              }))
+            : [];
+
+        const merged =
+          kind === "transit"
+            ? [...stops.slice(0, 4), ...addresses.slice(0, 5)]
+            : kind === "stop"
+              ? stops.slice(0, 8)
+              : addresses.slice(0, 8);
+
+        const seen = new Set<string>();
+        const deduped = merged.filter((r) => {
+          const key = `${normalize(r.name)}|${normalize(r.city ?? "")}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        const filter = normalize(cityFilter?.trim() ?? "");
+        setResults(
+          filter
+            ? deduped.filter((r) =>
+                normalize(`${r.city ?? ""} ${r.sub ?? ""}`).includes(filter),
+              )
+            : deduped,
+        );
         setOpen(true);
         setHighlight(0);
       } catch (err) {
@@ -110,7 +173,7 @@ export function PlacePicker({
       window.clearTimeout(timer);
       ctrl.abort();
     };
-  }, [q, kind]);
+  }, [q, kind, cityFilter]);
 
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
@@ -127,14 +190,38 @@ export function PlacePicker({
     skipSearchRef.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect parent selection in the field
     setQ(selectedLabel);
+    setOpen(false);
+    setResults([]);
   }, [selectedLabel]);
 
-  function choose(r: Result) {
-    onPick(r);
+  async function choose(r: Result) {
     skipSearchRef.current = true;
     setQ(r.name);
     setOpen(false);
     setResults([]);
+
+    if (kind === "transit" && r.kind === "address") {
+      setBusy(true);
+      const station = await findNearestStation(r.lat, r.lon, r.name, r.city);
+      if (!mountedRef.current) return;
+      setBusy(false);
+      onPick({
+        ...r,
+        city: r.city ?? station?.city,
+        station: station
+          ? {
+              name: station.name,
+              lat: station.lat,
+              lon: station.lon,
+              city: station.city,
+              distanceM: Math.round(station.distanceM),
+            }
+          : undefined,
+      });
+      return;
+    }
+
+    onPick(r);
   }
 
   return (
@@ -156,7 +243,7 @@ export function PlacePicker({
           }
           if (e.key === "Enter" && results[highlight]) {
             e.preventDefault();
-            choose(results[highlight]);
+            void choose(results[highlight]);
           }
         }}
         placeholder={placeholder}
@@ -174,13 +261,17 @@ export function PlacePicker({
         <ul
           role="listbox"
           aria-label={placeholder}
-          className="ui-search-dropdown max-h-64 overflow-y-auto p-1"
+          className="ui-search-dropdown max-h-72 overflow-y-auto p-1"
         >
           {results.map((r, i) => (
-            <li key={`${r.id ?? r.name}-${i}`} role="option" aria-selected={i === highlight}>
+            <li
+              key={`${r.id ?? r.name}-${i}`}
+              role="option"
+              aria-selected={i === highlight}
+            >
               <button
                 type="button"
-                onClick={() => choose(r)}
+                onClick={() => void choose(r)}
                 onMouseEnter={() => setHighlight(i)}
                 data-active={i === highlight}
                 className="ui-search-row rounded-[10px]"
@@ -189,12 +280,14 @@ export function PlacePicker({
                   <span className="block truncate text-[13px] font-semibold text-[color:var(--ink)]">
                     {r.name}
                   </span>
-                  {r.sub && (
-                    <span className="block truncate text-[11.5px] text-[color:var(--ink-dim)]">
-                      {r.sub}
-                    </span>
-                  )}
+                  <span className="block truncate text-[11.5px] text-[color:var(--ink-dim)]">
+                    {r.kind === "stop" ? "Station" : "Address"}
+                    {r.sub ? ` · ${r.sub}` : ""}
+                  </span>
                 </span>
+                {r.city && (
+                  <span className="ui-badge shrink-0">{r.city}</span>
+                )}
               </button>
             </li>
           ))}

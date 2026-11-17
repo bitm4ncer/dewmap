@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local Claude helper state (keep launch.json checked in, ignore per-user overrides)
 .claude/settings.local.json
+
+# Local git worktrees
+.worktrees/
