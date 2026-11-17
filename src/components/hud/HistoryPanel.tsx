@@ -19,7 +19,7 @@ interface HistoryPanelProps {
   onLandmarksOpacityChange: (o: number) => void;
 }
 
-function ToggleHeader({
+function Switch({
   label,
   on,
   onChange,
@@ -29,22 +29,17 @@ function ToggleHeader({
   onChange: (on: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <h3 className="text-[13px] font-semibold text-[color:var(--ink)]">
-        {label}
-      </h3>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-label={`${label} on/off`}
-        onClick={() => onChange(!on)}
-        className="hud-switch"
-        data-on={on}
-      >
-        <span className="hud-switch-thumb" aria-hidden />
-      </button>
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`${label} on/off`}
+      onClick={() => onChange(!on)}
+      className="hud-switch"
+      data-on={on}
+    >
+      <span className="hud-switch-thumb" aria-hidden />
+    </button>
   );
 }
 
@@ -65,31 +60,46 @@ export function HistoryPanel(props: HistoryPanelProps) {
       )}
 
       <HudPanel>
-        <div className="flex flex-col gap-2.5">
-          <ToggleHeader
-            label="Timeline Map"
-            on={props.mapOn}
-            onChange={props.onMapOnChange}
-          />
-          <p className="text-[11px] leading-snug text-[color:var(--ink-dim)]">
-            Replaces the basemap with OpenHistoricalMap&apos;s sepia
-            historical style for the chosen year. Drag the Year slider
-            above to travel through time.
-          </p>
+        <div className="ui-section">
+          <span className="ui-kicker">Time travel</span>
+          <div className="ui-row">
+            <div className="ui-row-main">
+              <div className="ui-row-title">Historical map</div>
+              <div className="ui-row-sub">
+                Replaces the basemap with OpenHistoricalMap&apos;s sepia
+                historical style for the chosen year.
+              </div>
+            </div>
+            <Switch
+              label="Historical map"
+              on={props.mapOn}
+              onChange={props.onMapOnChange}
+            />
+          </div>
         </div>
       </HudPanel>
 
       <HudPanel>
-        <div className="flex flex-col gap-2.5">
-          <ToggleHeader
-            label="Historic Landmarks"
-            on={props.landmarksOn}
-            onChange={props.onLandmarksOnChange}
-          />
+        <div className="ui-section">
+          <span className="ui-kicker">Landmarks</span>
+          <div className="ui-row">
+            <div className="ui-row-main">
+              <div className="ui-row-title">Historic sites</div>
+              <div className="ui-row-sub">
+                Castles, ruins, monuments, archaeological sites and
+                battlefields from OSM and Wikidata.
+              </div>
+            </div>
+            <Switch
+              label="Historic landmarks"
+              on={props.landmarksOn}
+              onChange={props.onLandmarksOnChange}
+            />
+          </div>
 
           {props.landmarksOn && (
-            <div className="flex items-center gap-2">
-              <span className="hud-label w-12 shrink-0">Opacity</span>
+            <div className="flex items-center gap-3">
+              <span className="hud-label w-14 shrink-0">Opacity</span>
               <input
                 type="range"
                 min={0}
@@ -105,21 +115,20 @@ export function HistoryPanel(props: HistoryPanelProps) {
                     props.landmarksOpacity * 100,
                   )}%`,
                 }}
-                aria-label="Historic Landmarks opacity"
+                aria-label="Historic landmarks opacity"
               />
-              <span className="hud-mono w-9 shrink-0 text-right text-[10px] text-[color:var(--ink-dim)]">
+              <span className="hud-mono w-10 shrink-0 text-right text-[12px] text-[color:var(--ink-dim)]">
                 {Math.round(props.landmarksOpacity * 100)}%
               </span>
             </div>
           )}
 
-          <p className="text-[11px] leading-snug text-[color:var(--ink-dim)]">
-            <span style={{ color: "#ff2d92" }}>●</span> Wikidata (named,
-            dated, links to Wikipedia){" "}
-            <span style={{ color: "#22d3ee" }}>●</span> OpenStreetMap{" "}
-            <span className="hud-mono">historic=*</span> (castles, ruins,
-            archaeological sites, monuments &amp; battlefields). Tap a
-            marker for a Wikipedia summary.
+          <p className="text-[13px] leading-relaxed text-[color:var(--ink-dim)]">
+            <span style={{ color: "var(--landmark-wikidata)" }}>●</span>{" "}
+            Wikidata (named, dated, links to Wikipedia){" "}
+            <span style={{ color: "var(--landmark-osm)" }}>●</span>{" "}
+            OpenStreetMap <span className="hud-mono">historic=*</span>. Tap a
+            marker for a summary.
           </p>
         </div>
       </HudPanel>

@@ -10,10 +10,11 @@ export interface ProcessParams {
   height: number;
   accessToken: string;
   evalscript?: string;
+  signal?: AbortSignal;
 }
 
 export async function fetchFrame(params: ProcessParams): Promise<Blob> {
-  const { bbox, from, to, width, height, accessToken, evalscript } = params;
+  const { bbox, from, to, width, height, accessToken, evalscript, signal } = params;
 
   const body = {
     input: {
@@ -47,6 +48,7 @@ export async function fetchFrame(params: ProcessParams): Promise<Blob> {
       Accept: "image/png",
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) {

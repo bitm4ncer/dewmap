@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,15 +26,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#080a06",
+  themeColor: "#0e0f0c",
   width: "device-width",
   initialScale: 1,
-  // Disable browser-level pinch zoom of the page itself; MapLibre handles
-  // its own pinch-zoom on the map element. Without this, two-finger gestures
-  // sometimes zoom the page chrome instead of the map on iOS Safari.
-  maximumScale: 1,
-  userScalable: false,
+  // Keep page zoom available (WCAG 1.4.4); MapLibre owns gestures on the
+  // map canvas, so its pinch-zoom still works.
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({
@@ -55,8 +56,9 @@ export default function RootLayout({
         */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
-      <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100">
+      <body className="min-h-full flex flex-col bg-[color:var(--bg)] text-[color:var(--ink)]">
         {children}
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

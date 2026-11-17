@@ -46,6 +46,7 @@ export interface DayOverlayOptions {
   accessToken: string;
   date: string;
   maxPixelsPerSide?: number;
+  signal?: AbortSignal;
 }
 
 export async function fetchDayOverlay({
@@ -53,6 +54,7 @@ export async function fetchDayOverlay({
   accessToken,
   date,
   maxPixelsPerSide = 2048,
+  signal,
 }: DayOverlayOptions): Promise<LatestOverlayResult> {
   const day = date.slice(0, 10);
   const fromIso = `${day}T00:00:00Z`;
@@ -65,6 +67,7 @@ export async function fetchDayOverlay({
     width,
     height,
     accessToken,
+    signal,
   });
   return { blob, from: fromIso, to: toIso, bbox, width, height };
 }

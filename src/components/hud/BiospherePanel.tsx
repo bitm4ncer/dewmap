@@ -304,7 +304,7 @@ function BiosphereLayerCard({
     <HudPanel>
       <div className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[13px] font-semibold text-[color:var(--ink)]">
+          <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
             {label}
           </h3>
           <button
@@ -334,7 +334,7 @@ function BiosphereLayerCard({
               style={{ ["--hud-fill" as string]: `${Math.round(opacity * 100)}%` }}
               aria-label={`${label} opacity`}
             />
-            <span className="hud-mono w-9 shrink-0 text-right text-[10px] text-[color:var(--ink-dim)]">
+            <span className="hud-mono w-9 shrink-0 text-right text-[11.5px] text-[color:var(--ink-dim)]">
               {Math.round(opacity * 100)}%
             </span>
           </div>
@@ -342,7 +342,7 @@ function BiosphereLayerCard({
 
         {extras}
 
-        <p className="text-[11px] leading-snug text-[color:var(--ink-dim)]">
+        <p className="text-[12px] leading-snug text-[color:var(--ink-dim)]">
           {caption}
         </p>
 
@@ -350,7 +350,7 @@ function BiosphereLayerCard({
         {swatches && on && <SwatchGrid spec={swatches} />}
 
         {status && (
-          <p className="hud-mono text-[10px] text-[color:var(--ink-mute)]">
+          <p className="hud-mono text-[11.5px] text-[color:var(--ink-mute)]">
             {status}
           </p>
         )}
@@ -367,13 +367,13 @@ function LegendBar({ spec }: { spec: LegendSpec }) {
         style={{ background: spec.gradient }}
         aria-hidden
       />
-      <div className="flex justify-between text-[10px] text-[color:var(--ink-dim)]">
+      <div className="flex justify-between text-[11.5px] text-[color:var(--ink-dim)]">
         <span>{spec.minLabel}</span>
         {spec.midLabel && <span>{spec.midLabel}</span>}
         <span>{spec.maxLabel}</span>
       </div>
       {spec.unit && (
-        <span className="hud-mono text-[10px] text-[color:var(--ink-mute)]">
+        <span className="hud-mono text-[11.5px] text-[color:var(--ink-mute)]">
           {spec.unit}
         </span>
       )}
@@ -392,14 +392,14 @@ function SwatchGrid({ spec }: { spec: SwatchSpec }) {
               style={{ backgroundColor: s.color }}
               aria-hidden
             />
-            <span className="text-[10px] text-[color:var(--ink-dim)]">
+            <span className="text-[11.5px] text-[color:var(--ink-dim)]">
               {s.label}
             </span>
           </div>
         ))}
       </div>
       {spec.unit && (
-        <span className="hud-mono text-[10px] text-[color:var(--ink-mute)]">
+        <span className="hud-mono text-[11.5px] text-[color:var(--ink-mute)]">
           {spec.unit}
         </span>
       )}

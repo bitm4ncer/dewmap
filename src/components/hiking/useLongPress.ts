@@ -47,6 +47,8 @@ export function useLongPress(
     let activePointerId: number | null = null;
     /** Set to true when long-press fires; consumed by the next click. */
     let suppressNextClick = false;
+    /** Safety net: touch long-press often emits no click at all. */
+    let suppressReset: number | null = null;
 
     const clearTimer = () => {
       if (timer != null) {
@@ -70,11 +72,16 @@ export function useLongPress(
       clearTimer();
       timer = window.setTimeout(() => {
         if (activePointerId == null) return;
+        if (suppressReset != null) window.clearTimeout(suppressReset);
+        suppressNextClick = true;
+        suppressReset = window.setTimeout(() => {
+          suppressNextClick = false;
+          suppressReset = null;
+        }, 900);
         const rect = canvas.getBoundingClientRect();
         const px = startX - rect.left;
         const py = startY - rect.top;
         const lngLat = map.unproject([px, py]);
-        suppressNextClick = true;
         if (vibrate && typeof navigator !== "undefined" && navigator.vibrate) {
           try {
             navigator.vibrate(40);
@@ -131,6 +138,7 @@ export function useLongPress(
 
     return () => {
       cancel();
+      if (suppressReset != null) window.clearTimeout(suppressReset);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", onPointerEnd);

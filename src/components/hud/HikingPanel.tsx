@@ -22,14 +22,18 @@ import {
 } from "@/components/hiking/useHikingLayers";
 import { ElevationChart } from "@/components/hiking/ElevationChart";
 import { geocode, prettyCategory, type GeocodeResult } from "@/lib/geocode";
+import { useNavigation } from "@/lib/navigation/store";
+import { deriveBrouterManeuvers, formatDuration, type RoutePlan } from "@/lib/routing";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
+  /** When the Routes panel owns the Walk/Bike switch, hide the inner one. */
+  hideModeSwitch?: boolean;
 }
 
 const ROUTE_DEBOUNCE_MS = 200;
 
-export function HikingPanel({ mapRef }: Props) {
+export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
   const waypoints = useHiking((s) => s.waypoints);
   const roundTrip = useHiking((s) => s.roundTrip);
   const profile = useHiking((s) => s.profile);
@@ -53,8 +57,10 @@ export function HikingPanel({ mapRef }: Props) {
   const unfinalize = useHiking((s) => s.unfinalize);
   const setPhase = useHiking((s) => s.setPhase);
   const setNotice = useHiking((s) => s.setNotice);
+  const startNavigation = useNavigation((s) => s.start);
 
   const abortRef = useRef<AbortController | null>(null);
+  const lastFittedIdRef = useRef<string | null>(null);
 
   // Activate hiking layers as long as the panel is mounted.
   useEffect(() => {
@@ -138,12 +144,17 @@ export function HikingPanel({ mapRef }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waypoints, roundTrip, profile, finalized]);
 
-  // Fly to the selected route once it is computed.
+  // Fly to the selected route once per explicit selection. Scoring and
+  // streaming update `candidates` repeatedly; refitting on every update
+  // would yank the camera three or four times per plan.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !selectedCandidateId) return;
+    if (lastFittedIdRef.current === selectedCandidateId) return;
+    if (map.isMoving()) return;
     const cand = candidates.find((c) => c.id === selectedCandidateId);
     if (!cand || cand.coordinates.length < 2) return;
+    lastFittedIdRef.current = selectedCandidateId;
     let south = Infinity;
     let west = Infinity;
     let north = -Infinity;
@@ -220,6 +231,28 @@ export function HikingPanel({ mapRef }: Props) {
     ? 0
     : Math.max(0, candidates.length - 1);
 
+  const navPlan = useMemo<RoutePlan | null>(() => {
+    if (!selectedCand) return null;
+    return {
+      id: selectedCand.id,
+      mode: profileMode(selectedCand.profile as BrouterProfile),
+      provider: "brouter",
+      profile: selectedCand.profile,
+      distanceKm: selectedCand.distanceKm,
+      durationMin: selectedCand.durationMin,
+      ascentM: selectedCand.ascentM,
+      descentM: selectedCand.descentM,
+      coordinates: selectedCand.coordinates,
+      maneuvers: deriveBrouterManeuvers(
+        selectedCand.coordinates,
+        selectedCand.durationMin * 60,
+      ),
+      summary: `${selectedCand.distanceKm.toFixed(1)} km · ${Math.round(
+        selectedCand.durationMin,
+      )} min`,
+    };
+  }, [selectedCand]);
+
   return (
     <div className="flex flex-col gap-3">
       {/* Route summary card */}
@@ -236,7 +269,7 @@ export function HikingPanel({ mapRef }: Props) {
       <HudPanel label={`Waypoints · ${waypoints.length}`}>
         <div className="flex flex-col gap-2">
           {waypoints.length === 0 ? (
-            <p className="text-[11px] text-[color:var(--hud-text-muted)]">
+            <p className="text-[12px] text-[color:var(--hud-text-muted)]">
               Long-press the map to drop a waypoint, search by name, use GPS,
               or tap a station when Rail · Lines is active.
             </p>
@@ -264,7 +297,7 @@ export function HikingPanel({ mapRef }: Props) {
             <button
               type="button"
               onClick={handleAddGps}
-              className="hud-btn-ghost !w-auto justify-center gap-1.5 px-2 text-[11px] font-medium"
+              className="hud-btn-ghost !w-auto justify-center gap-1.5 px-2 text-[12px] font-medium"
               title="Add my current location"
             >
               <GpsIcon /> GPS
@@ -279,12 +312,12 @@ export function HikingPanel({ mapRef }: Props) {
         <HudPanel label={finalized ? "Final route" : `Options · ${candidates.length}`}>
           <div className="flex flex-col gap-1.5">
             {phase.kind === "error" && (
-              <p className="break-words text-[11px] text-[color:var(--hud-danger)]">
+              <p className="break-words text-[12px] text-[color:var(--hud-danger)]">
                 {phase.message}
               </p>
             )}
             {notice && phase.kind !== "error" && (
-              <p className="break-words text-[11px] text-[color:var(--hud-warn)]">
+              <p className="break-words text-[12px] text-[color:var(--hud-warn)]">
                 {notice}
               </p>
             )}
@@ -316,24 +349,24 @@ export function HikingPanel({ mapRef }: Props) {
                   }
                 >
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="flex items-center gap-2 text-[11px] font-semibold">
+                    <span className="flex items-center gap-2 text-[12px] font-semibold">
                       <span
                         aria-hidden
                         className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: routeColor }}
                       />
                       {finalized ? "Selected" : `Route ${i + 1}`}
-                      <span className="text-[10px] font-normal text-[color:var(--hud-text-muted)]">
+                      <span className="text-[11.5px] font-normal text-[color:var(--hud-text-muted)]">
                         · {c.profile}
                       </span>
                     </span>
-                    <span className="hud-mono text-[11px]">
+                    <span className="hud-mono text-[12px]">
                       {c.distanceKm.toFixed(1)} km
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-[color:var(--hud-text-muted)]">
+                  <div className="flex items-center justify-between text-[11.5px] text-[color:var(--hud-text-muted)]">
                     <span>
-                      {Math.round(c.durationMin)} min · +{Math.round(c.ascentM)} m
+                      {formatDuration(c.durationMin)} · +{Math.round(c.ascentM)} m
                     </span>
                     {greenPct != null && (
                       <span
@@ -362,7 +395,7 @@ export function HikingPanel({ mapRef }: Props) {
             })}
 
             {!finalized && altCount > 0 && (
-              <p className="text-[10px] text-[color:var(--hud-text-muted)]">
+              <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
                 {altCount} alternative{altCount === 1 ? "" : "s"} drawn on map
                 — tap a dashed line or route above to switch.
               </p>
@@ -382,7 +415,7 @@ export function HikingPanel({ mapRef }: Props) {
                 <button
                   type="button"
                   onClick={unfinalize}
-                  className="hud-btn-ghost !w-auto justify-center px-3 text-[11px] font-medium"
+                  className="hud-btn-ghost !w-auto justify-center px-3 text-[12px] font-medium"
                 >
                   Show routes
                 </button>
@@ -391,9 +424,27 @@ export function HikingPanel({ mapRef }: Props) {
                 <button
                   type="button"
                   onClick={handleExportGpx}
-                  className="hud-btn-ghost !w-auto justify-center px-3 text-[11px] font-medium"
+                  className="hud-btn-ghost !w-auto justify-center px-3 text-[12px] font-medium"
                 >
                   Export GPX
+                </button>
+              )}
+              {finalized && navPlan && (
+                <button
+                  type="button"
+                  onClick={() => startNavigation(navPlan)}
+                  className="hud-btn-primary"
+                >
+                  Navigate
+                </button>
+              )}
+              {finalized && navPlan && (
+                <button
+                  type="button"
+                  onClick={() => startNavigation(navPlan, { simulate: true })}
+                  className="hud-btn-ghost !w-auto justify-center px-3 text-[12px] font-medium"
+                >
+                  Preview
                 </button>
               )}
             </div>
@@ -405,7 +456,7 @@ export function HikingPanel({ mapRef }: Props) {
       <HudPanel label="Settings">
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="hud-label text-[9px]">Round-trip</span>
+            <span className="hud-label text-[11px]">Round-trip</span>
             <ToggleSwitch
               on={roundTrip}
               onChange={setRoundTrip}
@@ -416,11 +467,15 @@ export function HikingPanel({ mapRef }: Props) {
             type="button"
             onClick={reverseWaypoints}
             disabled={waypoints.length < 2}
-            className="hud-btn-ghost !w-auto justify-center gap-1.5 self-start px-2 text-[11px] font-medium"
+            className="hud-btn-ghost !w-auto justify-center gap-1.5 self-start px-2 text-[12px] font-medium"
           >
             <ReverseIcon /> Reverse order
           </button>
-          <ModeAndProfilePicker profile={profile} setProfile={setProfile} />
+          <ModeAndProfilePicker
+            profile={profile}
+            setProfile={setProfile}
+            hideModeSwitch={hideModeSwitch}
+          />
         </div>
       </HudPanel>
 
@@ -432,7 +487,7 @@ export function HikingPanel({ mapRef }: Props) {
             clearWaypoints();
             setNotice(null);
           }}
-          className="hud-btn-ghost !w-auto justify-center gap-1.5 self-end px-3 text-[11px] font-medium"
+          className="hud-btn-ghost !w-auto justify-center gap-1.5 self-end px-3 text-[12px] font-medium"
           aria-label="Clear all waypoints and routes"
         >
           <svg
@@ -452,7 +507,7 @@ export function HikingPanel({ mapRef }: Props) {
         </button>
       )}
 
-      <div className="text-[10px] text-[color:var(--hud-text-muted)]">
+      <div className="text-[11.5px] text-[color:var(--hud-text-muted)]">
         BRouter · Photon · Overpass · OSM contributors
       </div>
     </div>
@@ -472,7 +527,7 @@ function RouteSummary({
 }) {
   if (waypointCount < 2) {
     return (
-      <p className="text-[11px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[12px] text-[color:var(--hud-text-muted)]">
         Add at least two waypoints to compute a route.
       </p>
     );
@@ -488,26 +543,26 @@ function RouteSummary({
           ? `Refining route… (${received} done)`
           : "Computing route…";
     return (
-      <p className="text-[11px] text-[color:var(--hud-text-muted)]">{label}</p>
+      <p className="text-[12px] text-[color:var(--hud-text-muted)]">{label}</p>
     );
   }
   if (phase.kind === "scoring") {
     return (
-      <p className="text-[11px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[12px] text-[color:var(--hud-text-muted)]">
         Scoring greenery…
       </p>
     );
   }
   if (phase.kind === "error") {
     return (
-      <p className="break-words text-[11px] text-[color:var(--hud-danger)]">
+      <p className="break-words text-[12px] text-[color:var(--hud-danger)]">
         {phase.message}
       </p>
     );
   }
   if (!candidate) {
     return (
-      <p className="text-[11px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[12px] text-[color:var(--hud-text-muted)]">
         Adjust waypoints to compute a route.
       </p>
     );
@@ -521,12 +576,12 @@ function RouteSummary({
         <span className="hud-mono text-[14px] text-[color:var(--hud-accent)]">
           {candidate.distanceKm.toFixed(1)} km
         </span>
-        <span className="hud-mono text-[11px] text-[color:var(--hud-text-muted)]">
-          {Math.round(candidate.durationMin)} min · +
+        <span className="hud-mono text-[12px] text-[color:var(--hud-text-muted)]">
+          {formatDuration(candidate.durationMin)} · +
           {Math.round(candidate.ascentM)} m
         </span>
       </div>
-      <div className="flex items-center justify-between gap-2 text-[10px] text-[color:var(--hud-text-muted)]">
+      <div className="flex items-center justify-between gap-2 text-[11.5px] text-[color:var(--hud-text-muted)]">
         <span>{finalized ? "Final · committed" : "Best of options · tap Confirm to lock"}</span>
         {greenPct != null && (
           <span
@@ -549,9 +604,11 @@ function RouteSummary({
 function ModeAndProfilePicker({
   profile,
   setProfile,
+  hideModeSwitch = false,
 }: {
   profile: BrouterProfile;
   setProfile: (p: BrouterProfile) => void;
+  hideModeSwitch?: boolean;
 }) {
   const mode = profileMode(profile);
   const profilesForMode = useMemo(
@@ -565,8 +622,9 @@ function ModeAndProfilePicker({
   };
   return (
     <div className="flex flex-col gap-2">
+      {!hideModeSwitch && (
       <div className="flex flex-col gap-1">
-        <span className="hud-label text-[9px]">Mode</span>
+        <span className="hud-label text-[11px]">Mode</span>
         <div
           className="hud-tab-row"
           style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
@@ -589,8 +647,9 @@ function ModeAndProfilePicker({
           </button>
         </div>
       </div>
+      )}
       <div className="flex flex-col gap-1">
-        <span className="hud-label text-[9px]">Profile</span>
+        <span className="hud-label text-[11px]">Profile</span>
         <div
           className="hud-tab-row"
           style={{
@@ -644,16 +703,16 @@ function WaypointRow({
     <div className="flex items-center gap-1.5 rounded-full border border-[color:var(--hud-border)] bg-[rgba(255,255,255,0.02)] px-2 py-1">
       <span
         aria-hidden
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-[#0a0a0b]"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold text-[color:var(--accent-ink)]"
         style={{ background: dotColor, boxShadow: `0 0 6px ${dotColor}80` }}
       >
         {index + 1}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[11px] text-[color:var(--hud-text)]">
+        <div className="truncate text-[12px] text-[color:var(--hud-text)]">
           {label}
         </div>
-        <div className="text-[10px] text-[color:var(--hud-text-muted)]">
+        <div className="text-[11.5px] text-[color:var(--hud-text-muted)]">
           {role} · {source}
         </div>
       </div>
@@ -693,7 +752,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
-      className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[color:var(--hud-text-muted)] transition-colors hover:bg-[var(--hud-accent-soft)] hover:text-[color:var(--hud-accent)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[color:var(--hud-text-muted)]"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--hud-text-muted)] transition-colors hover:bg-[var(--hud-accent-soft)] hover:text-[color:var(--hud-accent)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[color:var(--hud-text-muted)]"
     >
       {children}
     </button>
@@ -747,8 +806,12 @@ function SearchAdd({
   useEffect(() => {
     const text = q.trim();
     if (text.length < 2) {
+      ctrlRef.current?.abort();
+      /* eslint-disable react-hooks/set-state-in-effect -- clearing controlled async search state */
+      setBusy(false);
       setResults([]);
       setOpen(false);
+      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
     ctrlRef.current?.abort();
@@ -782,7 +845,7 @@ function SearchAdd({
       window.clearTimeout(handle);
       ctrl.abort();
     };
-  }, [q]);
+  }, [q, mapRef]);
 
   // Track input position so the portal-rendered dropdown stays anchored.
   useEffect(() => {
@@ -831,10 +894,10 @@ function SearchAdd({
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => results.length > 0 && setOpen(true)}
         placeholder="Search a place…"
-        className="hud-search w-full h-10 md:h-7 px-3 text-[11px]"
+        className="hud-search w-full h-10 md:h-7 px-3 text-[12px]"
       />
       {busy && (
-        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-[color:var(--hud-text-muted)]">
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[color:var(--hud-text-muted)]">
           …
         </span>
       )}
@@ -859,11 +922,11 @@ function SearchAdd({
                     setResults([]);
                     setOpen(false);
                   }}
-                  className="flex w-full items-start gap-1.5 border-b border-[color:var(--hud-border)] px-2 py-1.5 text-left text-[11px] text-[color:var(--hud-text)] last:border-b-0 hover:bg-[var(--hud-accent-soft)] hover:text-[color:var(--hud-accent)]"
+                  className="flex w-full items-start gap-1.5 border-b border-[color:var(--hud-border)] px-2 py-1.5 text-left text-[12px] text-[color:var(--hud-text)] last:border-b-0 hover:bg-[var(--hud-accent-soft)] hover:text-[color:var(--hud-accent)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{r.label || r.name}</span>
                   {prettyCategory(r.category) && (
-                    <span className="shrink-0 rounded-full border border-[color:var(--hud-border)] px-1.5 py-0.5 text-[9px] text-[color:var(--hud-text-muted)]">
+                    <span className="shrink-0 rounded-full border border-[color:var(--hud-border)] px-1.5 py-0.5 text-[11px] text-[color:var(--hud-text-muted)]">
                       {prettyCategory(r.category)}
                     </span>
                   )}

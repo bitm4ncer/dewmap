@@ -14,7 +14,8 @@ export type RailStyle = "tiles" | "lines";
 export type BasemapMode = "photo" | "hybrid" | "vector";
 export type OrientationMode = "north" | "route" | "heading";
 
-const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+const clamp01 = (n: number) =>
+  Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
 
 export interface Settings {
   imageBasemapId: string;
@@ -138,7 +139,11 @@ export const useSettings = create<Settings>()(
           basemapVariants: { ...s.basemapVariants, [basemapId]: variantId },
         })),
       setLiveBasemapDayOffset: (offset) =>
-        set({ liveBasemapDayOffset: Math.max(0, Math.min(14, Math.round(offset))) }),
+        set({
+          liveBasemapDayOffset: Number.isFinite(offset)
+            ? Math.max(0, Math.min(14, Math.round(offset)))
+            : 0,
+        }),
       setProjection: (p) => set({ projection: p }),
       setOrientationMode: (m) => set({ orientationMode: m }),
       setRailOn: (on) => set({ railOn: on }),
@@ -163,10 +168,12 @@ export const useSettings = create<Settings>()(
       setHistoryMapOn: (on) => set({ historyMapOn: on }),
       setHistoryYear: (year) =>
         set({
-          historyYear: Math.max(
-            HISTORY_YEAR_MIN,
-            Math.min(HISTORY_YEAR_MAX, Math.round(year)),
-          ),
+          historyYear: Number.isFinite(year)
+            ? Math.max(
+                HISTORY_YEAR_MIN,
+                Math.min(HISTORY_YEAR_MAX, Math.round(year)),
+              )
+            : HISTORY_YEAR_MAX,
         }),
     }),
     {
@@ -251,6 +258,7 @@ export const useSettings = create<Settings>()(
             p.historyLandmarksOpacity = 0.9;
           if (
             typeof p.historyYear !== "number" ||
+            !Number.isFinite(p.historyYear) ||
             p.historyYear < HISTORY_YEAR_MIN ||
             p.historyYear > HISTORY_YEAR_MAX
           ) {
@@ -344,8 +352,18 @@ export const useSettings = create<Settings>()(
           p.imageBasemapId = "s2cloudless";
         }
 
-        if (typeof p.imageBasemapId !== "string") p.imageBasemapId = DEFAULT_IMAGE_BASEMAP_ID;
-        if (typeof p.vectorBasemapId !== "string") p.vectorBasemapId = DEFAULT_VECTOR_BASEMAP_ID;
+        if (
+          typeof p.imageBasemapId !== "string" ||
+          !BASEMAPS.some((b) => b.id === p.imageBasemapId)
+        ) {
+          p.imageBasemapId = DEFAULT_IMAGE_BASEMAP_ID;
+        }
+        if (
+          typeof p.vectorBasemapId !== "string" ||
+          !BASEMAPS.some((b) => b.id === p.vectorBasemapId)
+        ) {
+          p.vectorBasemapId = DEFAULT_VECTOR_BASEMAP_ID;
+        }
         if (
           p.basemapMode !== "photo" &&
           p.basemapMode !== "hybrid" &&

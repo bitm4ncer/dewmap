@@ -112,15 +112,25 @@ export const useHiking = create<HikingState>()(
       setProfile: (p) => set({ profile: p, finalized: false }),
 
       setCandidates: (candidates) =>
-        set({
-          candidates,
-          selectedCandidateId: candidates[0]?.id ?? null,
-          finalized: false,
+        set((s) => {
+          const keep =
+            s.selectedCandidateId != null &&
+            candidates.some((c) => c.id === s.selectedCandidateId);
+          const selectedCandidateId = keep
+            ? s.selectedCandidateId
+            : (candidates[0]?.id ?? null);
+          return {
+            candidates,
+            selectedCandidateId,
+            finalized: keep && s.finalized,
+          };
         }),
       selectCandidate: (id) => set({ selectedCandidateId: id }),
       finalizeRoute: () => {
         const s = get();
-        if (s.selectedCandidateId) set({ finalized: true });
+        if (s.selectedCandidateId) {
+          set({ finalized: true, phase: { kind: "routed" } });
+        }
       },
       unfinalize: () => set({ finalized: false }),
 
@@ -129,20 +139,31 @@ export const useHiking = create<HikingState>()(
     }),
     {
       name: "biosphere1:hiking",
-      // v3: profile list reshuffled (walking-fast removed, bike profiles added).
-      version: 3,
+      // v4: route geometry moved out of localStorage (quota-safe); routes
+      // are recomputed from waypoints on mount.
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         enabled: state.enabled,
         waypoints: state.waypoints,
         roundTrip: state.roundTrip,
         profile: state.profile,
-        candidates: state.candidates,
-        selectedCandidateId: state.selectedCandidateId,
-        finalized: state.finalized,
       }),
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
+        if (version < 4) {
+          const p = persisted as Record<string, unknown>;
+          delete p.candidates;
+          delete p.selectedCandidateId;
+          delete p.finalized;
+          if (typeof p.enabled !== "boolean") p.enabled = false;
+          if (!Array.isArray(p.waypoints)) p.waypoints = [];
+          if (typeof p.roundTrip !== "boolean") p.roundTrip = false;
+          if (typeof p.profile !== "string" || !VALID_PROFILE_IDS.has(p.profile)) {
+            p.profile = "hiking-beta";
+          }
+          return p;
+        }
         if (version < 2) {
           // v1 stored station-pair workflow state — drop it.
           return {

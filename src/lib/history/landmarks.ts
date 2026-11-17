@@ -352,12 +352,9 @@ const RATE_LIMIT_BACKOFF_MS = 15_000;
 
 function isRateLimitError(err: unknown): boolean {
   const msg = (err as Error)?.message ?? "";
-  return (
-    msg.includes("429") ||
-    msg.includes("CONNECTION_CLOSED") ||
-    msg.includes("Failed to fetch") ||
-    msg.includes("NetworkError")
-  );
+  // Only genuine throttling/connection-reset signals. A CORS failure or
+  // ordinary offline error must not pause the layer for 15 seconds.
+  return msg.includes("429") || msg.includes("CONNECTION_CLOSED");
 }
 
 function tileKey(x: number, y: number): string {
@@ -430,12 +427,18 @@ async function loadTile(
       fetchOverpassLandmarks(bbox, signal),
       fetchWikidataLandmarks(bbox, signal),
     ]);
+    if (signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
     const merged: LandmarkFeature[] = [];
     if (osmRes.status === "fulfilled") merged.push(...osmRes.value);
     else if (isRateLimitError(osmRes.reason)) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
     }
     if (wdRes.status === "fulfilled") merged.push(...wdRes.value);
+    else if (isRateLimitError(wdRes.reason)) {
+      rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
+    }
     // Prefer Wikidata entry when both sources reference the same QID
     // (Wikidata always has a date; OSM rarely does).
     const seenQids = new Set<string>();
@@ -450,7 +453,8 @@ async function loadTile(
         !f.properties.wikidataId ||
         !seenQids.has(f.properties.wikidataId),
     );
-    tileCache.set(key, { features: deduped });
+    // Never poison the tile cache with a result produced after abort.
+    if (!signal?.aborted) tileCache.set(key, { features: deduped });
     return deduped;
   })();
   tileInFlight.set(key, promise);
@@ -479,6 +483,16 @@ export async function fetchLandmarksForBounds(
     return featuresToCollection(collectCachedFeaturesForBounds(bounds));
   }
   const tiles = tilesForBounds(bounds, HISTORY_TILE_ZOOM);
+  // A world view would fan out to thousands of tiles, each with an
+  // Overpass + SPARQL request. The layer is hidden below z4 anyway; cap
+  // the work and render whatever is already cached.
+  const MAX_TILES = 120;
+  if (tiles.length > MAX_TILES) {
+    console.warn(
+      `[history-landmarks] ${tiles.length} tiles at this view; using cached subset`,
+    );
+    return featuresToCollection(collectCachedFeaturesForBounds(bounds));
+  }
   // Cap parallelism — Wikidata SPARQL throttles aggressively.
   const MAX_PARALLEL = 2;
   const queue = tiles.slice();

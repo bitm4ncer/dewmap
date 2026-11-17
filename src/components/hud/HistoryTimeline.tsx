@@ -55,11 +55,11 @@ export function HistoryTimeline({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="hud-label text-[9px]">Year</span>
-        <span className="hud-mono text-[14px] text-[color:var(--hud-accent)]">
+        <span className="hud-label text-[12px]">Year</span>
+        <span className="hud-mono text-[16px] text-[color:var(--hud-accent)]">
           {year}
         </span>
-        <span className="hud-mono text-[9px] uppercase tracking-wider text-[color:var(--hud-text-muted)]">
+        <span className="hud-mono text-[12px] uppercase tracking-wider text-[color:var(--hud-text-muted)]">
           {loading
             ? "loading…"
             : visibleCount > 0
@@ -114,7 +114,7 @@ export function HistoryTimeline({
         </div>
       </div>
 
-      <div className="flex justify-between text-[9px] text-[color:var(--hud-text-muted)]">
+      <div className="flex justify-between text-[12px] text-[color:var(--hud-text-muted)]">
         <span>{HISTORY_YEAR_MIN}</span>
         <span>1800</span>
         <span>1900</span>

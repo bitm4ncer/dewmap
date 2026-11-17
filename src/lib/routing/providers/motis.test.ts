@@ -1,0 +1,344 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  decodeLegGeometry,
+  geocodeStops,
+  normalizeMotisItinerary,
+  planMotis,
+} from "./motis";
+import { ProviderError, type RouteRequest } from "../types";
+
+// Encoded at precision 7, matching MOTIS today.
+const WALK1 = "_anlm\\_gzpdDnwH_af@nh\\_ry@";
+const TRAM = "__gkm\\_|{sdD_t`B_af@_etBojcA";
+const WALK2 = "_z}qm\\oigwdDowHnh\\owH_pR";
+
+const ITINERARY = {
+  duration: 600,
+  startTime: "2026-11-17T10:00:00Z",
+  endTime: "2026-11-17T10:10:00Z",
+  transfers: 0,
+  legs: [
+    {
+      mode: "WALK",
+      from: {
+        name: "START",
+        lat: 49.41,
+        lon: 8.68,
+        departure: "2026-11-17T10:00:00Z",
+        scheduledDeparture: "2026-11-17T10:00:00Z",
+      },
+      to: {
+        name: "Heidelberg, Campus Bergheim",
+        lat: 49.408,
+        lon: 8.685,
+        arrival: "2026-11-17T10:03:00Z",
+        scheduledArrival: "2026-11-17T10:03:00Z",
+        stopId: "stop-1",
+        track: "1",
+      },
+      duration: 180,
+      startTime: "2026-11-17T10:00:00Z",
+      endTime: "2026-11-17T10:03:00Z",
+      scheduledStartTime: "2026-11-17T10:00:00Z",
+      scheduledEndTime: "2026-11-17T10:03:00Z",
+      realTime: true,
+      cancelled: false,
+      distance: 300,
+      legGeometry: { points: WALK1, length: 5 },
+      steps: [],
+    },
+    {
+      mode: "TRAM",
+      from: {
+        name: "Heidelberg, Campus Bergheim",
+        lat: 49.408,
+        lon: 8.685,
+        departure: "2026-11-17T10:04:00Z",
+        scheduledDeparture: "2026-11-17T10:04:00Z",
+        stopId: "stop-1",
+        track: "2",
+      },
+      to: {
+        name: "Neuenheim, Kußmaulstraße",
+        lat: 49.419,
+        lon: 8.6905,
+        arrival: "2026-11-17T10:07:00Z",
+        scheduledArrival: "2026-11-17T10:07:00Z",
+        stopId: "stop-2",
+        track: "3",
+      },
+      duration: 180,
+      startTime: "2026-11-17T10:04:00Z",
+      endTime: "2026-11-17T10:07:00Z",
+      scheduledStartTime: "2026-11-17T10:04:00Z",
+      scheduledEndTime: "2026-11-17T10:07:00Z",
+      realTime: true,
+      cancelled: true,
+      legGeometry: { points: TRAM, length: 5 },
+      routeShortName: "RNV 26",
+      routeLongName: "RNV 26 Handschuhsheim",
+      displayName: "RNV 26 Handschuhsheim",
+      agencyName: "RNV Heidelberg (Strab)",
+      headsign: "Handschuh., Heiligenbergschule",
+      intermediateStops: [
+        {
+          name: "Bunsengymnasium",
+          lat: 49.4105,
+          lon: 8.686,
+          stopId: "stop-3",
+        },
+      ],
+    },
+    {
+      mode: "WALK",
+      from: {
+        name: "Neuenheim, Kußmaulstraße",
+        lat: 49.419,
+        lon: 8.6905,
+        departure: "2026-11-17T10:07:00Z",
+        scheduledDeparture: "2026-11-17T10:07:00Z",
+        stopId: "stop-2",
+      },
+      to: {
+        name: "END",
+        lat: 49.42,
+        lon: 8.69,
+        arrival: "2026-11-17T10:10:00Z",
+        scheduledArrival: "2026-11-17T10:10:00Z",
+      },
+      duration: 240,
+      startTime: "2026-11-17T10:07:00Z",
+      endTime: "2026-11-17T10:10:00Z",
+      scheduledStartTime: "2026-11-17T10:07:00Z",
+      scheduledEndTime: "2026-11-17T10:10:00Z",
+      realTime: false,
+      cancelled: false,
+      distance: 120,
+      legGeometry: { points: WALK2, length: 5 },
+      steps: [],
+    },
+  ],
+};
+
+function transitRequest(overrides: Partial<RouteRequest> = {}): RouteRequest {
+  return {
+    mode: "transit",
+    waypoints: [
+      { lat: 49.41, lon: 8.68 },
+      { lat: 49.42, lon: 8.69 },
+    ],
+    departAt: "2026-11-17T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function okResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+async function captureError(promise: Promise<unknown>): Promise<ProviderError> {
+  try {
+    await promise;
+  } catch (err) {
+    if (err instanceof ProviderError) return err;
+    throw err;
+  }
+  throw new Error("Expected the promise to reject.");
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("decodeLegGeometry", () => {
+  const from = { lat: 49.41, lon: 8.68 };
+  const to = { lat: 49.408, lon: 8.685 };
+
+  it("picks precision 7 when the endpoints match", () => {
+    const coordinates = decodeLegGeometry({ points: WALK1 }, from, to);
+    expect(coordinates).toHaveLength(3);
+    expect(coordinates[0][0]).toBeCloseTo(8.68, 4);
+    expect(coordinates[0][1]).toBeCloseTo(49.41, 4);
+    expect(coordinates[2][0]).toBeCloseTo(8.685, 4);
+    expect(coordinates[2][1]).toBeCloseTo(49.408, 4);
+  });
+
+  it("ignores a wrong advertised precision and falls back to 7", () => {
+    const coordinates = decodeLegGeometry(
+      { points: WALK1, precision: 6 },
+      from,
+      to,
+    );
+    expect(coordinates[0][1]).toBeCloseTo(49.41, 4);
+    expect(coordinates[0][1]).toBeLessThan(50);
+  });
+
+  it("returns an empty list for missing geometry", () => {
+    expect(decodeLegGeometry(null, from, to)).toEqual([]);
+    expect(decodeLegGeometry({}, from, to)).toEqual([]);
+  });
+});
+
+describe("normalizeMotisItinerary", () => {
+  it("normalizes the journey and every leg", () => {
+    const plan = normalizeMotisItinerary(ITINERARY);
+    expect(plan.provider).toBe("motis");
+    expect(plan.mode).toBe("transit");
+    expect(plan.durationMin).toBe(10);
+    expect(plan.transit?.departure).toBe("2026-11-17T10:00:00Z");
+    expect(plan.transit?.arrival).toBe("2026-11-17T10:10:00Z");
+    expect(plan.transit?.transfers).toBe(0);
+    expect(plan.transit?.legs).toHaveLength(3);
+    expect(plan.maneuvers).toHaveLength(4);
+
+    const [walk, tram] = plan.transit?.legs ?? [];
+    expect(walk.mode).toBe("walk");
+    expect(walk.rawMode).toBe("WALK");
+    expect(walk.distanceKm).toBeCloseTo(0.3, 5);
+    expect(walk.realTime).toBe(true);
+
+    expect(tram.mode).toBe("transit");
+    expect(tram.rawMode).toBe("TRAM");
+    expect(tram.line).toBe("RNV 26");
+    expect(tram.agency).toBe("RNV Heidelberg (Strab)");
+    expect(tram.headsign).toBe("Handschuh., Heiligenbergschule");
+    expect(tram.from.platform).toBe("2");
+    expect(tram.to.platform).toBe("3");
+    expect(tram.from.stopId).toBe("stop-1");
+    expect(tram.to.stopId).toBe("stop-2");
+    expect(tram.realTime).toBe(true);
+    expect(tram.cancelled).toBe(true);
+    expect(tram.distanceKm).toBeGreaterThan(1.2);
+    expect(tram.distanceKm).toBeLessThan(1.4);
+    expect(tram.coordinates).toHaveLength(3);
+    expect(tram.coordinates[0][0]).toBeCloseTo(8.685, 4);
+    expect(tram.coordinates[0][1]).toBeCloseTo(49.408, 4);
+    expect(tram.coordinates[2][0]).toBeCloseTo(8.6905, 4);
+    expect(tram.intermediateStops?.[0]?.name).toBe("Bunsengymnasium");
+
+    const transitManeuver = plan.maneuvers.find((m) => m.type === "transit");
+    expect(transitManeuver?.instruction).toMatch(/RNV 26/);
+    expect(plan.maneuvers[plan.maneuvers.length - 1].type).toBe("arrive");
+  });
+
+  it("rejects itineraries without legs", () => {
+    expect(() => normalizeMotisItinerary({ legs: [] })).toThrow(ProviderError);
+  });
+});
+
+describe("planMotis", () => {
+  it("sends normalized params and returns itineraries", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        okResponse({ itineraries: [ITINERARY] }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const plans = await planMotis(
+      transitRequest({
+        alternatives: 2,
+        maxTransfers: 2,
+        wheelchair: true,
+        options: { searchWindowS: 1800 },
+      }),
+    );
+
+    expect(plans).toHaveLength(1);
+    expect(plans[0].provider).toBe("motis");
+
+    const call = fetchMock.mock.calls[0] as unknown as [
+      RequestInfo | URL,
+      RequestInit?,
+    ];
+    const url = new URL(String(call[0]));
+    expect(`${url.origin}${url.pathname}`).toBe(
+      "https://api.transitous.org/api/v1/plan",
+    );
+    expect(url.searchParams.get("fromPlace")).toBe("49.41,8.68");
+    expect(url.searchParams.get("toPlace")).toBe("49.42,8.69");
+    expect(url.searchParams.get("time")).toBe("2026-11-17T10:00:00.000Z");
+    expect(url.searchParams.get("arriveBy")).toBe("false");
+    expect(url.searchParams.get("numItineraries")).toBe("2");
+    expect(url.searchParams.get("maxTransfers")).toBe("2");
+    expect(url.searchParams.get("wheelchair")).toBe("true");
+    expect(url.searchParams.get("detailedTransfers")).toBe("false");
+    expect(url.searchParams.get("searchWindow")).toBe("1800");
+  });
+
+  it("maps an empty result to no-route", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          okResponse({ itineraries: [], direct: [] }),
+      ),
+    );
+    const err = await captureError(planMotis(transitRequest()));
+    expect(err.kind).toBe("no-route");
+  });
+
+  it("rejects with bad-response for too few waypoints", async () => {
+    const err = await captureError(
+      planMotis(transitRequest({ waypoints: [{ lat: 1, lon: 2 }] })),
+    );
+    expect(err.kind).toBe("bad-response");
+  });
+});
+
+describe("geocodeStops", () => {
+  it("maps stops and filters non-stop results", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        okResponse([
+          {
+            type: "STOP",
+            id: "de-DELFI_de:08221:1160",
+            name: "Heidelberg, Hauptbahnhof",
+            lat: 49.40357,
+            lon: 8.675442,
+            country: "DE",
+            modes: ["TRAM", "BUS", "REGIONAL_RAIL"],
+            areas: [{ name: "Deutschland" }, { name: "Heidelberg" }],
+          },
+          {
+            type: "PLACE",
+            id: "way/1",
+            name: "Some hotel",
+            lat: 49.4,
+            lon: 8.6,
+          },
+        ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stops = await geocodeStops("Heidelberg Hbf");
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toMatchObject({
+      type: "STOP",
+      id: "de-DELFI_de:08221:1160",
+      name: "Heidelberg, Hauptbahnhof",
+      country: "DE",
+      modes: ["TRAM", "BUS", "REGIONAL_RAIL"],
+      areas: ["Deutschland", "Heidelberg"],
+    });
+
+    const call = fetchMock.mock.calls[0] as unknown as [
+      RequestInfo | URL,
+      RequestInit?,
+    ];
+    const url = new URL(String(call[0]));
+    expect(url.pathname).toBe("/api/v1/geocode");
+    expect(url.searchParams.get("text")).toBe("Heidelberg Hbf");
+    expect(url.searchParams.get("type")).toBe("STOP");
+  });
+
+  it("does not call fetch for very short queries", async () => {
+    const fetchMock = vi.fn(async () => okResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(geocodeStops("H")).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

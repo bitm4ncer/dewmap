@@ -3,66 +3,112 @@
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface-0: var(--surf-0);
+  --color-surface-1: var(--surf-1);
+  --color-surface-2: var(--surf-2);
+  --color-surface-3: var(--surf-3);
+  --color-ink: var(--ink);
+  --color-ink-dim: var(--ink-dim);
+  --color-ink-mute: var(--ink-mute);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
 }
 
 html,
 body {
   font-family: var(--font-sans), system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.maplibregl-map { background: #0d0e0c; }
+body {
+  overscroll-behavior: none;
+}
+
+.maplibregl-map { background: var(--surf-0); }
 
 /* ────────────────────────────────────────────────────────────────────────
-   Design tokens — "Field Notes": warm off-black, four pane shades.
-   Each pane (map / biosphere / history / hiking) sets its own --accent
-   via [data-active-pane="…"] — children cascade automatically.
+   Design tokens — "Field Notes, refined": warm off-black surfaces, one
+   lime accent for every action/selection, pane identity only as a tiny
+   signature dot. This keeps the UI calm and consistent across panes.
    ──────────────────────────────────────────────────────────────────── */
 :root {
-  /* Surfaces */
-  --surf-0:        #1a1b18;
-  --surf-1:        #232520;
-  --surf-2:        #2c2e26;
-  --surf-glass:        rgba(26, 27, 24, 0.82);
-  --surf-glass-solid:  rgba(26, 27, 24, 0.96);
+  color-scheme: dark;
 
-  /* Ink */
-  --ink:        #f1f0e8;
-  --ink-dim:    #a3a59c;
-  --ink-mute:   #6c6e62;
-  --hairline:   rgba(241, 240, 232, 0.06);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  /* Pane shades — warm muted, lifted from mood swatch */
-  --hue-lime:  #d6e76b;
-  --hue-sage:  #a4c8a0;
-  --hue-cream: #f6f0bf;
-  --hue-olive: #b9bf85;
+  /* Surfaces — four steps, warm neutral */
+  --bg:         #0e0f0c;
+  --surf-0:     #12130f;
+  --surf-1:     #1a1c15;
+  --surf-2:     #22251b;
+  --surf-3:     #2b2f22;
+  --surf-glass:       rgba(14, 15, 12, 0.86);
+  --surf-glass-solid: rgba(14, 15, 12, 0.97);
 
-  /* Active accent — defaults to lime; overridden per active pane. */
-  --accent:        var(--hue-lime);
-  --accent-soft:   color-mix(in srgb, var(--accent) 16%, transparent);
-  --accent-mute:   color-mix(in srgb, var(--accent) 30%, transparent);
-  --accent-ink:    #14150f;        /* readable on accent fill */
+  /* Ink — ink-mute now passes AA for large labels */
+  --ink:        #f4f3ea;
+  --ink-dim:    #b9bbad;
+  --ink-mute:   #8a8c7e;
+  --hairline:   rgba(244, 243, 234, 0.08);
+  --hairline-strong: rgba(244, 243, 234, 0.14);
 
-  /* Semantics */
-  --warn:    #f0b95f;
-  --danger:  #ec8073;
+  /* One accent. Pane shades exist only as signature dots. */
+  --accent:        #d8ef6a;
+  --accent-soft:   color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 24%, transparent);
+  --accent-ink:    #13140d;
+
+  --hue-lime:  #d8ef6a;
+  --hue-sage:  #a9c9a4;
+  --hue-cream: #e8d9a8;
+  --hue-olive: #c0c58c;
+
+  --warn:   #f2bd66;
+  --danger: #f08b7e;
+  --info:   #8cc8ff;
+  /* Data-viz accents (landmark provenance) */
+  --landmark-wikidata: #ff5ea8;
+  --landmark-osm: #4fd1e8;
 
   /* Geometry */
-  --r-card: 18px;
-  --r-btn:  12px;
-  --r-pill: 9999px;
+  --r-card:  16px;
+  --r-sheet: 24px;
+  --r-btn:    12px;
+  --r-pill:   999px;
 
   /* Motion */
   --ease:     cubic-bezier(0.32, 0.72, 0, 1);
-  --dur-fast: 160ms;
+  --dur-fast: 150ms;
   --dur-base: 220ms;
-  --dur-slow: 320ms;
+  --dur-slow: 300ms;
+
+  /* Elevation */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.38);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.55);
 
   /* Topology */
-  --hud-topbar-h: calc(56px + env(safe-area-inset-top, 0px));
-  --hud-nav-h:    calc(82px + env(safe-area-inset-bottom, 0px));
+  --topbar-h:     calc(56px + var(--safe-top));
+  --hud-topbar-h: var(--topbar-h);
+  --hud-nav-h:    calc(110px + var(--safe-bottom));
+  --hud-peek-h:   calc(110px + var(--safe-bottom));
+  --panel-w:      380px;
 
-  /* Legacy aliases (kept so existing JSX classes/inline-vars keep working) */
+  /* Z scale */
+  --z-map: 0;
+  --z-controls: 10;
+  --z-chrome: 20;
+  --z-sheet: 30;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  /* Legacy aliases — existing components keep working. */
   --hud-surface:        var(--surf-glass);
   --hud-surface-solid:  var(--surf-glass-solid);
   --hud-surface-opaque: var(--surf-0);
@@ -72,49 +118,23 @@ body {
   --hud-accent:         var(--accent);
   --hud-accent-soft:    var(--accent-soft);
   --hud-accent-glow:    transparent;
-  /* Hairline alias — used inline by list-item dividers (waypoint rows,
-     search-result rows). All button/panel borders are removed at the
-     class level via `border: 0` so this hairline only shows where
-     genuinely useful. */
   --hud-border:         var(--hairline);
-  --hud-border-strong:  rgba(241, 240, 232, 0.12);
+  --hud-border-strong:  var(--hairline-strong);
   --hud-warn:           var(--warn);
   --hud-danger:         var(--danger);
 }
 
-/* Per-pane accent. Each scope re-aliases --hud-accent and
-   --hud-accent-soft locally — without redeclaring them here, the
-   :root-level alias `--hud-accent: var(--accent)` would be resolved
-   ONCE at :root (where --accent = lime) and never track the override.
-   This is the standard CSS custom-property gotcha: var() in a custom
-   property declaration is evaluated at the declaring scope, not at
-   the use site. */
-[data-active-pane="map"] {
-  --accent: var(--hue-lime);
-  --hud-accent: var(--hue-lime);
-  --hud-accent-soft: color-mix(in srgb, var(--hue-lime) 16%, transparent);
-}
-[data-active-pane="biosphere"] {
-  --accent: var(--hue-sage);
-  --hud-accent: var(--hue-sage);
-  --hud-accent-soft: color-mix(in srgb, var(--hue-sage) 16%, transparent);
-}
-[data-active-pane="history"] {
-  --accent: var(--hue-cream);
-  --hud-accent: var(--hue-cream);
-  --hud-accent-soft: color-mix(in srgb, var(--hue-cream) 16%, transparent);
-}
-[data-active-pane="hiking"] {
-  --accent: var(--hue-olive);
-  --hud-accent: var(--hue-olive);
-  --hud-accent-soft: color-mix(in srgb, var(--hue-olive) 16%, transparent);
-}
-
-/* Per-pane signature swatch (used by tab dots, drawer header strip, etc.) */
+/* Per-pane signature swatch only. Actions stay lime on every pane. */
 [data-pane="map"]       { --pane-tint: var(--hue-lime); }
 [data-pane="biosphere"] { --pane-tint: var(--hue-sage); }
 [data-pane="history"]   { --pane-tint: var(--hue-cream); }
 [data-pane="hiking"]    { --pane-tint: var(--hue-olive); }
+
+/* Global focus language — visible on every control, incl. inside clips. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -234,10 +254,10 @@ body {
 .hud-panel {
   position: relative;
   background: var(--surf-1);
-  border: 0;
+  border: 1px solid var(--hairline);
   border-radius: var(--r-card);
   color: var(--ink);
-  padding: 12px 14px;
+  padding: 14px;
 }
 .hud-panel::before,
 .hud-panel::after,
@@ -245,9 +265,9 @@ body {
 .hud-panel > .hud-corner-br { display: none; }
 
 .hud-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--ink-dim);
   text-transform: none;
 }
@@ -343,20 +363,26 @@ body {
     right: 0 !important;
     bottom: 0 !important;
     top: auto !important;
-    z-index: 11;
-    background: var(--surf-glass-solid);
-    border: 0;
-    border-radius: 24px 24px 0 0;
-    box-shadow: 0 -10px 36px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(14px);
+    z-index: var(--z-sheet);
+    height: var(--sheet-h, var(--hud-peek-h));
+    background: var(--surf-1);
+    border: 1px solid var(--hairline);
+    border-bottom: 0;
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+    contain: layout paint;
     transition: height var(--dur-slow) var(--ease);
-    will-change: height;
-    --hud-peek-h: calc(82px + env(safe-area-inset-bottom, 0px));
+    --hud-peek-h: calc(110px + var(--safe-bottom));
+  }
+
+  .hud-bottom-sheet[data-dragging="true"] {
+    transition: none;
+    user-select: none;
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] { height: var(--hud-peek-h); }
-  .hud-bottom-sheet[data-sheet-state="half"] { height: 50dvh; }
-  .hud-bottom-sheet[data-sheet-state="full"] { height: calc(100dvh - var(--hud-topbar-h)); }
+  .hud-bottom-sheet[data-sheet-state="half"] { height: 48dvh; }
+  .hud-bottom-sheet[data-sheet-state="full"] { height: calc(min(100dvh, var(--app-vh, 100dvh)) - var(--topbar-h)); }
 
   .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
 }
@@ -368,8 +394,8 @@ body {
    ──────────────────────────────────────────────────────────────────── */
 .hud-sheet-tabs {
   display: none;
-  gap: 6px;
-  padding: 0 12px 6px;
+  gap: 2px;
+  padding: 0 8px 6px;
   flex-shrink: 0;
 }
 
@@ -377,9 +403,10 @@ body {
   .hud-sheet-tabs { display: flex; }
 }
 
-.hud-sheet-tab {
+.hud-sheet-tab,
+.hud-panel-tab {
   flex: 1;
-  height: 44px;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -387,7 +414,6 @@ body {
   color: var(--ink-dim);
   background: transparent;
   border: 0;
-  border-radius: 14px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
@@ -395,111 +421,159 @@ body {
   position: relative;
 }
 
-.hud-sheet-tab::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--pane-tint, var(--ink-mute));
-  opacity: 0.55;
-  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+.hud-sheet-tab {
+  flex-direction: column;
+  height: 56px;
+  gap: 3px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.hud-sheet-tab svg,
+.hud-panel-tab svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.hud-sheet-tab .hud-tab-label,
+.hud-panel-tab .hud-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hud-sheet-tab:active { transform: scale(0.97); }
 
-.hud-sheet-tab[data-active="true"] {
-  color: var(--accent-ink);
-  background: var(--pane-tint, var(--accent));
+.hud-sheet-tab[data-active="true"],
+.hud-panel-tab[data-active="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
-.hud-sheet-tab[data-active="true"]::before { opacity: 0; }
+
+.hud-sheet-tab[data-active="true"] svg { color: var(--accent); }
+
+/* Desktop panel tab row — same content, horizontal pill shape. */
+.hud-panel-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surf-0);
+  border: 1px solid var(--hairline);
+}
+
+.hud-panel-tab {
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.hud-panel-tab svg { width: 17px; height: 17px; }
+
+.hud-panel-tab:hover { color: var(--ink); background: var(--surf-2); }
+.hud-panel-tab[data-active="true"]:hover { color: var(--accent); background: var(--accent-soft); }
 
 .hud-bottom-sheet-grabber {
   display: none;
   align-items: center;
   justify-content: center;
-  height: 14px;
+  height: 44px;
   flex-shrink: 0;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
 }
+.hud-bottom-sheet-grabber:active { cursor: grabbing; }
 .hud-bottom-sheet-grabber::before {
   content: "";
-  width: 36px;
+  width: 40px;
   height: 4px;
   border-radius: 999px;
   background: var(--ink-mute);
-  opacity: 0.5;
-  transition: opacity var(--dur-fast) ease;
+  opacity: 0.55;
+  transition: opacity var(--dur-fast) ease, background var(--dur-fast) ease;
 }
-.hud-bottom-sheet-grabber:active::before { opacity: 0.85; }
+.hud-bottom-sheet-grabber:hover::before,
+.hud-bottom-sheet-grabber:active::before { opacity: 0.95; background: var(--ink-dim); }
 
-/* Tiny circular icon button — sheet expand / close */
+/* Circular icon button — 44px touch target by default */
 .hud-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: 0;
   background: transparent;
   color: var(--ink-dim);
-  border-radius: 9999px;
+  border-radius: 999px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .hud-icon-btn:hover {
-  background: rgba(241, 240, 232, 0.06);
+  background: var(--surf-2);
   color: var(--ink);
 }
+.hud-icon-btn:active { background: var(--surf-3); }
 
 /* ────────────────────────────────────────────────────────────────────────
    Phone overrides — bigger tap targets where required
    ──────────────────────────────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .hud-bottom-nav { display: flex; }
   .hud-side-handles { display: none !important; }
   .hud-bottom-sheet-grabber { display: flex; }
 
-  .hud-btn-ghost { min-width: 40px; min-height: 40px; width: auto; padding-inline: 12px; }
-  .hud-btn-primary { min-height: 44px; padding: 10px 18px; font-size: 13px; }
-  .hud-tab { min-height: 36px; padding: 8px 4px; font-size: 11px; }
-  .hud-basemap-btn { padding: 12px 14px; font-size: 12px; }
-  .hud-basemap-btn-subtitle { font-size: 10px; }
-  .hud-variant-chip { min-height: 32px; padding: 6px 14px; font-size: 11px; }
-  .hud-basemap-switch-btn { width: 38px; height: 38px; }
+  .hud-btn-ghost { min-width: 44px; min-height: 44px; width: auto; padding-inline: 12px; }
+  .hud-btn-primary { min-height: 46px; padding: 11px 20px; font-size: 13.5px; }
+  .hud-tab { min-height: 44px; padding: 8px 6px; font-size: 12px; }
+  .ui-seg { min-height: 44px; font-size: 12.5px; }
+  .hud-basemap-btn { padding: 13px 14px; font-size: 13px; }
+  .hud-basemap-btn-subtitle { font-size: 11px; }
+  .hud-variant-chip { min-height: 36px; padding: 7px 14px; font-size: 12px; }
+  .hud-basemap-switch-btn { width: 44px; height: 44px; }
 
   .led-toggle, .hud-switch { position: relative; }
   .led-toggle::after, .hud-switch::after {
     content: "";
     position: absolute;
-    inset: -12px;
+    inset: -14px;
   }
 
   .hud-search input,
-  .hud-search > input { min-height: 40px; }
+  .hud-search > input { min-height: 44px; font-size: 14px; }
 
-  .maplibregl-ctrl-group button { width: 38px !important; height: 38px !important; }
+  .maplibregl-ctrl-group button { width: 44px !important; height: 44px !important; }
 
   .maplibregl-ctrl-top-left,
-  .maplibregl-ctrl-top-right { margin-top: env(safe-area-inset-top, 0px); }
+  .maplibregl-ctrl-top-right { margin-top: var(--safe-top); }
 
-  .maplibregl-ctrl-bottom-left,
+  /* Move the map control stack to the right edge on phones; keep it
+     above the sheet in peek, fade it when the sheet covers the map. */
+  .maplibregl-ctrl-bottom-left {
+    left: auto !important;
+    right: 12px;
+    align-items: flex-end;
+    margin-bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 12px) !important;
+    transition: opacity 180ms ease, margin-bottom 180ms ease;
+  }
   .maplibregl-ctrl-bottom-right {
-    margin-bottom: calc(var(--hud-nav-h) + 8px) !important;
-    transition: margin-bottom 180ms ease, opacity 180ms ease;
+    margin-bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 12px) !important;
+    transition: opacity 180ms ease, margin-bottom 180ms ease;
   }
-  .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show) {
-    margin-bottom: calc(var(--hud-nav-h) + 48px) !important;
-  }
+  .maplibregl-ctrl-scale { display: none !important; }
 
-  /* When the bottom sheet is at half/full state, the map controls along
-     the bottom edge would land underneath the sheet — fade them out
-     instead of letting them stack visually inside the sheet content. */
+  /* Keep the phone chrome minimal: advanced view controls live in the
+     Map panel; only locate/zoom remain on the map. */
+  .maplibregl-ctrl-fullscreen,
+  .maplibregl-ctrl-projection,
+  .maplibregl-ctrl-orientation { display: none !important; }
+
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-left,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-left,
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-right,
@@ -516,7 +590,7 @@ input[type="range"].hud-slider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 18px;
+  height: 30px;
   background: transparent;
   cursor: pointer;
 }
@@ -544,18 +618,18 @@ input[type="range"].hud-slider::-moz-range-progress {
 
 input[type="range"].hud-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   background: var(--ink);
   border: 0;
   border-radius: 9999px;
-  margin-top: -5px;
+  margin-top: -7px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 input[type="range"].hud-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   background: var(--ink);
   border: 0;
   border-radius: 9999px;
@@ -667,96 +741,84 @@ input[type="range"].hud-slider::-moz-range-thumb {
 
 @media (min-width: 768px) {
   .hud-sidebar {
-    background: var(--surf-glass-solid);
-    backdrop-filter: blur(14px);
+    background: var(--surf-1);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-sheet);
+    box-shadow: var(--shadow-float);
   }
 }
 
-/* Side-handle stack — re-anchored BELOW the floating top-bar to avoid
-   the basemap-switch overlap that the old design suffered from. */
-.hud-side-handles {
-  position: absolute;
-  left: -44px;
-  top: 76px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  z-index: 9;
-}
-
+/* Generic circular handle (kept for the desktop open affordance). */
 .hud-handle {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--surf-glass-solid);
-  border: 0;
+  background: var(--surf-2);
+  border: 1px solid var(--hairline);
   color: var(--ink-dim);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-  border-radius: 9999px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  border-radius: 999px;
 }
 
 .hud-handle:hover {
   color: var(--ink);
-  background: var(--surf-2);
+  background: var(--surf-3);
 }
 
-/* Each pane handle wears its signature shade as a small dot */
-.hud-handle[data-pane]::after {
-  content: "";
+/* Desktop: when the panel is closed, one calm reopen button remains. */
+.hud-drawer-open {
   position: absolute;
-  inset: auto 6px 6px auto;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--pane-tint, var(--accent));
-  opacity: 0.7;
-  transition: transform var(--dur-fast) ease, opacity var(--dur-fast) ease;
-}
-
-.hud-handle[data-active="true"] {
-  color: var(--accent-ink);
-  background: var(--pane-tint, var(--accent));
-}
-.hud-handle[data-active="true"]::after { opacity: 0; }
-
-/* Open/close chevron handle (no pane dot) */
-.hud-handle[data-handle="open"] {
-  background: var(--surf-glass-solid);
+  right: 12px;
+  bottom: calc(var(--safe-bottom) + 24px);
+  top: auto;
+  z-index: var(--z-chrome);
+  display: none;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surf-2);
   color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--shadow-float);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.hud-handle[data-handle="open"]:hover { background: var(--surf-2); }
+.hud-drawer-open:hover { background: var(--surf-3); }
+.hud-drawer-open:active { transform: scale(0.96); }
+@media (min-width: 768px) { .hud-drawer-open { display: inline-flex; } }
 
 /* ────────────────────────────────────────────────────────────────────────
    Tab row — inline segmented switcher (used inside panels, no borders)
    Active fills with --accent; idle is transparent.
    ──────────────────────────────────────────────────────────────────── */
 .hud-tab-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0;
+  display: flex;
+  gap: 2px;
   padding: 4px;
-  background: rgba(241, 240, 232, 0.04);
-  border: 0;
-  border-radius: 9999px;
+  background: var(--surf-0);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
   overflow: hidden;
 }
 
 .hud-tab {
-  padding: 6px 8px;
-  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 8px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--ink-dim);
   background: transparent;
   border: 0;
-  border-radius: 9999px;
+  border-radius: 10px;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
@@ -965,11 +1027,12 @@ input[type="range"].hud-slider::-moz-range-thumb {
    ──────────────────────────────────────────────────────────────────── */
 .hud-switch {
   position: relative;
-  width: 28px;
-  height: 16px;
-  border-radius: 9999px;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
   border: 0;
-  background: rgba(241, 240, 232, 0.1);
+  background: rgba(244, 243, 234, 0.14);
   cursor: pointer;
   transition: background var(--dur-base) var(--ease);
 }
@@ -977,17 +1040,18 @@ input[type="range"].hud-slider::-moz-range-thumb {
 
 .hud-switch-thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   transition: transform var(--dur-base) var(--ease), background var(--dur-fast) ease;
 }
 
 .hud-switch[data-on="true"] .hud-switch-thumb {
-  transform: translateX(12px);
+  transform: translateX(16px);
   background: var(--accent-ink);
 }
 
@@ -1130,3 +1194,353 @@ input[type="range"].hud-slider::-moz-range-thumb {
 
 /* Kill the legacy scanlines class — no decorative texture in the new system */
 .hud-scanlines { background-image: none; }
+
+/* Navigation mode: the map is the interface. Chrome steps back. */
+[data-navigating="true"] .ui-topbar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+[data-navigating="true"] .hud-drawer-open { display: none; }
+@media (max-width: 767px) {
+  [data-navigating="true"] .hud-bottom-sheet { display: none; }
+  [data-navigating="true"] .maplibregl-ctrl-bottom-left,
+  [data-navigating="true"] .maplibregl-ctrl-bottom-right { opacity: 0; pointer-events: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   UI primitives — used by the new shell and panels.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Top bar ------------------------------------------------------------- */
+.ui-topbar {
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: var(--z-chrome);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(var(--safe-top) + 10px) 12px 0;
+  transition: padding-right var(--dur-base) var(--ease);
+}
+
+.ui-logo {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  pointer-events: auto;
+}
+
+.ui-search-wrap {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  pointer-events: auto;
+}
+
+.ui-search-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--surf-glass-solid);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-float);
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.ui-search-pill:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: var(--shadow-float), 0 0 0 3px var(--accent-soft);
+}
+.ui-search-pill input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+.ui-search-pill input::placeholder { color: var(--ink-mute); }
+.ui-search-kbd {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-mute);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 2px 5px;
+}
+
+.ui-search-dropdown {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 8px);
+  z-index: var(--z-toast);
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--surf-1);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-modal);
+}
+
+.ui-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.ui-search-row:hover,
+.ui-search-row[data-active="true"] { background: var(--accent-soft); }
+.ui-search-row-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--surf-2);
+  color: var(--ink-dim);
+}
+
+/* Panel --------------------------------------------------------------- */
+.ui-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+.ui-panel-title {
+  font-size: 19px;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.ui-panel-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 16px calc(18px + var(--safe-bottom));
+}
+
+/* Cards, rows, sections ------------------------------------------------ */
+.ui-card {
+  border-radius: var(--r-card);
+  background: var(--surf-1);
+  border: 1px solid var(--hairline);
+  padding: 14px;
+}
+.ui-card-flat {
+  border-radius: var(--r-card);
+  background: var(--surf-0);
+  border: 1px solid var(--hairline);
+  padding: 14px;
+}
+
+.ui-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ui-kicker {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.ui-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 0;
+}
+.ui-row + .ui-row { border-top: 1px solid var(--hairline); }
+.ui-row-main { min-width: 0; flex: 1; }
+.ui-row-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.25;
+}
+.ui-row-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+.ui-divider { height: 1px; background: var(--hairline); border: 0; margin: 2px 0; }
+
+/* Segmented control ---------------------------------------------------- */
+.ui-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--surf-0);
+  border: 1px solid var(--hairline);
+}
+.ui-seg {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.ui-seg:hover { color: var(--ink); }
+.ui-seg[data-active="true"] {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+.ui-seg svg { width: 17px; height: 17px; }
+
+/* Inputs --------------------------------------------------------------- */
+.ui-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--hairline);
+  background: var(--surf-0);
+  color: var(--ink);
+  font-size: 13.5px;
+  outline: 0;
+}
+.ui-input::placeholder { color: var(--ink-mute); }
+.ui-input:focus { border-color: var(--accent); }
+
+/* FAB ------------------------------------------------------------------ */
+.ui-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surf-2);
+  color: var(--ink);
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.ui-fab:hover { background: var(--surf-3); }
+.ui-fab:active { transform: scale(0.96); }
+.ui-fab[data-variant="primary"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.ui-fab[data-variant="primary"]:hover { background: color-mix(in srgb, var(--accent) 90%, white); }
+
+/* Badges & status ------------------------------------------------------ */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--ink-dim);
+  background: var(--surf-2);
+  border: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.ui-badge[data-tone="accent"] { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.ui-badge[data-tone="warn"] { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 25%, transparent); }
+.ui-badge[data-tone="danger"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
+.ui-badge[data-tone="info"] { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); border-color: color-mix(in srgb, var(--info) 25%, transparent); }
+
+.ui-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  flex-shrink: 0;
+}
+.ui-status-dot[data-tone="warn"] { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 18%, transparent); }
+.ui-status-dot[data-tone="danger"] { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent); }
+
+/* Empty / loading ------------------------------------------------------ */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 12.5px;
+}
+.ui-skeleton {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--surf-2) 25%, var(--surf-3) 50%, var(--surf-2) 75%);
+  background-size: 200% 100%;
+  animation: ui-skeleton 1.4s ease-in-out infinite;
+}
+@keyframes ui-skeleton { to { background-position: -200% 0; } }
+
+/* Toast ---------------------------------------------------------------- */
+.ui-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 24px);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  max-width: min(92vw, 460px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: var(--surf-3);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-modal);
+}
+
+/* Sheet content safe area --------------------------------------------- */
+.ui-safe-bottom { padding-bottom: var(--safe-bottom); }
+
+@media (min-width: 768px) {
+  .ui-topbar { padding: calc(var(--safe-top) + 12px) 14px 0; }
+  .ui-topbar--with-panel { padding-right: calc(var(--panel-w) + 28px); }
+  .ui-logo { width: 38px; height: 38px; }
+  .ui-search-pill { height: 48px; max-width: 560px; }
+  .ui-search-wrap { flex: 0 1 560px; }
+}

@@ -39,9 +39,20 @@ function openDb(): Promise<IDBDatabase | null> {
     } catch {
       return resolve(null);
     }
-    req.onerror = () => resolve(null);
-    req.onblocked = () => resolve(null);
-    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => {
+      // Do not memoise a failed open for the lifetime of the page.
+      dbPromise = null;
+      resolve(null);
+    };
+    req.onblocked = () => {
+      dbPromise = null;
+      resolve(null);
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     req.onupgradeneeded = () => {
       const db = req.result;
       // Schema bumps drop the old store entirely — simpler than writing
@@ -75,7 +86,10 @@ export async function railTileGet(
     }
     req.onsuccess = () => {
       const v = req.result as StoredRailTile | undefined;
-      if (!v) return resolve(null);
+      if (!v || v.key !== key) return resolve(null);
+      if (!Array.isArray(v.lines) || !Array.isArray(v.stations)) {
+        return resolve(null);
+      }
       if (Date.now() - v.ts > TTL_MS) return resolve(null);
       resolve(v);
     };

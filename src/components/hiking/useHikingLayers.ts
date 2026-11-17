@@ -178,8 +178,9 @@ function routeFeatures(
   };
 }
 
-export function useHikingLayers(map: MLMap | null) {
-  const enabled = useHiking((s) => s.enabled);
+export function useHikingLayers(map: MLMap | null, visible = true) {
+  const hikingEnabled = useHiking((s) => s.enabled);
+  const enabled = hikingEnabled && visible;
   const waypoints = useHiking((s) => s.waypoints);
   const candidates = useHiking((s) => s.candidates);
   const selectedCandidateId = useHiking((s) => s.selectedCandidateId);
@@ -236,7 +237,7 @@ export function useHikingLayers(map: MLMap | null) {
           paint: {
             "circle-radius": 10,
             "circle-color": ["get", "color"],
-            "circle-stroke-color": "#0a0a0b",
+            "circle-stroke-color": "#0e0f0c",
             "circle-stroke-width": 2,
             "circle-opacity": 0.95,
           },
@@ -255,7 +256,7 @@ export function useHikingLayers(map: MLMap | null) {
             "text-font": ["Noto Sans Bold"],
           },
           paint: {
-            "text-color": "#0a0a0b",
+            "text-color": "#0e0f0c",
           },
         });
       }
@@ -323,7 +324,7 @@ export function useHikingLayers(map: MLMap | null) {
           filter: ["!", ["get", "selected"]],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#0a0a0b",
+            "line-color": "#0e0f0c",
             "line-width": 5,
             "line-opacity": 0.55,
           },
@@ -352,7 +353,7 @@ export function useHikingLayers(map: MLMap | null) {
           filter: ["==", ["get", "selected"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#0a0a0b",
+            "line-color": "#0e0f0c",
             "line-width": 7,
             "line-opacity": 0.8,
           },

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/purity -- map chrome renders live countdowns and clock labels */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import maplibregl, { Map as MLMap, ScaleControl } from "maplibre-gl";
@@ -35,13 +36,12 @@ import {
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
-import { ProjectionControl } from "./ProjectionControl";
-import { OrientationControl } from "./OrientationControl";
 import { bearingAlongRoute } from "@/lib/orientation";
 import { HudPanel } from "./hud/HudPanel";
-import { SidebarToggle } from "./SidebarToggle";
 import { PaneToggle } from "./PaneToggle";
-import { HikingPanel } from "./hud/HikingPanel";
+import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
+import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
+import { DataSourcesPanel } from "./hud/DataSourcesPanel";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
@@ -56,12 +56,15 @@ import {
   type WikipediaSummary,
 } from "@/lib/history/wikipedia";
 import {
-  OHM_ATTRIBUTION,
   OHM_HISTORICAL_BASEMAP_ID,
   OHM_HISTORICAL_STYLE_URL,
   applyOhmDate,
 } from "@/lib/history/basemap";
 import { useHikingLayers } from "./hiking/useHikingLayers";
+import { usePlannerLayers } from "./planner/usePlannerLayers";
+import { useNavigationEngine } from "@/lib/navigation/useNavigation";
+import { useNavigation } from "@/lib/navigation/store";
+import { NavigationOverlay } from "./navigation/NavigationOverlay";
 
 const OVERLAY_SOURCE_ID = "timeline-overlay";
 const OVERLAY_LAYER_ID = "timeline-overlay-layer";
@@ -101,6 +104,8 @@ interface ViewState {
   zoom: number;
 }
 
+const INITIAL_VIEW: ViewState = { center: [6.775, 51.2277], zoom: 12 };
+
 type SidebarPane = "control" | "hiking" | "biosphere" | "history";
 
 interface PaneSpec {
@@ -115,7 +120,7 @@ interface PaneSpec {
 const SIDEBAR_PANES: PaneSpec[] = [
   {
     key: "control",
-    label: "Map Controls",
+    label: "Map",
     icon: (
       <svg
         width="22"
@@ -136,7 +141,7 @@ const SIDEBAR_PANES: PaneSpec[] = [
   },
   {
     key: "biosphere",
-    label: "Biosphere",
+    label: "Nature",
     icon: (
       <svg
         width="22"
@@ -333,7 +338,7 @@ function ensureRailLinesLayer(map: MLMap, opacity: number) {
       source: RAIL_LINES_SOURCE_ID,
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#080a06",
+        "line-color": "#0e0f0c",
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
           9, 1.8,
@@ -354,12 +359,12 @@ function ensureRailLinesLayer(map: MLMap, opacity: number) {
         "line-color": [
           "match",
           ["get", "kind"],
-          "rail", "#d4ff38",
+          "rail", "#d8ef6a",
           "light_rail", "#b8e6ff",
           "subway", "#b8e6ff",
           "tram", "#9dd4ff",
           "narrow_gauge", "#e2b8ff",
-          "#d4ff38",
+          "#d8ef6a",
         ],
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
@@ -446,8 +451,8 @@ function ensureRailStationsLayer(map: MLMap) {
           14, 4.5,
           17, 6,
         ],
-        "circle-color": "#d4ff38",
-        "circle-stroke-color": "#0a0a0b",
+        "circle-color": "#d8ef6a",
+        "circle-stroke-color": "#0e0f0c",
         "circle-stroke-width": 1.5,
         "circle-opacity": 0.95,
       },
@@ -476,7 +481,7 @@ function ensureRailStationsLayer(map: MLMap) {
       },
       paint: {
         "text-color": "#e8f0d9",
-        "text-halo-color": "#0a0a0b",
+        "text-halo-color": "#0e0f0c",
         "text-halo-width": 1.4,
       },
     });
@@ -702,8 +707,8 @@ function ensureHistoryLandmarksLayer(map: MLMap, opacity: number) {
         "circle-color": [
           "match",
           ["get", "source"],
-          "wikidata", "#ff2d92", // hot pink → Wikidata (dated, named, has article)
-          "#22d3ee",             // cyan      → OSM (community heritage)
+          "wikidata", "#ff5ea8", // hot pink → Wikidata (dated, named, has article)
+          "#4fd1e8",             // cyan      → OSM (community heritage)
         ],
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 1.6,
@@ -736,7 +741,7 @@ function ensureHistoryLandmarksLayer(map: MLMap, opacity: number) {
       },
       paint: {
         "text-color": "#e8f0d9",
-        "text-halo-color": "#0a0a0b",
+        "text-halo-color": "#0e0f0c",
         "text-halo-width": 1.4,
         "text-opacity": opacity,
       },
@@ -905,15 +910,25 @@ const NDVI_ATTRIBUTION =
 // Generic 200-or-not probe used by every Biosphere data-source resolver
 // (Forest Loss, NO₂, Natura) to walk a candidate list of slugs/layers
 // and pick the first reachable one.
-async function probeUrl(url: string, timeoutMs = 8000): Promise<boolean> {
+const probeCache = new Map<string, boolean>();
+async function probeUrl(url: string, timeoutMs = 5000): Promise<boolean> {
+  const cached = probeCache.get(url);
+  if (cached !== undefined) return cached;
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    const res = await fetch(url, { method: "GET", signal: ctrl.signal });
-    clearTimeout(t);
+    const res = await fetch(url, {
+      method: "GET",
+      signal: ctrl.signal,
+      headers: { Range: "bytes=0-0" },
+    });
+    if (probeCache.size > 200) probeCache.clear();
+    probeCache.set(url, res.ok);
     return res.ok;
   } catch {
     return false;
+  } finally {
+    window.clearTimeout(timer);
   }
 }
 
@@ -1146,14 +1161,20 @@ async function findLatestNo2Source(): Promise<No2Source | null> {
   if (no2ProbeInFlight) return no2ProbeInFlight;
   no2ProbeInFlight = (async () => {
     for (const candidate of NO2_LAYER_CANDIDATES) {
-      for (let daysBack = 1; daysBack <= 7; daysBack++) {
-        const date = gibsDateNDaysAgo(daysBack);
-        const url = no2ProbeUrl(candidate.layer, candidate.matrix, date);
-        no2LastProbedUrl = url;
-        if (await probeUrl(url)) {
-          no2Probed = { ...candidate, date };
-          return no2Probed;
-        }
+      // Probe the last 5 days in parallel; a serial 8×7 walk could take
+      // minutes on a cold cache. The first hit wins.
+      const dates = [1, 2, 3, 4, 5].map((n) => gibsDateNDaysAgo(n));
+      const hits = await Promise.all(
+        dates.map(async (date) => {
+          const url = no2ProbeUrl(candidate.layer, candidate.matrix, date);
+          no2LastProbedUrl = url;
+          return (await probeUrl(url)) ? date : null;
+        }),
+      );
+      const date = hits.find((d): d is string => d != null);
+      if (date) {
+        no2Probed = { ...candidate, date };
+        return no2Probed;
       }
     }
     return null;
@@ -1233,7 +1254,6 @@ const NATURA_SOURCE_CANDIDATES: NaturaSource[] = [
 ];
 let naturaProbed: NaturaSource | null = null;
 let naturaProbeInFlight: Promise<NaturaSource | null> | null = null;
-let naturaLastProbedUrl: string | null = null;
 
 function naturaTileUrl(layers: string): string {
   const params = new URLSearchParams({
@@ -1283,7 +1303,6 @@ async function findLatestNaturaSource(): Promise<NaturaSource | null> {
   naturaProbeInFlight = (async () => {
     for (const candidate of NATURA_SOURCE_CANDIDATES) {
       const url = naturaProbeUrl(candidate.layers);
-      naturaLastProbedUrl = url;
       if (await probeUrl(url)) {
         naturaProbed = candidate;
         return candidate;
@@ -1296,10 +1315,6 @@ async function findLatestNaturaSource(): Promise<NaturaSource | null> {
   } finally {
     naturaProbeInFlight = null;
   }
-}
-
-function getLastProbedNaturaUrl(): string | null {
-  return naturaLastProbedUrl;
 }
 
 function ensureNaturaLayer(
@@ -1532,8 +1547,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
-  const projectionControlRef = useRef<ProjectionControl | null>(null);
-  const orientationControlRef = useRef<OrientationControl | null>(null);
   const liveMarkerRef = useRef<maplibregl.Marker | null>(null);
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
@@ -1585,6 +1598,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setBasemapVariant,
     setLiveBasemapDayOffset,
     setProjection,
+    setOrientationMode,
     setRailOn,
     setRailwayOpacity,
     setRailStyle,
@@ -1619,16 +1633,17 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const active = historyMapOn ? OHM_HISTORICAL_BASEMAP_ID : baseActive;
   const activeVariantId = basemapVariants[active];
   const railwayOn = railOn;
-  const [view, setView] = useState<ViewState>({
-    center: [6.775, 51.2277],
-    zoom: 12,
-  });
   const [sector, setSector] = useState<Bbox | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [snapshotIndex, setSnapshotIndex] = useState<number>(-1);
   const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
   const [overlayOpacity, setOverlayOpacity] = useState(1);
   const [timelineState, setTimelineState] = useState<TimelineState>({ kind: "idle" });
+  // Snapshot requests are sequenced and abortable: clicking A → B must never
+  // let A's slower response overwrite B, and a late blob must not leak.
+  const snapshotRequestRef = useRef(0);
+  const snapshotAbortRef = useRef<AbortController | null>(null);
+  const overlayUrlRef = useRef<string | null>(null);
 
   // Biosphere panel — Forest Loss probe + NO₂ probe + Natura probe.
   const [forestLossResolved, setForestLossResolved] = useState<ForestLossSource | null>(null);
@@ -1671,20 +1686,76 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const id = window.setInterval(() => setDebugTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
   }, [debugOn]);
-  type SheetState = "peek" | "half" | "full";
   // Active pane is always defined: in peek state the tabs still highlight one.
   const [activePane, setActivePane] = useState<SidebarPane>("control");
+  const [routesMode, setRoutesMode] = useState<RoutesMode>(() => {
+    if (typeof window === "undefined") return "walk";
+    const stored = window.localStorage.getItem("biosphere.routesMode");
+    return stored === "bike" || stored === "car" || stored === "transit"
+      ? stored
+      : "walk";
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("biosphere.routesMode", routesMode);
+    } catch {
+      /* private mode */
+    }
+  }, [routesMode]);
   const [sheetState, setSheetState] = useState<SheetState>(() => {
     if (typeof window === "undefined") return "half";
-    return window.matchMedia("(min-width: 768px)").matches ? "half" : "peek";
+    return window.matchMedia("(max-width: 767px)").matches ? "peek" : "half";
   });
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(max-width: 767px)").matches;
+  });
+  useEffect(() => {
+    // Track the visual viewport (mobile keyboards + URL bar) so a "full"
+    // sheet never extends under the keyboard.
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      document.documentElement.style.setProperty("--app-vh", `${vv.height}px`);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  const wasMobileRef = useRef(isMobile);
+  useEffect(() => {
+    if (wasMobileRef.current === isMobile) return;
+    wasMobileRef.current = isMobile;
+    // Crossing the phone/tablet breakpoint must not leave a "full" sheet
+    // state on desktop or a closed drawer on a phone.
+    setSheetState(isMobile ? "peek" : "half");
+  }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
   const [geoStatus, setGeoStatus] = useState<string | null>(null);
   const [geoHeading, setGeoHeading] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
-  useHikingLayers(mapInstance);
+  const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
+    state: sheetState,
+    onChange: setSheetState,
+    enabled: isMobile,
+  });
+
+  useHikingLayers(mapInstance, routesMode === "walk" || routesMode === "bike");
+  usePlannerLayers(
+    mapInstance,
+    routesMode === "car" ? "car" : routesMode === "transit" ? "transit" : null,
+  );
   const railNetworkStatus = useRailNetworkStatus();
+  const navigation = useNavigationEngine({ mapRef });
+  const navActive = useNavigation((s) => s.active);
 
   // One-shot purge of expired rail tiles on mount. Best-effort, no
   // blocking on the result.
@@ -1720,28 +1791,24 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // ensures the sheet is open at the user's preferred size.
   const selectPane = (pane: SidebarPane) => {
     if (pane === activePane) {
-      setSheetState((s) => (s === "peek" ? preferredOpen : "peek"));
+      snapTo(sheetState === "peek" ? preferredOpen : "peek");
       return;
     }
     setActivePane(pane);
-    setSheetState((s) => (s === "peek" ? preferredOpen : s));
+    if (sheetState === "peek") snapTo(preferredOpen);
   };
 
   const toggleExpand = () => {
     if (sheetState === "full") {
-      setSheetState("half");
       setPreferredOpen("half");
+      snapTo("half");
     } else {
-      setSheetState("full");
       setPreferredOpen("full");
+      snapTo("full");
     }
   };
 
-  const collapseToPeek = () => setSheetState("peek");
-
-  const cyclePeekHalf = () => {
-    setSheetState((s) => (s === "peek" ? preferredOpen : "peek"));
-  };
+  const collapseToPeek = useCallback(() => snapTo("peek"), [snapTo]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -1769,8 +1836,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         : initial!.kind === "raster"
           ? rasterStyle(initial!, initialVariantId, initialOffset)
           : initial!.url,
-      center: view.center,
-      zoom: view.zoom,
+      center: INITIAL_VIEW.center,
+      zoom: INITIAL_VIEW.zoom,
       minZoom: 2,
       // 22 lets Esri imagery overzoom past its native z=17 cap; lower-res
       // basemaps (S2 at z=15, GIBS at z=9) also stretch when the user
@@ -1883,28 +1950,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       else map.once("load", fire);
     };
     tryAutoStart();
-    map.addControl(new maplibregl.FullscreenControl(), "bottom-left");
-    const projectionControl = new ProjectionControl({
-      initial: projection,
-      onChange: setProjection,
-    });
-    projectionControlRef.current = projectionControl;
-    map.addControl(projectionControl, "bottom-left");
-
-    // Custom orientation toggle replaces the old NavigationControl compass
-    // (showCompass disabled above). Cycles north → route → heading.
-    const orientationControl = new OrientationControl({
-      initial: useSettings.getState().orientationMode,
-      onChange: (m: OrientationMode) => useSettings.getState().setOrientationMode(m),
-    });
-    orientationControlRef.current = orientationControl;
-    map.addControl(orientationControl, "bottom-left");
-
-    map.on("moveend", () => {
-      const c = map.getCenter();
-      setView({ center: [c.lng, c.lat], zoom: map.getZoom() });
-    });
-
     map.on("error", (e) => {
       const msg = e?.error?.message ?? "";
       if (
@@ -1976,6 +2021,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       mapRef.current = null;
       setMapInstance(null);
     };
+    // Map init is intentionally one-shot; persisted values are read once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Tracks the last basemap+variant+offset combo we actually applied via
@@ -2000,6 +2047,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       // Time-Travel basemap: swap to OHM's official "historical" style
       // by URL. The hybrid-labels overlay would clash with OHM's own
       // labels, so we deliberately skip it on this branch.
+      // eslint-disable-next-line react-hooks/immutability -- effect-side cache key update
       lastAppliedBasemapKeyRef.current = key;
       map.setStyle(OHM_HISTORICAL_STYLE_URL);
       const reapply = () => {
@@ -2094,13 +2142,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("zoom", applyScale);
 
     let compassStarted = false;
+    let compassStarting = false;
     let panToNextFix = true;
 
     const startCompassSubscription = async () => {
-      if (compassStarted) return;
-      compassStarted = true;
+      if (compassStarted || compassStarting) return;
+      compassStarting = true;
       const granted = await requestCompassPermission();
+      compassStarting = false;
+      // Only latch success. A denied/failed permission must be retryable
+      // on the next user gesture (iOS especially).
       if (!granted) return;
+      compassStarted = true;
       // Throttle: only push state when rounded heading changes by
       // ≥ 2°. Noisy magnetometers can fire ~50 events/second; pre-
       // rounding to 2° throttles React updates to ~5/s while keeping
@@ -2240,7 +2293,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       } catch {
         // style not yet loaded
       }
-      projectionControlRef.current?.setMode(projection);
     };
     apply();
     map.on("style.load", apply);
@@ -2248,12 +2300,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("style.load", apply);
     };
   }, [projection]);
-
-  // Keep the orientation control in sync if the persisted store changes
-  // (e.g., after rehydration on first paint).
-  useEffect(() => {
-    orientationControlRef.current?.setMode(orientationMode);
-  }, [orientationMode]);
 
   // Pull the currently-selected hiking route coordinates so the route-up
   // bearing effect can find the segment under the user's GPS position.
@@ -2302,10 +2348,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (interactingRef.current) return; // user is dragging — leave the camera alone
 
     if (orientationMode === "north") {
-      try {
-        map.easeTo({ bearing: 0, duration: 400 });
-      } catch {
-        /* style not yet loaded */
+      // Only correct when the map is actually rotated. This effect also
+      // re-runs on every compass tick; firing easeTo unconditionally
+      // would fight the user and burn animation frames at ~5 Hz.
+      const bearing = ((map.getBearing() % 360) + 360) % 360;
+      if (bearing > 0.5 && bearing < 359.5) {
+        try {
+          map.easeTo({ bearing: 0, duration: 300 });
+        } catch {
+          /* style not yet loaded */
+        }
       }
       return;
     }
@@ -2337,30 +2389,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [
     orientationMode,
-    livePos?.[0],
-    livePos?.[1],
+    livePos,
     liveHeadingDeg,
     activeRouteCoords,
   ]);
-
-  // Visual hint on the orientation button: dim the icon when the
-  // current mode has no data to act on yet.
-  useEffect(() => {
-    const ctrl = orientationControlRef.current;
-    if (!ctrl) return;
-    if (orientationMode === "north") {
-      ctrl.setArmed(true);
-      return;
-    }
-    if (orientationMode === "route") {
-      ctrl.setArmed(
-        !!activeRouteCoords && activeRouteCoords.length >= 2 && !!livePos,
-      );
-      return;
-    }
-    // heading
-    ctrl.setArmed(liveHeadingDeg != null);
-  }, [orientationMode, activeRouteCoords, livePos, liveHeadingDeg]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2381,7 +2413,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
     const apply = () => ensureRailwayLayer(map, railwayOpacity);
     if (map.isStyleLoaded()) apply();
-    else map.once("style.load", apply);
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -2410,6 +2441,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     let cancelled = false;
     let renderRaf = 0;
+    const inflightControllers = new Set<AbortController>();
 
     const renderFromCache = () => {
       if (cancelled) return;
@@ -2474,15 +2506,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
       const tiles = tilesForBounds(map.getBounds(), RAIL_TILE_ZOOM);
       const toFetch = tiles.filter((t) => {
-        const key = `${t.x}/${t.y}`;
+        const key = `${RAIL_TILE_ZOOM}/${t.x}/${t.y}`;
         return !railTileCache.has(key) && !railTileInFlight.has(key);
       });
       const slots = Math.max(0, RAIL_MAX_PARALLEL - railTileInFlight.size);
       for (const t of toFetch.slice(0, slots)) {
-        const key = `${t.x}/${t.y}`;
+        const key = `${RAIL_TILE_ZOOM}/${t.x}/${t.y}`;
         railTileInFlight.add(key);
         notifyRailNetworkStatus();
         const ctrl = new AbortController();
+        inflightControllers.add(ctrl);
         const bbox = railTileBbox(RAIL_TILE_ZOOM, t.x, t.y);
 
         // Two-tier cache: try IndexedDB first (instant after the user has
@@ -2522,6 +2555,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               console.warn("[rail-network]", err);
             }
           } finally {
+            inflightControllers.delete(ctrl);
             railTileInFlight.delete(key);
             notifyRailNetworkStatus();
             if (success) {
@@ -2573,7 +2607,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
 
     if (map.isStyleLoaded()) apply();
-    else map.once("style.load", apply);
     map.on("style.load", apply);
     map.on("moveend", onMoveEnd);
     map.on("click", RAIL_STATIONS_HIT_LAYER_ID, onClick);
@@ -2582,6 +2615,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     return () => {
       cancelled = true;
+      inflightControllers.forEach((c) => c.abort());
+      inflightControllers.clear();
       if (renderRaf) cancelAnimationFrame(renderRaf);
       map.off("style.load", apply);
       map.off("moveend", onMoveEnd);
@@ -2623,11 +2658,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ]);
       ensureSpeciesLayer(map, speciesOpacity, speciesTaxonKey, beforeId);
     };
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("style.load", apply);
-    }
+    if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -2676,11 +2707,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ]);
       ensureForestLossLayer(map, forestLossOpacity, slug, beforeId);
     };
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("style.load", apply);
-    }
+    if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -2702,8 +2729,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (map) removeHistoryLandmarksLayer(map);
       historyPopupRef.current?.remove();
       historyPopupRef.current = null;
+      /* eslint-disable react-hooks/set-state-in-effect -- cleanup of a map-driven layer */
       setHistoryVisibleCount(0);
       setHistoryEarliestYear(null);
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [historyLandmarksOn]);
 
@@ -2715,6 +2744,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (!map || !historyLandmarksOn) return;
     let cancelled = false;
     let pendingFetch: AbortController | null = null;
+    let requestId = 0;
 
     const recompute = (data: LandmarkCollection) => {
       setHistoryLandmarksData(map, data);
@@ -2736,14 +2766,21 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         east: b.getEast(),
         north: b.getNorth(),
       };
+      // The layer is hidden below z4; do not fan out Overpass/SPARQL
+      // requests for a continental or world view.
+      if (map.getZoom() < 4) {
+        recompute(landmarksFromCache(bounds));
+        return;
+      }
       // Instant repaint from cache so dragging never blanks the map.
       recompute(landmarksFromCache(bounds));
       pendingFetch?.abort();
       pendingFetch = new AbortController();
+      const ticket = ++requestId;
       setHistoryLoading(true);
       fetchLandmarksForBounds(bounds, pendingFetch.signal)
         .then((data) => {
-          if (cancelled) return;
+          if (cancelled || ticket !== requestId) return;
           recompute(data);
         })
         .catch((err) => {
@@ -2751,7 +2788,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           console.warn("[history-landmarks]", err);
         })
         .finally(() => {
-          if (!cancelled) setHistoryLoading(false);
+          if (!cancelled && ticket === requestId) setHistoryLoading(false);
         });
     };
 
@@ -2862,7 +2899,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
 
     if (map.isStyleLoaded()) apply();
-    else map.once("style.load", apply);
     map.on("style.load", apply);
     map.on("moveend", onMoveEnd);
     map.on("click", HISTORY_LANDMARKS_HIT_LAYER_ID, onClick);
@@ -2950,11 +2986,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ]);
       ensureNo2Layer(map, no2Opacity, source, beforeId);
     };
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("style.load", apply);
-    }
+    if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -3005,11 +3037,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ]);
       ensureNaturaLayer(map, naturaSitesOpacity, source, beforeId);
     };
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("style.load", apply);
-    }
+    if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -3046,11 +3074,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ]);
       ensureLandCoverLayer(map, landCoverOpacity, beforeId);
     };
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("style.load", apply);
-    }
+    if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -3081,11 +3105,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
     const apply = () =>
       ensureGibsOverlay(map, NDVI_SOURCE_ID, NDVI_LAYER_ID, url, ndviOpacity, NDVI_ATTRIBUTION);
-    if (map.isStyleLoaded()) {
-      apply();
-    } else {
-      map.once("style.load", apply);
-    }
+    if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
@@ -3108,29 +3128,47 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sidebarOpen]);
+  }, [sidebarOpen, collapseToPeek]);
 
   const loadSnapshot = useCallback(
     async (lockedBbox: Bbox, snapshot: Snapshot) => {
       const map = mapRef.current;
       if (!map || !credentials) return;
+      const requestId = ++snapshotRequestRef.current;
+      snapshotAbortRef.current?.abort();
+      const controller = new AbortController();
+      snapshotAbortRef.current = controller;
       setTimelineState({ kind: "loading" });
       try {
         const token = await getAccessToken(credentials);
+        if (controller.signal.aborted || requestId !== snapshotRequestRef.current) {
+          return;
+        }
         const result = await fetchDayOverlay({
           bbox: lockedBbox,
           accessToken: token,
           date: snapshot.datetime,
           maxPixelsPerSide: 2048,
+          signal: controller.signal,
         });
+        if (controller.signal.aborted || requestId !== snapshotRequestRef.current) {
+          return;
+        }
         const url = URL.createObjectURL(result.blob);
-        setOverlayUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return url;
-        });
+        const previous = overlayUrlRef.current;
+        overlayUrlRef.current = url;
+        setOverlayUrl(url);
         setOverlay(map, url, lockedBbox, overlayOpacity);
         setTimelineState({ kind: "ready" });
+        // The map source has switched to `url` now; give MapLibre a beat
+        // before releasing the previous blob.
+        if (previous) {
+          window.setTimeout(() => URL.revokeObjectURL(previous), 1500);
+        }
       } catch (err) {
+        if (controller.signal.aborted || requestId !== snapshotRequestRef.current) {
+          return;
+        }
         setTimelineState({
           kind: "error",
           message: err instanceof Error ? err.message : String(err),
@@ -3200,19 +3238,29 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
   function handleClearTimeline() {
     const map = mapRef.current;
+    snapshotRequestRef.current += 1;
+    snapshotAbortRef.current?.abort();
     if (map) {
       removeOverlay(map);
       removeSectorOutline(map);
     }
-    setOverlayUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
+    const previous = overlayUrlRef.current;
+    overlayUrlRef.current = null;
+    setOverlayUrl(null);
+    if (previous) window.setTimeout(() => URL.revokeObjectURL(previous), 800);
     setSector(null);
     setSnapshots([]);
     setSnapshotIndex(-1);
     setTimelineState({ kind: "idle" });
   }
+
+  useEffect(() => {
+    return () => {
+      snapshotAbortRef.current?.abort();
+      const url = overlayUrlRef.current;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3234,8 +3282,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     el.title = flyTarget.label;
     el.innerHTML = `
       <svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M14 0 C 5 0 0 5 0 13 C 0 24 14 36 14 36 C 14 36 28 24 28 13 C 28 5 23 0 14 0 Z" fill="#d4ff38" stroke="rgba(8,10,6,0.85)" stroke-width="1.5" />
-        <circle cx="14" cy="13" r="5" fill="#080a06" />
+        <path d="M14 0 C 5 0 0 5 0 13 C 0 24 14 36 14 36 C 14 36 28 24 28 13 C 28 5 23 0 14 0 Z" fill="#d8ef6a" stroke="rgba(8,10,6,0.85)" stroke-width="1.5" />
+        <circle cx="14" cy="13" r="5" fill="#0e0f0c" />
       </svg>
     `;
     el.addEventListener("click", (e) => {
@@ -3276,31 +3324,31 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const activePaneTheme =
     activePane === "control" ? "map" : activePane;
   return (
-    <div className="relative h-full w-full" data-active-pane={activePaneTheme}>
+    <div
+      className="relative h-full w-full"
+      data-active-pane={activePaneTheme}
+      data-navigating={navActive}
+    >
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Floating top bar — icon, search field, basemap-mode switch.
-          When the desktop drawer is open it pads the right edge so the
-          basemap-switch never slides under it. */}
+      {/* Floating top bar — logo, search, and (desktop only) the
+          basemap-mode switch. On phones the Map tab owns basemap chrome,
+          so the search keeps the full width. */}
       <div
-        className={[
-          "pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center gap-2 px-3 pt-[max(env(safe-area-inset-top,0px),12px)]",
-          "transition-[padding] duration-200 ease-out",
-          sidebarOpen ? "md:pr-[384px]" : "md:pr-3",
-        ].join(" ")}
+        className={["ui-topbar", sidebarOpen ? "ui-topbar--with-panel" : ""].join(" ")}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={`${ICON_BASE_PATH}/icon.svg`}
           alt="BiosphereOne"
-          width={36}
-          height={36}
-          className="pointer-events-auto block h-9 w-9 shrink-0"
+          width={40}
+          height={40}
+          className="ui-logo"
         />
-        <div className="pointer-events-auto min-w-0 flex-1">
-          <SearchBox onSelect={setFlyTarget} nearby={view.center} />
+        <div className="ui-search-wrap">
+          <SearchBox onSelect={setFlyTarget} getNearby={() => { const m = mapRef.current; if (!m) return undefined; const c = m.getCenter(); return [c.lng, c.lat]; }} />
         </div>
-        <div className="pointer-events-auto shrink-0">
+        <div className="pointer-events-auto hidden shrink-0 md:block">
           <BasemapSwitch mode={basemapMode} onModeChange={setBasemapMode} />
         </div>
       </div>
@@ -3311,7 +3359,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         && (railNetworkStatus.inFlight > 0
           || railNetworkStatus.cooldownUntil > Date.now()) && (
         <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[10px] text-[color:var(--hud-text)]">
+          <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-[color:var(--hud-text)]">
             <span className="hud-corner-tr" aria-hidden />
             <span className="hud-corner-br" aria-hidden />
             <span
@@ -3345,12 +3393,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           edge free. */}
       {(geoStatus || geoHeading) && (
         <div className="pointer-events-auto absolute left-1/2 z-20 -translate-x-1/2 top-[calc(env(safe-area-inset-top,0px)+62px)] md:top-auto md:bottom-3">
-          <div className="hud-panel flex items-center gap-2 px-3 py-1.5 text-[11px] text-[color:var(--hud-text)] whitespace-nowrap">
-            <span className="hud-corner-tr" aria-hidden />
-            <span className="hud-corner-br" aria-hidden />
-            {geoStatus && <span className="hud-mono whitespace-nowrap">{geoStatus}</span>}
+          <div className="hud-panel flex max-w-[calc(100vw-1.5rem)] items-center gap-2 px-3 py-2 text-[12px] text-[color:var(--hud-text)]">
+            {geoStatus && <span className="hud-mono min-w-0 break-words">{geoStatus}</span>}
             {geoHeading && (
-              <span className="hud-mono whitespace-nowrap text-[color:var(--hud-accent)]">
+              <span className="hud-mono shrink-0 text-[color:var(--hud-accent)]">
                 · {geoHeading}
               </span>
             )}
@@ -3360,66 +3406,71 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 setGeoStatus(null);
                 setGeoHeading(null);
               }}
-              aria-label="Dismiss"
-              className="text-[color:var(--hud-text-muted)] hover:text-[color:var(--hud-accent)]"
+              aria-label="Dismiss location status"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[color:var(--hud-text-muted)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--hud-accent)]"
             >
-              ×
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
             </button>
           </div>
         </div>
       )}
 
-      {/* Sidebar — bottom-sheet on mobile, floating drawer on desktop.
-          Note: `md:overflow-visible` so the side-handle column can poke
-          past the drawer's left edge. The inner .hud-sidebar applies
-          its own clipping via the rounded body. */}
+      {/* Desktop: one calm reopen affordance when the panel is closed. */}
+      {!sidebarOpen && (
+        <button
+          type="button"
+          className="hud-drawer-open"
+          onClick={() => snapTo(preferredOpen)}
+          aria-label="Open panel"
+          aria-expanded={false}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+        </button>
+      )}
+
+      {/* Sidebar — bottom-sheet on mobile, floating drawer on desktop. */}
       <aside
+        ref={sheetRef}
+        aria-label="Map panel"
         data-sheet-state={sheetState}
+        data-dragging={dragging}
         className={[
           "hud-bottom-sheet",
           "flex w-full flex-col",
           "md:absolute md:right-3 md:top-3 md:bottom-3",
-          "md:left-auto md:w-[360px] md:max-w-[360px]",
-          "md:overflow-visible",
+          "md:left-auto md:w-[var(--panel-w)] md:max-w-[var(--panel-w)]",
           "md:transition-transform md:duration-300 md:ease-out",
-          "md:will-change-transform",
           sidebarOpen
             ? "md:translate-x-0"
             : "md:translate-x-[calc(100%+12px)]",
         ].join(" ")}
       >
-        {/* Side-handle column — desktop only. Open/close chevron stays
-            fixed at the top, the pane toggles stack below. Position is
-            driven by the .hud-side-handles class in globals.css so they
-            sit cleanly below the floating top bar. */}
-        <div className="hud-side-handles">
-          <SidebarToggle
-            open={sidebarOpen}
-            onToggle={() =>
-              setSheetState((s) => (s === "peek" ? preferredOpen : "peek"))
-            }
-          />
-          {SIDEBAR_PANES.map((p) => (
-            <PaneToggle
-              key={p.key}
-              active={activePane === p.key && sidebarOpen}
-              label={p.label}
-              onToggle={() => selectPane(p.key)}
-              variant="handle"
-              pane={p.key === "control" ? "map" : p.key}
-            >
-              {p.icon}
-            </PaneToggle>
-          ))}
-        </div>
-
-        {/* Drag handle — mobile, taps cycle peek ↔ half */}
+        {/* Drag handle — pointer-driven sheet resize with tap-to-toggle. */}
         <button
           type="button"
-          onClick={cyclePeekHalf}
-          aria-label={sheetState === "peek" ? "Open panel" : "Collapse panel"}
+          {...handleProps}
+          aria-label={
+            sheetState === "peek" ? "Open panel" : "Resize panel"
+          }
+          aria-expanded={sidebarOpen}
           className="hud-bottom-sheet-grabber"
-        />
+        >
+          <span className="sr-only">Drag to resize panel</span>
+        </button>
 
         {/* In-sheet tabs — mobile only (CSS gates visibility). */}
         <nav className="hud-sheet-tabs" aria-label="Panel switcher">
@@ -3437,20 +3488,37 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           ))}
         </nav>
 
-        {/* panel body — visible only when expanded. On desktop this
-            div carries the rounded silhouette + drop shadow so the
-            handles outside (in `.hud-side-handles`) stay un-clipped. */}
+        {/* Panel body — on desktop this is the full-height drawer. */}
         <div
-          className="hud-sidebar flex min-w-0 flex-1 flex-col overflow-hidden md:rounded-3xl md:shadow-[0_18px_42px_rgba(0,0,0,0.55)]"
+          className="hud-sidebar flex min-w-0 flex-1 flex-col overflow-hidden"
+          inert={!sidebarOpen}
           aria-hidden={!sidebarOpen}
         >
-          {/* Pane signature tape — coloured strip identifying the active pane */}
-          <div className="px-4 pt-3 md:pt-4">
+          {/* Pane signature tape — a 3px identity mark, not a theme. */}
+          <div className="px-4 pt-3">
             <div className="pane-tape" aria-hidden />
           </div>
 
-          <div className="flex items-center justify-between gap-2 px-4 pb-2">
-            <h2 className="text-[15px] font-semibold tracking-tight text-[color:var(--ink)]">
+          {/* Desktop pane switcher lives inside the panel. */}
+          <div className="hidden px-4 pb-3 md:block">
+            <nav className="hud-panel-tabs" aria-label="Panel switcher">
+              {SIDEBAR_PANES.map((p) => (
+                <PaneToggle
+                  key={p.key}
+                  active={activePane === p.key && sidebarOpen}
+                  label={p.label}
+                  onToggle={() => selectPane(p.key)}
+                  variant="panel"
+                  pane={p.key === "control" ? "map" : p.key}
+                >
+                  {p.icon}
+                </PaneToggle>
+              ))}
+            </nav>
+          </div>
+
+          <div className="ui-panel-header">
+            <h2 className="ui-panel-title">
               {activePane === "hiking"
                 ? "Routes"
                 : activePane === "biosphere"
@@ -3460,51 +3528,53 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     : "Map"}
             </h2>
             <div className="flex items-center gap-1">
-              {/* Expand / shrink — mobile only */}
-              <button
-                type="button"
-                onClick={toggleExpand}
-                aria-label={sheetState === "full" ? "Shrink panel" : "Expand panel"}
-                className="hud-icon-btn md:hidden"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
+              {isMobile && (
+                <button
+                  type="button"
+                  onClick={toggleExpand}
+                  aria-label={
+                    sheetState === "full" ? "Shrink panel" : "Expand panel"
+                  }
+                  className="hud-icon-btn"
                 >
-                  {sheetState === "full" ? (
-                    <>
-                      <path d="M6 2 L6 6 L2 6" />
-                      <path d="M10 2 L10 6 L14 6" />
-                      <path d="M6 14 L6 10 L2 10" />
-                      <path d="M10 14 L10 10 L14 10" />
-                    </>
-                  ) : (
-                    <>
-                      <path d="M2 6 L2 2 L6 2" />
-                      <path d="M14 6 L14 2 L10 2" />
-                      <path d="M2 10 L2 14 L6 14" />
-                      <path d="M14 10 L14 14 L10 14" />
-                    </>
-                  )}
-                </svg>
-              </button>
-              {/* Collapse to peek — mobile only */}
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    {sheetState === "full" ? (
+                      <>
+                        <path d="M6 2 L6 6 L2 6" />
+                        <path d="M10 2 L10 6 L14 6" />
+                        <path d="M6 14 L6 10 L2 10" />
+                        <path d="M10 14 L10 10 L14 10" />
+                      </>
+                    ) : (
+                      <>
+                        <path d="M2 6 L2 2 L6 2" />
+                        <path d="M14 6 L14 2 L10 2" />
+                        <path d="M2 10 L2 14 L6 14" />
+                        <path d="M14 10 L14 14 L10 14" />
+                      </>
+                    )}
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={collapseToPeek}
-                aria-label="Collapse panel"
-                className="hud-icon-btn md:hidden"
+                aria-label={isMobile ? "Collapse panel" : "Close panel"}
+                className="hud-icon-btn"
               >
                 <svg
-                  width="14"
-                  height="14"
+                  width="18"
+                  height="18"
                   viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
@@ -3513,15 +3583,19 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   strokeLinejoin="round"
                   aria-hidden
                 >
-                  <path d="M8 3 L8 12 M4 8 L8 12 L12 8" />
+                  {isMobile ? (
+                    <path d="M8 3 L8 12 M4 8 L8 12 L12 8" />
+                  ) : (
+                    <path d="M6 4 L10 8 L6 12" />
+                  )}
                 </svg>
               </button>
             </div>
           </div>
 
-          <div className="hud-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-4 pt-1">
+          <div className="hud-scrollbar ui-panel-body">
             {activePane === "hiking" ? (
-              <HikingPanel mapRef={mapRef} />
+              <RoutesPanel mapRef={mapRef} mode={routesMode} onModeChange={setRoutesMode} />
             ) : activePane === "history" ? (
               <HistoryPanel
                 year={historyYear}
@@ -3575,12 +3649,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               />
             ) : (
               <>
-                <HudPanel className="hud-mono">
-                  <span className="text-[11px] text-[color:var(--hud-text)]">
-                    {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
-                    {view.zoom.toFixed(1)}
-                  </span>
-                </HudPanel>
+                <MapReadout map={mapInstance} />
+
+                <ViewPanel
+                  projection={projection}
+                  onProjectionChange={setProjection}
+                  orientationMode={orientationMode}
+                  onOrientationChange={setOrientationMode}
+                  basemapMode={basemapMode}
+                  onBasemapModeChange={setBasemapMode}
+                />
 
                 <BasemapPanel
                   imageId={imageBasemapId}
@@ -3637,7 +3715,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   }}
                   credentials={credentials !== null}
                   onOpenSettings={onOpenSettings}
-                  zoomOk={view.zoom >= MIN_FETCH_ZOOM}
+                  zoomOk={(mapInstance?.getZoom() ?? INITIAL_VIEW.zoom) >= MIN_FETCH_ZOOM}
                   minZoom={MIN_FETCH_ZOOM}
                   state={timelineState}
                   sector={sector}
@@ -3649,11 +3727,27 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   opacity={overlayOpacity}
                   onOpacityChange={setOverlayOpacity}
                 />
+
+                <DataSourcesPanel />
               </>
             )}
           </div>
         </div>
       </aside>
+
+      <NavigationOverlay
+        progress={navigation.progress}
+        position={navigation.position}
+        error={navigation.error}
+        offRoute={navigation.offRoute}
+        onRecenter={() => {
+          const map = mapRef.current;
+          const pos = navigation.position;
+          if (map && pos) {
+            map.easeTo({ center: [pos.lon, pos.lat], zoom: 16, duration: 600 });
+          }
+        }}
+      />
 
       {debugOn && (
         <DebugHud
@@ -3674,6 +3768,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           no2ResolvedLabel={no2Resolved?.label ?? null}
           no2ResolvedDate={no2Resolved?.date ?? null}
           no2LastProbedUrl={getLastProbedNo2Url()}
+          // eslint-disable-next-line react-hooks/refs -- debug-only readout
           lastBasemapKey={lastAppliedBasemapKeyRef.current}
           basemapMode={basemapMode}
           imageBasemapId={imageBasemapId}
@@ -3721,10 +3816,10 @@ function BasemapPanel({
     return (
       <div className="flex flex-col gap-1">
         <div className="hud-section-heading">
-          <span className="hud-label text-[9px]">{label}</span>
+          <span className="hud-label text-[11px]">{label}</span>
           {isLive && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-medium text-[color:var(--accent)]"
+              className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[color:var(--accent)]"
               aria-label="currently displayed"
             >
               <span
@@ -3793,41 +3888,6 @@ function BasemapPanel({
   );
 }
 
-function VariantChips({
-  basemap,
-  selectedId,
-  onSelect,
-}: {
-  basemap: Basemap;
-  selectedId: string;
-  onSelect: (variantId: string) => void;
-}) {
-  if (!basemap.variants) return null;
-  return (
-    <div
-      className="hud-variant-chips no-scrollbar"
-      role="radiogroup"
-      aria-label={`${basemap.label} variants`}
-    >
-      {basemap.variants.options.map((v) => {
-        const active = v.id === selectedId;
-        return (
-          <button
-            key={v.id}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onSelect(v.id)}
-            data-active={active}
-            className="hud-variant-chip"
-          >
-            {v.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 interface BasemapSwitchProps {
   mode: BasemapMode;
@@ -3926,6 +3986,159 @@ function BasemapSwitch({ mode, onModeChange }: BasemapSwitchProps) {
   );
 }
 
+function MapReadout({ map }: { map: MLMap | null }) {
+  const [view, setView] = useState<ViewState>(INITIAL_VIEW);
+
+  useEffect(() => {
+    if (!map) return;
+    const sync = () => {
+      const c = map.getCenter();
+      const nextCenter: [number, number] = [c.lng, c.lat];
+      const nextZoom = map.getZoom();
+      setView((prev) => {
+        if (
+          Math.abs(prev.center[0] - nextCenter[0]) < 1e-7 &&
+          Math.abs(prev.center[1] - nextCenter[1]) < 1e-7 &&
+          Math.abs(prev.zoom - nextZoom) < 1e-4
+        ) {
+          return prev;
+        }
+        return { center: nextCenter, zoom: nextZoom };
+      });
+    };
+    sync();
+    map.on("moveend", sync);
+    map.on("zoomend", sync);
+    return () => {
+      map.off("moveend", sync);
+      map.off("zoomend", sync);
+    };
+  }, [map]);
+
+  return (
+    <HudPanel className="hud-mono">
+      <span className="text-[13px] text-[color:var(--hud-text)]">
+        {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
+        {view.zoom.toFixed(1)}
+      </span>
+    </HudPanel>
+  );
+}
+
+interface ViewPanelProps {
+  projection: "mercator" | "globe";
+  onProjectionChange: (p: "mercator" | "globe") => void;
+  orientationMode: OrientationMode;
+  onOrientationChange: (m: OrientationMode) => void;
+  basemapMode: BasemapMode;
+  onBasemapModeChange: (m: BasemapMode) => void;
+}
+
+function ViewPanel({
+  projection,
+  onProjectionChange,
+  orientationMode,
+  onOrientationChange,
+  basemapMode,
+  onBasemapModeChange,
+}: ViewPanelProps) {
+  const fullscreen = () => {
+    if (typeof document === "undefined") return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => {});
+    } else {
+      void document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  };
+
+  return (
+    <HudPanel>
+      <div className="ui-section">
+        <span className="ui-kicker">View</span>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="ui-row-title">Mode</span>
+          <div className="ui-segmented w-[190px]" role="group" aria-label="Basemap mode">
+            {(
+              [
+                ["photo", "Image"],
+                ["hybrid", "Hybrid"],
+                ["vector", "Vector"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="ui-seg"
+                data-active={basemapMode === key}
+                aria-pressed={basemapMode === key}
+                onClick={() => onBasemapModeChange(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="ui-row-title">Projection</span>
+          <div className="ui-segmented w-[190px]" role="group" aria-label="Projection">
+            {(
+              [
+                ["mercator", "Flat"],
+                ["globe", "Globe"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="ui-seg"
+                data-active={projection === key}
+                aria-pressed={projection === key}
+                onClick={() => onProjectionChange(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="ui-row-title">Orientation</span>
+          <div className="ui-segmented w-[230px]" role="group" aria-label="Map orientation">
+            {(
+              [
+                ["north", "North"],
+                ["route", "Route"],
+                ["heading", "Heading"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="ui-seg"
+                data-active={orientationMode === key}
+                aria-pressed={orientationMode === key}
+                onClick={() => onOrientationChange(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={fullscreen}
+          className="mt-1 inline-flex min-h-10 items-center justify-center gap-2 rounded-[12px] border border-[color:var(--hairline)] px-3 text-[12.5px] font-semibold text-[color:var(--ink-dim)] transition-colors hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
+        >
+          Toggle fullscreen
+        </button>
+      </div>
+    </HudPanel>
+  );
+}
+
 interface RailsPanelProps {
   on: boolean;
   onChange: (on: boolean) => void;
@@ -3963,7 +4176,7 @@ function RailsPanel({
     <HudPanel>
       <div className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[13px] font-semibold text-[color:var(--ink)]">
+          <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
             Rails
           </h3>
           <button
@@ -4021,13 +4234,13 @@ function RailsPanel({
                 style={{ ["--hud-fill" as string]: `${Math.round(opacity * 100)}%` }}
                 aria-label="Rail overlay opacity"
               />
-              <span className="hud-mono w-9 shrink-0 text-right text-[10px] text-[color:var(--ink-dim)]">
+              <span className="hud-mono w-9 shrink-0 text-right text-[11.5px] text-[color:var(--ink-dim)]">
                 {Math.round(opacity * 100)}%
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-[color:var(--ink-dim)]">
+            <div className="flex items-center gap-1.5 text-[11.5px] text-[color:var(--ink-dim)]">
               {railStyle === "lines"
-                && (railNetworkStatus.inFlight > 0
+                        && (railNetworkStatus.inFlight > 0
                   || railNetworkStatus.cooldownUntil > Date.now()) && (
                   <span
                     aria-hidden
@@ -4165,7 +4378,7 @@ function TimelineYearTab({
   const selectedId = isS2Active ? s2ActiveVariant : "";
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[10px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
         Sentinel-2 cloudless · 10 m · annual mosaic
       </p>
       <div
@@ -4194,7 +4407,7 @@ function TimelineYearTab({
         })}
       </div>
       {!isS2Active && (
-        <p className="text-[10px] text-[color:var(--hud-text-muted)]">
+        <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
           Tap a year to switch the photo basemap to Sentinel-2.
         </p>
       )}
@@ -4237,7 +4450,7 @@ function TimelineLiveTab({
   };
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[10px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
         NOAA-20 VIIRS daily true-color · step through the past 14 days
       </p>
       <div className="flex items-center justify-between gap-2">
@@ -4253,10 +4466,10 @@ function TimelineLiveTab({
           </svg>
         </button>
         <div className="flex flex-1 flex-col items-center leading-tight">
-          <span className="hud-mono text-[13px] text-[color:var(--hud-text)]">
+          <span className="hud-mono text-[14px] text-[color:var(--hud-text)]">
             {niceDate}
           </span>
-          <span className="text-[10px] text-[color:var(--hud-text-muted)]">
+          <span className="text-[11.5px] text-[color:var(--hud-text-muted)]">
             {relative}
           </span>
         </div>
@@ -4358,7 +4571,7 @@ function TimelineSnapshotsTab({
             <button
               type="button"
               onClick={onClear}
-              className="text-[10px] uppercase tracking-wider text-[color:var(--hud-text-muted)] hover:text-[color:var(--hud-accent)]"
+              className="text-[11.5px] uppercase tracking-wider text-[color:var(--hud-text-muted)] hover:text-[color:var(--hud-accent)]"
             >
               clear
             </button>
@@ -4379,17 +4592,17 @@ function TimelineSnapshotsTab({
       )}
 
       {!credentials && (
-        <p className="max-w-[260px] text-[11px] text-[color:var(--hud-text-muted)]">
+        <p className="max-w-[260px] text-[12px] text-[color:var(--hud-text-muted)]">
           Tap the gear icon to add Copernicus credentials.
         </p>
       )}
       {credentials && !zoomOk && !active && (
-        <p className="max-w-[260px] text-[11px] text-[color:var(--hud-warn)]">
+        <p className="max-w-[260px] text-[12px] text-[color:var(--hud-warn)]">
           Zoom in to z{minZoom} or closer first
         </p>
       )}
       {state.kind === "error" && (
-        <p className="max-w-[260px] break-words text-[11px] text-[color:var(--hud-danger)]">
+        <p className="max-w-[260px] break-words text-[12px] text-[color:var(--hud-danger)]">
           {state.message}
         </p>
       )}
@@ -4407,14 +4620,14 @@ function TimelineSnapshotsTab({
               ‹
             </button>
             <div className="flex-1 text-center">
-              <div className="hud-mono text-[11px] text-[color:var(--hud-text)]">
+              <div className="hud-mono text-[12px] text-[color:var(--hud-text)]">
                 {new Date(current.datetime).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
                 })}
               </div>
-              <div className="text-[10px] text-[color:var(--hud-text-muted)]">
+              <div className="text-[11.5px] text-[color:var(--hud-text-muted)]">
                 {current.cloudCover != null
                   ? `${current.cloudCover.toFixed(0)}% cloud`
                   : "cloud: —"}
@@ -4440,7 +4653,7 @@ function TimelineSnapshotsTab({
           />
 
           <div className="flex items-center gap-2">
-            <span className="hud-label text-[9px]">Opacity</span>
+            <span className="hud-label text-[11px]">Opacity</span>
             <input
               type="range"
               min={0}
@@ -4451,7 +4664,7 @@ function TimelineSnapshotsTab({
               className="hud-slider flex-1"
               style={{ ["--hud-fill" as string]: `${Math.round(opacity * 100)}%` }}
             />
-            <span className="hud-mono w-8 text-right text-[10px] text-[color:var(--hud-text-muted)]">
+            <span className="hud-mono w-8 text-right text-[11.5px] text-[color:var(--hud-text-muted)]">
               {Math.round(opacity * 100)}%
             </span>
           </div>
@@ -4468,98 +4681,66 @@ interface SnapshotCalendarProps {
 }
 
 function SnapshotCalendar({ snapshots, activeIndex, onSelect }: SnapshotCalendarProps) {
-  const now = new Date();
-  const end = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const start = new Date(end.getTime() - 364 * 24 * 60 * 60 * 1000);
-
-  if (snapshots.length > 0) {
-    const earliest = new Date(snapshots[0].datetime);
-    earliest.setUTCHours(0, 0, 0, 0);
-    if (earliest.getTime() < start.getTime()) start.setTime(earliest.getTime());
-  }
-
-  const spanMs = Math.max(1, end.getTime() - start.getTime());
-
-  const monthTicks: { pct: number; label: string }[] = [];
-  const monthNames = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const cursor = new Date(
-    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
-  );
-  while (cursor.getTime() <= end.getTime()) {
-    if (cursor.getTime() >= start.getTime()) {
-      monthTicks.push({
-        pct: ((cursor.getTime() - start.getTime()) / spanMs) * 100,
-        label: monthNames[cursor.getUTCMonth()],
-      });
-    }
-    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
-  }
-
-  function dotColor(cc: number | null, isActive: boolean) {
-    if (isActive)
-      return "bg-[color:var(--hud-accent)] ring-1 ring-[color:var(--hud-accent)] shadow-[0_0_6px_var(--hud-accent-glow)]";
-    if (cc == null) return "bg-[color:var(--hud-accent)]/70";
-    if (cc < 10) return "bg-emerald-400";
-    if (cc < 30) return "bg-emerald-500/90";
-    if (cc < 60) return "bg-amber-400";
-    return "bg-neutral-500";
+  function dotColor(cc: number | null) {
+    if (cc == null) return "bg-[color:var(--ink-mute)]";
+    if (cc < 10) return "bg-[color:var(--accent)]";
+    if (cc < 30) return "bg-[color:var(--accent)]/70";
+    if (cc < 60) return "bg-[color:var(--warn)]";
+    return "bg-[color:var(--danger)]";
   }
 
   return (
-    <div className="flex flex-col gap-1 pt-1">
-      <div className="relative h-3 text-[9px] text-neutral-500">
-        {monthTicks.map((m, i) => (
-          <span
-            key={i}
-            className="absolute top-0 -translate-x-1/2"
-            style={{ left: `${m.pct}%` }}
-          >
-            {m.label}
-          </span>
-        ))}
-      </div>
-
-      <div className="relative h-4 rounded-full bg-neutral-800/60">
-        {monthTicks.map((m, i) => (
-          <span
-            key={`t-${i}`}
-            className="absolute top-0 bottom-0 w-px bg-neutral-700"
-            style={{ left: `${m.pct}%` }}
-            aria-hidden
-          />
-        ))}
+    <div className="flex flex-col gap-2 pt-1">
+      <div
+        className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1"
+        role="listbox"
+        aria-label="Available snapshots"
+      >
         {snapshots.map((s, i) => {
-          const t = Date.parse(s.datetime);
-          const pct = ((t - start.getTime()) / spanMs) * 100;
-          const isActive = i === activeIndex;
+          const active = i === activeIndex;
+          const date = new Date(s.datetime).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          });
           return (
             <button
               key={s.id}
               type="button"
+              role="option"
+              aria-selected={active}
               onClick={() => onSelect(i)}
               title={`${s.datetime.slice(0, 10)}${
                 s.cloudCover != null ? ` · ${s.cloudCover.toFixed(0)}% cloud` : ""
               }`}
-              aria-label={`Snapshot ${s.datetime.slice(0, 10)}`}
-              className={`absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform hover:scale-125 ${dotColor(
-                s.cloudCover,
-                isActive,
-              )} ${isActive ? "z-10 scale-125" : ""}`}
-              style={{ left: `${pct}%` }}
-            />
+              className={[
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition-colors",
+                active
+                  ? "border-transparent bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
+                  : "border-[color:var(--hairline)] bg-[color:var(--surf-0)] text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)]",
+              ].join(" ")}
+            >
+              <span className={`h-2 w-2 rounded-full ${dotColor(s.cloudCover)}`} aria-hidden />
+              {date}
+              {s.cloudCover != null && (
+                <span className={active ? "opacity-75" : "text-[color:var(--ink-mute)]"}>
+                  {s.cloudCover.toFixed(0)}%
+                </span>
+              )}
+            </button>
           );
         })}
       </div>
 
-      <div className="flex items-center gap-2 text-[9px] text-neutral-500">
-        <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" /> clear
-        <span className="inline-block h-2 w-2 rounded-full bg-amber-400" /> partly
-        <span className="inline-block h-2 w-2 rounded-full bg-neutral-500" /> cloudy
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-[color:var(--ink-mute)]">
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-[color:var(--accent)]" /> clear
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-[color:var(--warn)]" /> partly
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-[color:var(--danger)]" /> cloudy
+        </span>
       </div>
     </div>
   );
@@ -4590,6 +4771,7 @@ interface DebugHudProps {
   log: string[];
 }
 
+/* eslint-disable react-hooks/refs -- debug-only readout of the MapLibre instance */
 function DebugHud({
   tick,
   mapRef,
@@ -4634,7 +4816,7 @@ function DebugHud({
   }
   return (
     <div
-      className="pointer-events-auto fixed left-1 right-1 top-[max(64px,env(safe-area-inset-top,0px))] z-[9999] max-h-[55vh] overflow-auto rounded border-2 border-red-500 bg-black/95 p-2 font-mono text-[10px] leading-tight text-amber-100 shadow-2xl"
+      className="pointer-events-auto fixed left-1 right-1 top-[max(64px,env(safe-area-inset-top,0px))] z-[9999] max-h-[55vh] overflow-auto rounded border-2 border-red-500 bg-black/95 p-2 font-mono text-[11.5px] leading-tight text-amber-100 shadow-2xl"
     >
       <div className="mb-1 font-semibold text-amber-300">DEBUG HUD · ?debug=0 to hide</div>
       <div>active basemap: {activeBasemapId} (mode={basemapMode}, image={imageBasemapId})</div>
@@ -4701,3 +4883,4 @@ function DebugHud({
     </div>
   );
 }
+/* eslint-enable react-hooks/refs */

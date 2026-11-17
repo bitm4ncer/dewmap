@@ -7,13 +7,15 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "BiosphereOne",
     short_name: "BiosphereOne",
     description:
-      "Live satellite imagery with weather radar. Sentinel-2 cloudless basemap, latest-available overlay on demand, real-time precipitation.",
+      "Hiking, cycling, driving and public-transport navigation with live satellite and environmental layers.",
+    lang: "en",
+    categories: ["navigation", "travel", "maps"],
     start_url: ".",
     scope: ".",
     display: "standalone",
     orientation: "any",
-    background_color: "#080a06",
-    theme_color: "#080a06",
+    background_color: "#0e0f0c",
+    theme_color: "#0e0f0c",
     icons: [
       {
         src: "icon.svg",
@@ -24,6 +26,7 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "icon-512.png",
         sizes: "512x512",
         type: "image/png",
+        purpose: "any",
       },
       {
         src: "apple-icon.png",
