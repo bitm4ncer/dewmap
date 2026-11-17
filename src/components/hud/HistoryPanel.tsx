@@ -124,9 +124,15 @@ export function HistoryPanel(props: HistoryPanelProps) {
           )}
 
           <p className="text-[13px] leading-relaxed text-[color:var(--ink-dim)]">
-            <span style={{ color: "var(--landmark-wikidata)" }}>●</span>{" "}
+            <span
+              className="inline-block h-2 w-2 rounded-full align-middle"
+              style={{ background: "var(--landmark-wikidata)" }}
+            />{" "}
             Wikidata (named, dated, links to Wikipedia){" "}
-            <span style={{ color: "var(--landmark-osm)" }}>●</span>{" "}
+            <span
+              className="inline-block h-2 w-2 rounded-full align-middle"
+              style={{ background: "var(--landmark-osm)" }}
+            />{" "}
             OpenStreetMap <span className="hud-mono">historic=*</span>. Tap a
             marker for a summary.
           </p>

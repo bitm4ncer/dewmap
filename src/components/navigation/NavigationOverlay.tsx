@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ManeuverIcon, RecenterIcon, SpeakerIcon } from "@/components/ui/icons";
 import { useNavigation } from "@/lib/navigation/store";
 import type { RouteProgress } from "@/lib/navigation/progress";
 import type { LivePosition } from "@/lib/navigation/useNavigation";
@@ -8,7 +9,6 @@ import {
   formatClock,
   formatDistance,
   formatDuration,
-  type Maneuver,
 } from "@/lib/routing";
 
 interface Props {
@@ -30,25 +30,6 @@ function TrainGlyph() {
   );
 }
 
-function maneuverGlyph(m: Maneuver | null): string {
-  if (!m) return "●";
-  if (m.type === "arrive") return "⚑";
-  if (m.type === "roundabout") return "⟳";
-  switch (m.modifier) {
-    case "left":
-    case "slight-left":
-    case "sharp-left":
-      return "↰";
-    case "right":
-    case "slight-right":
-    case "sharp-right":
-      return "↱";
-    case "uturn":
-      return "↶";
-    default:
-      return "↑";
-  }
-}
 
 export function NavigationOverlay({
   progress,
@@ -118,12 +99,12 @@ export function NavigationOverlay({
             aria-hidden
             className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-[color:var(--accent)] text-[24px] font-bold text-[color:var(--accent-ink)]"
           >
-            {isTransit ? <TrainGlyph /> : maneuverGlyph(next)}
+            {isTransit ? <TrainGlyph /> : <ManeuverIcon maneuver={next} size={28} />}
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[17px] font-semibold leading-tight text-[color:var(--ink)]">
               {isTransit
-                ? `${transitLeg!.line ?? transitLeg!.rawMode ?? "Transit"} → ${
+                ? `${transitLeg!.line ?? transitLeg!.rawMode ?? "Transit"} to ${
                     transitLeg!.headsign ?? transitLeg!.to.name
                   }`
                 : next
@@ -173,7 +154,7 @@ export function NavigationOverlay({
                 aria-label={muted ? "Unmute voice guidance" : "Mute voice guidance"}
                 className="hud-icon-btn border border-[color:var(--hairline)]"
               >
-                {muted ? "🔇" : "🔊"}
+                <SpeakerIcon muted={muted} size={19} />
               </button>
               <button
                 type="button"
@@ -184,7 +165,7 @@ export function NavigationOverlay({
                 aria-label="Recenter map"
                 className="hud-icon-btn border border-[color:var(--hairline)]"
               >
-                {follow === "course" ? "◈" : "N"}
+                {follow === "course" ? <RecenterIcon size={19} /> : "N"}
               </button>
               <button
                 type="button"

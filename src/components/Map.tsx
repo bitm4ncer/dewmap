@@ -42,6 +42,7 @@ import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
+import { ChevronLeftIcon, ChevronRightIcon } from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
@@ -2000,7 +2001,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const msg = e.error?.message ?? String(e.error ?? "unknown");
       setDebugLog((prev) =>
         [
-          `[map.error src=${sourceId}] ${msg}${url ? ` → ${url.slice(-90)}` : ""}`,
+          `[map.error src=${sourceId}] ${msg}${url ? ` -> ${url.slice(-90)}` : ""}`,
           ...prev,
         ].slice(0, 12),
       );
@@ -4617,7 +4618,7 @@ function TimelineSnapshotsTab({
               className="hud-btn-ghost"
               aria-label="Previous snapshot"
             >
-              ‹
+              <ChevronLeftIcon size={18} />
             </button>
             <div className="flex-1 text-center">
               <div className="hud-mono text-[12px] text-[color:var(--hud-text)]">
@@ -4642,7 +4643,7 @@ function TimelineSnapshotsTab({
               className="hud-btn-ghost"
               aria-label="Next snapshot"
             >
-              ›
+              <ChevronRightIcon size={18} />
             </button>
           </div>
 

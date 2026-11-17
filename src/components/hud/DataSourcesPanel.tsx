@@ -1,4 +1,5 @@
 import { HudPanel } from "./HudPanel";
+import { ChevronDownIcon } from "@/components/ui/icons";
 
 interface Source {
   name: string;
@@ -76,12 +77,10 @@ export function DataSourcesPanel() {
       <details className="group">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-semibold text-[color:var(--ink)]">
           Data sources &amp; attribution
-          <span
-            aria-hidden
+          <ChevronDownIcon
+            size={16}
             className="text-[color:var(--ink-mute)] transition-transform group-open:rotate-180"
-          >
-            ▾
-          </span>
+          />
         </summary>
         <ul className="mt-2 flex flex-col">
           {SOURCES.map((s) => (

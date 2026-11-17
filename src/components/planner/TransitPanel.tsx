@@ -10,6 +10,7 @@ import {
 } from "@/lib/planner/transitStore";
 import { PlacePicker, type PickedPlace } from "./PlacePicker";
 import { useNavigation } from "@/lib/navigation/store";
+import { SwapIcon } from "@/components/ui/icons";
 import {
   planRoutes,
   formatDuration,
@@ -171,7 +172,7 @@ export function TransitPanel({ mapRef }: Props) {
               aria-label="Swap origin and destination"
               className="hud-icon-btn w-11 shrink-0 self-center border border-[color:var(--hairline)]"
             >
-              ⇅
+              <SwapIcon size={18} />
             </button>
           </div>
 
@@ -346,7 +347,7 @@ function JourneyCard({
     >
       <div className="flex items-baseline justify-between gap-2">
         <span className="hud-mono text-[15px] font-semibold text-[color:var(--ink)]">
-          {formatClock(t.departure)} → {formatClock(t.arrival)}
+          {formatClock(t.departure)} – {formatClock(t.arrival)}
         </span>
         <span className="text-[12px] text-[color:var(--ink-dim)]">
           {formatDuration(t.durationMin)}
@@ -466,7 +467,7 @@ function JourneyDetail({ journey }: { journey: RoutePlan }) {
                   </div>
                   {leg.mode !== "walk" && (
                     <div className="truncate text-[11.5px] text-[color:var(--ink-dim)]">
-                      → {leg.to.name}
+                      to {leg.to.name}
                       {leg.to.platform ? ` · ${leg.to.platform}` : ""}
                       {leg.headsign ? ` · ${leg.headsign}` : ""}
                     </div>

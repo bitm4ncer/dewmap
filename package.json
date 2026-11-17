@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "check:no-emoji": "node scripts/check-no-emoji.mjs"
   },
   "dependencies": {
     "@openhistoricalmap/maplibre-gl-dates": "^1.3.0",

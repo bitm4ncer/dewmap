@@ -215,7 +215,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
     if (!cand) return;
     const first = waypoints[0]?.label ?? "Start";
     const last = waypoints[waypoints.length - 1]?.label ?? "End";
-    const name = `${first} → ${last} · ${cand.distanceKm.toFixed(1)} km`;
+    const name = `${first} - ${last} - ${cand.distanceKm.toFixed(1)} km`;
     const gpx = routeToGpx(cand, { name, waypoints });
     const filename = `hike-${first}-${last}-${cand.distanceKm.toFixed(1)}km.gpx`
       .replace(/\s+/g, "_")

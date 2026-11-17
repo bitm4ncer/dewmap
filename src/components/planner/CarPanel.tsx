@@ -8,6 +8,7 @@ import { PlacePicker, type PickedPlace } from "./PlacePicker";
 import { planRoutes, formatDuration, formatDistance, isAbortError } from "@/lib/routing";
 import type { RoutePlan } from "@/lib/routing";
 import { useNavigation } from "@/lib/navigation/store";
+import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from "@/components/ui/icons";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -206,7 +207,7 @@ export function CarPanel({ mapRef }: Props) {
                     aria-label="Move stop up"
                     className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] disabled:opacity-30"
                   >
-                    ↑
+                    <ChevronUpIcon size={17} />
                   </button>
                   <button
                     type="button"
@@ -215,7 +216,7 @@ export function CarPanel({ mapRef }: Props) {
                     aria-label="Move stop down"
                     className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] disabled:opacity-30"
                   >
-                    ↓
+                    <ChevronDownIcon size={17} />
                   </button>
                   <button
                     type="button"
@@ -223,7 +224,7 @@ export function CarPanel({ mapRef }: Props) {
                     aria-label="Remove stop"
                     className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--danger)]"
                   >
-                    ×
+                    <CloseIcon size={16} />
                   </button>
                 </div>
               </li>
