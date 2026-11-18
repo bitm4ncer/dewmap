@@ -941,7 +941,6 @@ async function probeUrl(url: string, timeoutMs = 5000): Promise<boolean> {
     const res = await fetch(url, {
       method: "GET",
       signal: ctrl.signal,
-      headers: { Range: "bytes=0-0" },
     });
     if (probeCache.size > 200) probeCache.clear();
     probeCache.set(url, res.ok);
@@ -1130,33 +1129,16 @@ interface No2Source {
   label: string;
 }
 const NO2_LAYER_CANDIDATES = [
-  // OMI / Aura — long-running NO₂ product, daily, global. Various
-  // historical slug forms documented in the GIBS catalog.
-  { layer: "OMI_NO2_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level6", label: "NASA OMI" },
-  { layer: "OMI_NO2_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level5", label: "NASA OMI" },
-  { layer: "OMI_Aura_NO2_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level6", label: "NASA OMI" },
-  { layer: "OMI_Aura_Nitrogen_Dioxide_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level6", label: "NASA OMI" },
-  // Sentinel-5P / TROPOMI — newer high-res product (~3.5 km).
+  // OMI / Aura — long-running daily NO₂ product, global.
   {
-    layer: "Sentinel-5P_NO2_Tropospheric_Column_Daily",
-    matrix: "GoogleMapsCompatible_Level7",
-    label: "Sentinel-5P TROPOMI",
+    layer: "OMI_Nitrogen_Dioxide_Tropo_Column",
+    matrix: "GoogleMapsCompatible_Level6",
+    label: "NASA OMI",
   },
+  // Fallback — MODIS Aerosol Optical Depth. Not strictly NO₂ but a
+  // closely related "polluted air" indicator that is widely available.
   {
-    layer: "Sentinel-5P_TROPOMI_NO2_Tropospheric_Column_Daily",
-    matrix: "GoogleMapsCompatible_Level7",
-    label: "Sentinel-5P TROPOMI",
-  },
-  {
-    layer: "S5P_TROPOMI_NO2_Tropospheric_Column_Daily",
-    matrix: "GoogleMapsCompatible_Level7",
-    label: "Sentinel-5P TROPOMI",
-  },
-  // Final fallback — MODIS Aerosol Optical Depth. Not strictly NO₂ but
-  // a closely related "polluted air" indicator that's universally
-  // available daily.
-  {
-    layer: "MODIS_Combined_Value_Added_AOD",
+    layer: "MODIS_Terra_Aerosol_Optical_Depth_3km",
     matrix: "GoogleMapsCompatible_Level6",
     label: "MODIS aerosol (fallback)",
   },
@@ -1182,9 +1164,9 @@ async function findLatestNo2Source(): Promise<No2Source | null> {
   if (no2ProbeInFlight) return no2ProbeInFlight;
   no2ProbeInFlight = (async () => {
     for (const candidate of NO2_LAYER_CANDIDATES) {
-      // Probe the last 5 days in parallel; a serial 8×7 walk could take
-      // minutes on a cold cache. The first hit wins.
-      const dates = [1, 2, 3, 4, 5].map((n) => gibsDateNDaysAgo(n));
+      // The daily OMI product lags by up to ~3 weeks. Probe a month in
+      // parallel; the first hit wins.
+      const dates = Array.from({ length: 30 }, (_, i) => gibsDateNDaysAgo(i + 1));
       const hits = await Promise.all(
         dates.map(async (date) => {
           const url = no2ProbeUrl(candidate.layer, candidate.matrix, date);
@@ -1387,23 +1369,24 @@ function removeNaturaLayer(map: MLMap) {
 const LAND_COVER_ATTRIBUTION =
   '<a href="https://esa-worldcover.org" target="_blank" rel="noreferrer">ESA WorldCover 2021</a> · 10 m global land cover';
 
-const LAND_COVER_WMTS_URL = "https://services.terrascope.be/wmts/v2";
-const LAND_COVER_LAYER_NAME = "WORLDCOVER_2021_MAP";
+const LAND_COVER_WMS_URL = "https://mapproxy.terrascope.be/mapproxy/service";
+const LAND_COVER_LAYER_NAME = "esa-worldcover-map-10m-2021-v2_map";
 
 function landCoverTileUrl(): string {
   const params = new URLSearchParams({
-    SERVICE: "WMTS",
-    REQUEST: "GetTile",
-    VERSION: "1.0.0",
-    LAYER: LAND_COVER_LAYER_NAME,
-    STYLE: "",
+    SERVICE: "WMS",
+    REQUEST: "GetMap",
+    VERSION: "1.3.0",
+    LAYERS: LAND_COVER_LAYER_NAME,
+    STYLES: "",
+    CRS: "EPSG:3857",
     FORMAT: "image/png",
-    TILEMATRIXSET: "EPSG:3857",
+    WIDTH: "256",
+    HEIGHT: "256",
   });
-  return (
-    `${LAND_COVER_WMTS_URL}?${params.toString()}` +
-    `&TILEMATRIX=EPSG:3857:{z}&TILECOL={x}&TILEROW={y}`
-  );
+  // MapLibre expands {bbox-epsg-3857} per raster tile, so the WMS proxy
+  // behaves like a slippy tile source.
+  return `${LAND_COVER_WMS_URL}?${params.toString()}&BBOX={bbox-epsg-3857}`;
 }
 
 function ensureLandCoverLayer(

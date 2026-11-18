@@ -21,6 +21,14 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("uses live-capable overlay endpoints", () => {
+    expect(map).not.toContain("__map");
+    expect(map).toContain("mapproxy.terrascope.be");
+    expect(map).toContain("{bbox-epsg-3857}");
+    expect(map).toContain("OMI_Nitrogen_Dioxide_Tropo_Column");
+    expect(map).not.toContain('"OMI_NO2_Tropospheric_Column"');
+  });
+
   it("keeps sheet actions out of the tab row and orders the map panel", () => {
     const tabsStart = map.indexOf('className="hud-sheet-tabs"');
     const tabsEnd = map.indexOf("</nav>", tabsStart);
