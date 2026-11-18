@@ -4,6 +4,8 @@ export interface PoiImage {
   url: string;
   href?: string;
   credit: string;
+  license?: string;
+  licenseUrl?: string;
 }
 
 export interface PoiOpeningRow {
@@ -35,6 +37,7 @@ export interface PoiSelection {
   lon: number;
   lat: number;
   name?: string;
+  label?: string;
   category?: string;
   city?: string;
 }

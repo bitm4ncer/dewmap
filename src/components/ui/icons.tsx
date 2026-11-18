@@ -336,3 +336,13 @@ export function HeadingIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+
+export function DirectionsIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M5 20V10a4 4 0 0 1 4-4h9" />
+      <path d="m14 2 4 4-4 4" />
+    </svg>
+  );
+}

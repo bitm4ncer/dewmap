@@ -67,12 +67,15 @@ import {
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
+  HISTORY_UNDATED_VISIBLE_FROM,
   fetchLandmarksForBounds,
+  isLandmarkVisibleAtYear,
   landmarksFromCache,
   type LandmarkCollection,
   type LandmarkProperties,
 } from "@/lib/history/landmarks";
 import {
+  fetchWikidataImage,
   fetchWikipediaSummary,
   fetchWikipediaSummaryFromQid,
   type WikipediaSummary,
@@ -681,7 +684,14 @@ const HISTORY_LANDMARKS_LABEL_LAYER_ID = "history-landmarks-label";
 // History tab look empty whenever the user opened it on a continent
 // view.
 const HISTORY_LANDMARKS_MIN_ZOOM = 4;
-const HISTORY_UNDATED_VISIBLE_FROM = 2000;
+
+function historyLabelFont(map: MLMap): string {
+  // OHM's glyph endpoint serves its own OpenHistorical set (and Open
+  // Sans), but not Noto Sans; Protomaps serves Noto Sans and not
+  // OpenHistorical. Picking the wrong one makes every landmark label 404.
+  const glyphs = map.getStyle()?.glyphs ?? "";
+  return glyphs.includes("openhistoricalmap") ? "OpenHistorical" : "Noto Sans Regular";
+}
 
 function ensureHistoryLandmarksLayer(map: MLMap, opacity: number) {
   if (!map.getSource(HISTORY_LANDMARKS_SOURCE_ID)) {
@@ -747,7 +757,7 @@ function ensureHistoryLandmarksLayer(map: MLMap, opacity: number) {
       minzoom: 11,
       layout: {
         "text-field": ["get", "name"],
-        "text-font": ["Noto Sans Regular"],
+        "text-font": [historyLabelFont(map)],
         "text-size": [
           "interpolate",
           ["linear"],
@@ -866,17 +876,24 @@ function escapeHtml(s: string): string {
 function summaryToHtml(
   summary: WikipediaSummary | null,
   title: string,
+  fallbackImage?: string,
+  commonsUrl?: string,
 ): string {
-  if (!summary) {
-    return `<div class="hud-popup-body">No Wikipedia article available for "${escapeHtml(
-      title,
-    )}".</div>`;
-  }
-  const thumb = summary.thumbnail
-    ? `<img class="hud-popup-thumb" src="${escapeHtml(
-        summary.thumbnail.source,
-      )}" alt="" />`
+  const image = summary?.thumbnail?.source ?? fallbackImage;
+  const thumb = image
+    ? `<img class="hud-popup-thumb" src="${escapeHtml(image)}" alt="" loading="lazy" />`
     : "";
+  const commonsLink =
+    commonsUrl && !summary?.thumbnail?.source
+      ? `<a class="hud-popup-link" href="${escapeHtml(
+          commonsUrl,
+        )}" target="_blank" rel="noopener noreferrer">Commons ↗</a>`
+      : "";
+  if (!summary) {
+    return `<div class="hud-popup-body">${thumb}No Wikipedia article available for "${escapeHtml(
+      title,
+    )}".${commonsLink}</div>`;
+  }
   return `
     <div class="hud-popup-body">
       ${thumb}
@@ -884,6 +901,7 @@ function summaryToHtml(
       <a class="hud-popup-link" href="${escapeHtml(
         summary.url,
       )}" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a>
+      ${commonsLink}
     </div>
   `;
 }
@@ -1562,6 +1580,7 @@ function buildLiveLocationEl(): {
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
   const [poiSelection, setPoiSelection] = useState<PoiSelection | null>(null);
+  const sheetBeforePoiRef = useRef<SheetState | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
     start: RoutePoint;
@@ -1599,6 +1618,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   );
   const [historyLoading, setHistoryLoading] = useState(false);
   const historyPopupRef = useRef<maplibregl.Popup | null>(null);
+  /** Latest fetched collection, for recounting when the slider moves. */
+  const historyDataRef = useRef<LandmarkCollection | null>(null);
   const {
     imageBasemapId,
     vectorBasemapId,
@@ -1655,6 +1676,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setHistoryMapOn,
     setHistoryYear,
   } = useSettings();
+  /** Latest slider year; fetch callbacks outlive the render that started them. */
+  const historyYearRef = useRef(historyYear);
+  useEffect(() => {
+    historyYearRef.current = historyYear;
+  }, [historyYear]);
   const baseActive =
     basemapMode === "vector" ? vectorBasemapId : imageBasemapId;
   // Timeline-Map and Historic Landmarks toggle independently. The
@@ -1908,35 +1934,86 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const toggleFull = () => snapTo(sheetState === "full" ? "half" : "full");
   const collapseToPeek = useCallback(() => snapTo("peek"), [snapTo]);
 
-  const closePoi = useCallback(() => setPoiSelection(null), []);
-  const centerPoi = useCallback((lon: number, lat: number) => {
-    const map = mapRef.current;
-    if (!map) return;
-    map.flyTo({
-      center: [lon, lat],
-      zoom: Math.max(map.getZoom(), 16),
-      duration: 700,
-    });
-  }, []);
+  /** Opening a place card clears the sheet out of the way, then restores
+   *  the previous sheet size when the card is closed. */
+  const openPoi = useCallback(
+    (selection: PoiSelection) => {
+      if (
+        isMobile
+        && sheetBeforePoiRef.current == null
+        && sheetState !== "peek"
+      ) {
+        sheetBeforePoiRef.current = sheetState;
+        snapTo("peek");
+      }
+      setPoiSelection(selection);
+    },
+    [isMobile, sheetState, snapTo],
+  );
+
+  const closePoi = useCallback(() => {
+    setPoiSelection(null);
+    const previous = sheetBeforePoiRef.current;
+    sheetBeforePoiRef.current = null;
+    if (isMobile && previous) snapTo(previous);
+  }, [isMobile, snapTo]);
 
   const handleTransitSearchComplete = useCallback(() => {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
 
-  /** A pinned search result becomes the destination for the next mode pick. */
+  /** Replace the fallback start with the real GPS fix when available. */
+  const refreshPinStart = useCallback(() => {
+    if (livePos || typeof navigator === "undefined" || !navigator.geolocation) {
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        setPendingPin((prev) =>
+          prev
+            ? {
+                ...prev,
+                start: {
+                  name: "My location",
+                  lat: pos.coords.latitude,
+                  lon: pos.coords.longitude,
+                },
+              }
+            : prev,
+        ),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
+    );
+  }, [livePos]);
+
+  const startPointFor = useCallback(
+    (lon: number, lat: number): RoutePoint => {
+      if (livePos) {
+        return { name: "My location", lat: livePos[1], lon: livePos[0] };
+      }
+      const center = mapRef.current?.getCenter();
+      return center
+        ? { name: "Map center", lat: center.lat, lon: center.lng }
+        : { name: "Map center", lat, lon };
+    },
+    [livePos],
+  );
+
+  /** A search result opens a compact place card immediately. */
   const handleSearchSelect = useCallback(
     (result: GeocodeResult) => {
       setFlyTarget(result);
-      const center = mapRef.current?.getCenter();
-      const start: RoutePoint = livePos
-        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
-        : center
-          ? { name: "Map center", lat: center.lat, lon: center.lng }
-          : {
-              name: "Map center",
-              lat: result.coordinates[1],
-              lon: result.coordinates[0],
-            };
+      openPoi({
+        ...(result.osmType && result.osmId
+          ? { osmType: result.osmType, osmId: result.osmId }
+          : {}),
+        lon: result.coordinates[0],
+        lat: result.coordinates[1],
+        name: result.name || result.label,
+        label: result.label,
+        ...(result.city ? { city: result.city } : {}),
+        ...(result.category ? { category: result.category } : {}),
+      });
       setPendingPin({
         dest: {
           name: result.name || result.label,
@@ -1945,32 +2022,32 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           city: result.city,
           kind: "address",
         },
-        start,
+        start: startPointFor(result.coordinates[0], result.coordinates[1]),
       });
-      // Without a live fix the map centre is only a fallback; ask for the
-      // real position so the route starts where the user is.
-      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            setPendingPin((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    start: {
-                      name: "My location",
-                      lat: pos.coords.latitude,
-                      lon: pos.coords.longitude,
-                    },
-                  }
-                : prev,
-            ),
-          () => {},
-          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
-        );
-      }
+      refreshPinStart();
+    },
+    [openPoi, refreshPinStart, startPointFor],
+  );
+
+  const handlePoiDirections = useCallback(
+    (selection: PoiSelection) => {
+      setPendingPin({
+        dest: {
+          name: selection.name ?? "Destination",
+          lat: selection.lat,
+          lon: selection.lon,
+          city: selection.city,
+          kind: "address",
+        },
+        start: startPointFor(selection.lon, selection.lat),
+      });
+      refreshPinStart();
+      setActivePane("hiking");
+      sheetBeforePoiRef.current = null;
+      setPoiSelection(null);
       snapTo(isMobile ? "modes" : "half");
     },
-    [isMobile, livePos, snapTo],
+    [isMobile, refreshPinStart, snapTo, startPointFor],
   );
 
 
@@ -2215,20 +2292,35 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       lastAppliedBasemapKeyRef.current = key;
       map.setStyle(OHM_HISTORICAL_STYLE_URL);
       const reapply = () => {
+        clearTimeout(watchdog);
         map.setProjection({ type: projection });
         if (sector) setSectorOutline(map, sector);
         if (overlayUrl && sector)
           setOverlay(map, overlayUrl, sector, overlayOpacity);
         applyOhmDate(map, historyYear);
       };
+      // A style URL that fails to load (offline, blocked CDN, expired
+      // unpkg pin) otherwise leaves a blank map with no feedback. Revert
+      // to the previous basemap if `style.load` never arrives.
+      const watchdog = setTimeout(() => {
+        console.warn(
+          "[history-basemap] OHM style did not load within 12 s; reverting",
+        );
+        lastAppliedBasemapKeyRef.current = null;
+        setHistoryMapOn(false);
+      }, 12_000);
       // `load` is a one-shot initial event in MapLibre's lifecycle —
       // every subsequent setStyle fires `style.load` instead. Using
       // `load` here meant `reapply` never ran after a basemap switch,
       // which silently dropped sector outlines / projection / OHM
       // dates whenever the user changed maps.
-      if (map.isStyleLoaded()) setTimeout(reapply, 0);
-      else map.once("style.load", reapply);
-      return;
+      const onStyleLoad = () => reapply();
+      if (map.isStyleLoaded()) setTimeout(onStyleLoad, 0);
+      else map.once("style.load", onStyleLoad);
+      return () => {
+        clearTimeout(watchdog);
+        map.off("style.load", onStyleLoad);
+      };
     }
 
     const basemap = BASEMAPS.find((b) => b.id === active);
@@ -2872,6 +2964,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (map) removeHistoryLandmarksLayer(map);
       historyPopupRef.current?.remove();
       historyPopupRef.current = null;
+      historyDataRef.current = null;
       /* eslint-disable react-hooks/set-state-in-effect -- cleanup of a map-driven layer */
       setHistoryVisibleCount(0);
       setHistoryEarliestYear(null);
@@ -2890,8 +2983,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let requestId = 0;
 
     const recompute = (data: LandmarkCollection) => {
+      historyDataRef.current = data;
       setHistoryLandmarksData(map, data);
-      setHistoryVisibleCount(data.features.length);
+      const year = historyYearRef.current;
+      setHistoryVisibleCount(
+        data.features.filter((f) =>
+          isLandmarkVisibleAtYear(f.properties, year),
+        ).length,
+      );
       let earliest: number | null = null;
       for (const f of data.features) {
         const y = f.properties.inception;
@@ -2921,7 +3020,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       pendingFetch = new AbortController();
       const ticket = ++requestId;
       setHistoryLoading(true);
-      fetchLandmarksForBounds(bounds, pendingFetch.signal)
+      fetchLandmarksForBounds(bounds, pendingFetch.signal, (partial) => {
+        if (cancelled || ticket !== requestId) return;
+        // Paint whichever source answered first (usually Wikidata while
+        // Overpass mirrors are slow or down).
+        recompute(partial);
+      })
         .then((data) => {
           if (cancelled || ticket !== requestId) return;
           recompute(data);
@@ -2987,9 +3091,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             props.wikidataId,
           )}" target="_blank" rel="noopener noreferrer">Wikidata ↗</a>`
         : "";
-      const noArticleHtml = `<div class="hud-popup-body">No Wikipedia article linked.${
-        wikidataLink ? "<br/>" + wikidataLink : ""
-      }</div>`;
       historyPopupRef.current?.remove();
       const popup = new maplibregl.Popup({
         className: "hud-popup",
@@ -3006,24 +3107,54 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const title = props.wikipediaTitle;
       const lang = props.wikipediaLang ?? "en";
       const qid = props.wikidataId;
+      const imageUrl = props.imageUrl;
 
       const tryRender = async () => {
         // 1. Direct article title (set on the feature) — fastest path,
         //    works for OSM features with `wikipedia=lang:Title` tags
         //    and Wikidata features that resolved to enwiki up front.
-        if (title) {
-          const summary = await fetchWikipediaSummary(title, lang);
-          if (summary) return summaryToHtml(summary, title);
-        }
         // 2. Wikidata sitelink fallback — pulls de/fr/es/it/nl etc.
         //    when the SPARQL query didn't return an English title.
-        //    This is what unblocks landmarks like Q16970 Garnisonskirche
-        //    St. Anna that only have a German article.
-        if (qid) {
-          const summary = await fetchWikipediaSummaryFromQid(qid);
-          if (summary) return summaryToHtml(summary, summary.title);
+        const summaryPromise = (async () => {
+          if (title) {
+            const summary = await fetchWikipediaSummary(title, lang);
+            if (summary) return summary;
+          }
+          if (qid) return await fetchWikipediaSummaryFromQid(qid);
+          return null;
+        })();
+        // OSM tags carry an image directly; Wikidata needs one tiny
+        // wbgetclaims lookup. Both are optional.
+        const imagePromise: Promise<string | null> = imageUrl
+          ? Promise.resolve(imageUrl)
+          : qid
+            ? fetchWikidataImage(qid)
+            : Promise.resolve(null);
+        const [summary, image] = await Promise.all([
+          summaryPromise,
+          imagePromise,
+        ]);
+        if (summary) {
+          return summaryToHtml(
+            summary,
+            title ?? summary.title,
+            image ?? undefined,
+            image ?? undefined,
+          );
         }
-        return noArticleHtml;
+        const thumb = image
+          ? `<img class="hud-popup-thumb" src="${escapeHtml(
+              image,
+            )}" alt="" loading="lazy" />`
+          : "";
+        const commonsLink = image
+          ? `<br/><a class="hud-popup-link" href="${escapeHtml(
+              image,
+            )}" target="_blank" rel="noopener noreferrer">Commons ↗</a>`
+          : "";
+        return `<div class="hud-popup-body">${thumb}No Wikipedia article linked.${
+          wikidataLink ? "<br/>" + wikidataLink : ""
+        }${commonsLink}</div>`;
       };
 
       tryRender()
@@ -3061,11 +3192,19 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyLandmarksOn, active]);
 
-  // Slider drag → no refetch, just `setFilter`. Cheap.
+  // Slider drag → no refetch, just `setFilter` + recount. Cheap.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !historyLandmarksOn) return;
     applyHistoryLandmarksFilter(map, historyYear);
+    const data = historyDataRef.current;
+    if (data) {
+      setHistoryVisibleCount(
+        data.features.filter((f) =>
+          isLandmarkVisibleAtYear(f.properties, historyYear),
+        ).length,
+      );
+    }
   }, [historyLandmarksOn, historyYear]);
 
   useEffect(() => {
@@ -3478,7 +3617,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             || feature.layer?.id === HISTORY_LANDMARKS_HIT_LAYER_ID,
         );
       if (hit) return;
-      setPoiSelection({
+      openPoi({
         lon: event.lngLat.lng,
         lat: event.lngLat.lat,
       });
@@ -3487,7 +3626,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapInstance]);
+  }, [mapInstance, openPoi]);
 
   return (
     <div
@@ -3862,7 +4001,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       <PoiDetail
         selection={poiSelection}
         onClose={closePoi}
-        onCenter={centerPoi}
+        onDirections={handlePoiDirections}
       />
 
       <NavigationOverlay

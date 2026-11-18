@@ -107,7 +107,12 @@ The client currently talks to Transitous directly, so the app stays lean.
 
 ## Place details (POI)
 
-- Tapping a search result or a map location opens a clean detail card.
+- Tapping a search result opens a **minimised place card immediately**;
+  tapping it, the chevron or swiping up expands it. Map taps do the same.
+- The compact card shows the search hit before the detail fetch finishes:
+  thumbnail placeholder, name, category, city, address and open state.
+- Directions in the card hands the destination to the existing route mode
+  picker.
 - Nominatim `extratags` supplies opening hours, phone, email, website,
   address, wheelchair/payment facts and `contact:*` social tags. Results are
   cached for 24 hours and requests are serialised to respect Nominatim's
@@ -118,9 +123,12 @@ The client currently talks to Transitous directly, so the app stays lean.
   descriptions (for example a REWE branch does not show another store).
 - Opening hours are parsed into a weekly grid with an "open now" state for
   common OSM syntax; complex rules fall back to the raw value.
-- Photos come from OSM, Wikimedia Commons and Wikipedia, with a link to the
-  original file and its licence. The card uses the flat surface system, a
-  78dvh mobile sheet and a 380px desktop card.
+- Photos come from OSM, Wikimedia Commons and Wikipedia. Commons files are
+  resolved through the imageinfo API to direct `thumb.wikimedia.org` URLs
+  (with author and licence) instead of redirect-based `Special:FilePath`
+  URLs. The hero fades in after load and falls back to a category panel.
+  The card uses the flat surface system, a compact 152px mobile header,
+  a 78dvh expanded sheet and a 380px desktop card.
 - `src/lib/poi/*` contains the data layer, parser and cache;
   `src/components/poi/PoiDetail.tsx` the UI.
 
@@ -128,8 +136,8 @@ The client currently talks to Transitous directly, so the app stays lean.
 
 - `npx tsc --noEmit` — clean.
 - `npm run lint` — 0 errors, 0 warnings.
-- `npm test` — 169 tests passing (format, HTTP, engine, BRouter, Valhalla,
-  MOTIS, hiking routing, POI parsing and opening-hours rules).
+- `npm test` — 211 tests passing (format, HTTP, engine, BRouter, Valhalla,
+  MOTIS, hiking routing, POI/Commons parsing and opening-hours rules).
 - `npm run build` — static export succeeds.
 - Lighthouse (production export): Accessibility 100, Best Practices 100,
   SEO 100.
@@ -138,7 +146,8 @@ The client currently talks to Transitous directly, so the app stays lean.
   (ICE 872, platforms, real-time fields), car navigation simulation with
   turn instruction and ETA, hiking route with waypoints and alternatives,
   POI detail cards for a museum and a supermarket (photo, hours, contact,
-  socials), map-click reverse lookup.
+  socials), immediate compact card on search, expand/drag, directions handoff,
+  direct Commons thumbnails, map-click reverse lookup.
 
 ## Known limitations
 

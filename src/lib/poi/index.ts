@@ -1,4 +1,5 @@
 import { fetchWikipediaSummary } from "@/lib/history/wikipedia";
+import { resolveCommonsImage } from "./commons";
 import { lookupPoi, reversePoi, type RawPoi } from "./nominatim";
 import { parseOpeningHours } from "./openingHours";
 import { fetchWikidata } from "./wikidata";
@@ -66,20 +67,6 @@ function writeCache(key: string, value: PoiDetails): void {
   } catch {
     // Quota or private mode: the in-memory cache still works.
   }
-}
-
-function commonsUrl(file: string, width = 900): string {
-  const normalized = file.replace(/^File:/i, "").replace(/ /g, "_");
-  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(
-    normalized,
-  )}?width=${width}`;
-}
-
-function commonsPage(file: string): string {
-  const normalized = file.replace(/^File:/i, "").replace(/ /g, "_");
-  return `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(
-    normalized,
-  )}`;
 }
 
 function wikipediaTag(tag: string | undefined): {
@@ -208,6 +195,15 @@ export async function fetchPoiDetails(
       ? raw.category
       : selection.category ?? raw.category;
 
+  const [osmCommons, wikidataCommons] = await Promise.all([
+    raw.commonsFile
+      ? resolveCommonsImage(raw.commonsFile, 900, signal)
+      : Promise.resolve(null),
+    !brandEntity && wd?.imageFile
+      ? resolveCommonsImage(wd.imageFile, 900, signal)
+      : Promise.resolve(null),
+  ]);
+
   const images = mergeImages(
     raw.imageUrl && isDisplayableImage(raw.imageUrl)
       ? {
@@ -216,20 +212,8 @@ export async function fetchPoiDetails(
           href: raw.imageUrl,
         }
       : null,
-    raw.commonsFile
-      ? {
-          url: commonsUrl(raw.commonsFile),
-          href: commonsPage(raw.commonsFile),
-          credit: "Wikimedia Commons",
-        }
-      : null,
-    !brandEntity && wd?.imageFile
-      ? {
-          url: commonsUrl(wd.imageFile),
-          href: commonsPage(wd.imageFile),
-          credit: "Wikimedia Commons",
-        }
-      : null,
+    osmCommons,
+    wikidataCommons,
     !brandEntity && wiki?.thumbnail
       ? {
           url: wiki.thumbnail.source,
