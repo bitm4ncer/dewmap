@@ -68,14 +68,11 @@ function StreetViewIcon({ size = 16 }: { size?: number }) {
       fill="none"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="7.4" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="4.2" r="2.2" fill="currentColor" />
       <path
-        d="M12 4.6v14.8M4.6 12h14.8"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
+        d="M8.2 9.2c0-1.2 1-2.2 2.2-2.2h3.2c1.2 0 2.2 1 2.2 2.2v2.8c0 .8-.6 1.4-1.4 1.4h-.3v5.5c0 .8-.6 1.4-1.4 1.4s-1.4-.6-1.4-1.4v-3.3h-.6v3.3c0 .8-.6 1.4-1.4 1.4s-1.4-.6-1.4-1.4v-5.5h-.3c-.8 0-1.4-.6-1.4-1.4V9.2Z"
+        fill="currentColor"
       />
-      <circle cx="12" cy="12" r="2.1" fill="currentColor" />
     </svg>
   );
 }
@@ -548,6 +545,20 @@ function PoiDetailContent({
                 title="Plan route"
               >
                 <RouteIcon size={18} />
+              </button>
+            )}
+            {streetView && (
+              <button
+                type="button"
+                className="poi-mini-btn"
+                onClick={() => {
+                  haptic("tap");
+                  setStreetViewOpen(true);
+                }}
+                aria-label="Open Street View"
+                title="Open Street View"
+              >
+                <StreetViewIcon size={18} />
               </button>
             )}
             <button
