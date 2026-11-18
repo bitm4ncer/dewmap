@@ -1702,7 +1702,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     return () => window.clearInterval(id);
   }, [debugOn]);
   // Active pane is always defined: in peek state the tabs still highlight one.
-  const [activePane, setActivePane] = useState<SidebarPane>("control");
+  const [activePane, setActivePane] = useState<SidebarPane>("hiking");
   const [routesMode, setRoutesMode] = useState<RoutesMode>(() => {
     if (typeof window === "undefined") return "transit";
     const stored = window.localStorage.getItem("biosphere.routesMode");

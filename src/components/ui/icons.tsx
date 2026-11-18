@@ -180,3 +180,45 @@ export function ManeuverIcon({
     </svg>
   );
 }
+
+export function TransitIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="5" y="3" width="14" height="13.5" rx="3" />
+      <path d="M8 7.5h8M8 11h8" />
+      <path d="M8 17l-2 4M16 17l2 4M7.5 21h9" />
+    </svg>
+  );
+}
+
+export function WalkIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="13.5" cy="4.2" r="1.7" />
+      <path d="M13 7.2 11 13l3 2.6 1 5.2" />
+      <path d="m11 13-3 2.4M11 9.6 7.5 11.4M13 8.6l3.4 2.2" />
+    </svg>
+  );
+}
+
+export function BikeIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="5.8" cy="16.2" r="3.8" />
+      <circle cx="18.2" cy="16.2" r="3.8" />
+      <path d="M5.8 16.2 9.5 7h5.2l-4.2 9.2M12 7l1.8 4.6M8.4 7h3.4M14.4 11.6h5.2" />
+    </svg>
+  );
+}
+
+export function CarIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M4 15.5 5.4 9.6A2 2 0 0 1 7.4 8h9.2a2 2 0 0 1 2 1.6L20 15.5" />
+      <path d="M3.5 15.5h17v3.2h-2.2M5.7 18.7H3.5v-3.2" />
+      <circle cx="7.5" cy="18.4" r="1.5" />
+      <circle cx="16.5" cy="18.4" r="1.5" />
+      <path d="M7 12h10" />
+    </svg>
+  );
+}

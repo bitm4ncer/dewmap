@@ -1,6 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { Map as MLMap } from "maplibre-gl";
+import { BikeIcon, CarIcon, TransitIcon, WalkIcon } from "@/components/ui/icons";
 import { HikingPanel } from "./HikingPanel";
 import { CarPanel } from "@/components/planner/CarPanel";
 import { TransitPanel } from "@/components/planner/TransitPanel";
@@ -13,11 +15,11 @@ import {
 
 export type RoutesMode = "walk" | "bike" | "car" | "transit";
 
-const MODES: { id: RoutesMode; label: string }[] = [
-  { id: "transit", label: "Transit" },
-  { id: "walk", label: "Walk" },
-  { id: "bike", label: "Bike" },
-  { id: "car", label: "Car" },
+const MODES: { id: RoutesMode; label: string; icon: ReactNode }[] = [
+  { id: "transit", label: "Transit", icon: <TransitIcon size={16} /> },
+  { id: "walk", label: "Walk", icon: <WalkIcon size={16} /> },
+  { id: "bike", label: "Bike", icon: <BikeIcon size={16} /> },
+  { id: "car", label: "Car", icon: <CarIcon size={16} /> },
 ];
 
 function defaultProfileFor(mode: "walk" | "bike"): BrouterProfile {
@@ -60,7 +62,10 @@ export function RoutesPanel({
             aria-pressed={mode === m.id}
             onClick={() => choose(m.id)}
           >
-            {m.label}
+            <span className="inline-flex items-center gap-1.5">
+              {m.icon}
+              {m.label}
+            </span>
           </button>
         ))}
       </div>

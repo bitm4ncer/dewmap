@@ -64,6 +64,10 @@ describe("flat CSS invariants", () => {
     expect(css).not.toContain("[data-pane=");
   });
 
+  it("keeps mobile form text at 16px to stop focus zoom", () => {
+    expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*?input:not\(\[type="range"\]\)[\s\S]*?font-size: 16px !important/);
+  });
+
   it("lets the drag height override every snap state", () => {
     const stateRules = blocks.filter((b) => b.selector.includes("data-sheet-state="));
     expect(stateRules.every((b) => !/(^|;)\s*height:/.test(b.body))).toBe(true);

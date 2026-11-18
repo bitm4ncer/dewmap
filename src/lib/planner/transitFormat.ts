@@ -191,6 +191,27 @@ export function journeyDayOffset(
 }
 
 /** START/END are coordinate origins from MOTIS, not station names. */
+/** Minutes between one leg's arrival and the next leg's departure. */
+export function transferMinutes(from: TransitLeg, to: TransitLeg): number | null {
+  const arrival = Date.parse(from.arrival);
+  const departure = Date.parse(to.departure);
+  if (!Number.isFinite(arrival) || !Number.isFinite(departure)) return null;
+  const minutes = Math.round((departure - arrival) / 60_000);
+  return minutes >= 0 ? minutes : null;
+}
+
+/** Shortest layover in a journey, or null when there is no transfer. */
+export function minTransferMinutes(journey: RoutePlan): number | null {
+  const legs = journey.transit?.legs ?? [];
+  let min: number | null = null;
+  for (let i = 1; i < legs.length; i++) {
+    const gap = transferMinutes(legs[i - 1], legs[i]);
+    if (gap == null) continue;
+    min = min == null ? gap : Math.min(min, gap);
+  }
+  return min;
+}
+
 export function stopLabel(stop: TransitStopRef): string {
   if (stop.name === "START") return "Start";
   if (stop.name === "END") return "Destination";

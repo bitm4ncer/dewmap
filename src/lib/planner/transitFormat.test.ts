@@ -19,6 +19,8 @@ import {
   sortJourneys,
   stopClock,
   stopDayOffset,
+  minTransferMinutes,
+  transferMinutes,
   transferWarnings,
   walkTotals,
 } from "./transitFormat";
@@ -139,6 +141,35 @@ describe("labels and colours", () => {
     expect(
       lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#000000" })),
     ).toBe("#ffffff");
+  });
+
+  it("measures the layover between two legs", () => {
+    const a = leg({ arrival: "2026-11-18T09:25:00+01:00" });
+    const b = leg({ departure: "2026-11-18T09:33:00+01:00" });
+    expect(transferMinutes(a, b)).toBe(8);
+    expect(
+      transferMinutes(
+        leg({ arrival: "2026-11-18T09:33:00+01:00" }),
+        leg({ departure: "2026-11-18T09:25:00+01:00" }),
+      ),
+    ).toBeNull();
+  });
+
+  it("finds the shortest transfer in a journey", () => {
+    const first = leg({
+      departure: "2026-11-18T09:00:00+01:00",
+      arrival: "2026-11-18T09:20:00+01:00",
+    });
+    const second = leg({
+      departure: "2026-11-18T09:27:00+01:00",
+      arrival: "2026-11-18T09:50:00+01:00",
+    });
+    const third = leg({
+      departure: "2026-11-18T09:56:00+01:00",
+      arrival: "2026-11-18T10:10:00+01:00",
+    });
+    expect(minTransferMinutes(plan({}, [first, second, third]))).toBe(6);
+    expect(minTransferMinutes(plan({}, [first]))).toBeNull();
   });
 
   it("codes rail and tram types so transfers read at a glance", () => {

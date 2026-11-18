@@ -1524,3 +1524,14 @@ input[type="range"].hud-slider::-moz-range-thumb {
   .ui-search-pill { height: 48px; max-width: 560px; }
   .ui-search-wrap { flex: 0 1 560px; }
 }
+
+/* iOS zooms the page when a focused field renders below 16px. Keep every
+   editable control at 16px on phones so opening the keyboard never shifts
+   the map or the sheet. */
+@media (max-width: 767px) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

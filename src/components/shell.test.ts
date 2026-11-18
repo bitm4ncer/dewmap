@@ -11,6 +11,17 @@ describe("shell", () => {
     expect(css).not.toContain(".ui-logo");
   });
 
+  it("opens on the Routes pane", () => {
+    expect(map).toContain('useState<SidebarPane>("hiking")');
+  });
+
+  it("gives every travel mode an icon", () => {
+    const routes = readFileSync(new URL("./hud/RoutesPanel.tsx", import.meta.url), "utf8");
+    for (const icon of ["TransitIcon", "WalkIcon", "BikeIcon", "CarIcon"]) {
+      expect(routes).toContain(`<${icon}`);
+    }
+  });
+
   it("draws a heading arrow in the live marker", () => {
     expect(map).toContain("live-location-arrow");
     expect(css).toContain(".live-location-arrow");
