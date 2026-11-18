@@ -6,6 +6,22 @@ export type SheetState = "peek" | "half" | "full";
 
 const ORDER: SheetState[] = ["peek", "half", "full"];
 
+const GESTURE_AXIS_PX = 10;
+
+/** A swipe counts only when it is clearly vertical; otherwise the tap wins. */
+export function gestureDirection(dx: number, dy: number): "up" | "down" | "none" {
+  if (Math.abs(dy) < GESTURE_AXIS_PX) return "none";
+  if (Math.abs(dy) <= Math.abs(dx)) return "none";
+  return dy < 0 ? "up" : "down";
+}
+
+/** Directions that can actually move the sheet from its current snap point. */
+export function canDrag(state: SheetState, direction: "up" | "down" | "none"): boolean {
+  if (direction === "up") return state !== "full";
+  if (direction === "down") return state !== "peek";
+  return false;
+}
+
 interface Options {
   state: SheetState;
   onChange: (state: SheetState) => void;
@@ -36,6 +52,12 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     velocity: number;
   } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const pendingRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startHeight: number;
+  } | null>(null);
 
   const clearInlineHeight = useCallback(() => {
     sheetRef.current?.style.removeProperty("--sheet-h");
@@ -181,6 +203,74 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     [clearInlineHeight],
   );
 
+  const onGestureDown = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      if (!enabled) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      // The grabber keeps its own immediate drag + tap-to-toggle.
+      if ((e.target as HTMLElement).closest(".hud-bottom-sheet-grabber")) return;
+      const el = sheetRef.current;
+      if (!el) return;
+      pendingRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startHeight: el.getBoundingClientRect().height,
+      };
+    },
+    [enabled],
+  );
+
+  const onGestureMove = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      const pending = pendingRef.current;
+      if (pending && pending.pointerId === e.pointerId && !dragRef.current) {
+        const direction = gestureDirection(
+          e.clientX - pending.startX,
+          e.clientY - pending.startY,
+        );
+        if (direction === "none") return;
+        if (!canDrag(state, direction)) {
+          pendingRef.current = null;
+          return;
+        }
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // Synthetic pointers may not be capturable.
+        }
+        dragRef.current = {
+          pointerId: e.pointerId,
+          startY: pending.startY,
+          startHeight: pending.startHeight,
+          lastY: pending.startY,
+          lastT: e.timeStamp,
+          velocity: 0,
+        };
+        pendingRef.current = null;
+        setDragging(true);
+      }
+      if (dragRef.current) onPointerMove(e);
+    },
+    [onPointerMove, state],
+  );
+
+  const onGestureUp = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      pendingRef.current = null;
+      if (dragRef.current) finishDrag(e);
+    },
+    [finishDrag],
+  );
+
+  const onGestureCancel = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      pendingRef.current = null;
+      onPointerCancel(e);
+    },
+    [onPointerCancel],
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
       if (!enabled) return;
@@ -221,6 +311,12 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       onPointerUp: finishDrag,
       onPointerCancel,
       onKeyDown,
+    },
+    gestureProps: {
+      onPointerDown: onGestureDown,
+      onPointerMove: onGestureMove,
+      onPointerUp: onGestureUp,
+      onPointerCancel: onGestureCancel,
     },
   };
 }

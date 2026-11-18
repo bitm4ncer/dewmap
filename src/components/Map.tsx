@@ -1504,6 +1504,7 @@ function buildLiveLocationEl(): {
   root: HTMLDivElement;
   scaler: HTMLDivElement;
   cone: HTMLDivElement;
+  arrow: HTMLDivElement;
 } {
   const root = document.createElement("div");
   root.className = "live-location-marker";
@@ -1539,9 +1540,19 @@ function buildLiveLocationEl(): {
     </svg>`;
   scaler.appendChild(cone);
 
-  root.appendChild(scaler);
+  // Constant-size heading arrow above the dot; the marker rotates it.
+  const arrow = document.createElement("div");
+  arrow.className = "live-location-arrow";
+  arrow.hidden = true;
+  arrow.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M8 1.5 L14.5 14 L8 10.8 L1.5 14 Z" fill="currentColor" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/>
+    </svg>`;
 
-  return { root, scaler, cone };
+  root.appendChild(scaler);
+  root.appendChild(arrow);
+
+  return { root, scaler, cone, arrow };
 }
 
 export function LiveMap({ credentials, onOpenSettings }: Props) {
@@ -1553,6 +1564,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
   const coneRef = useRef<HTMLDivElement | null>(null);
+  const arrowRef = useRef<HTMLDivElement | null>(null);
   const compassUnsubRef = useRef<(() => void) | null>(null);
   // True while the user is actively dragging / pinching / rotating /
   // tilting the map. Used to suspend auto-rotation in the bearing
@@ -1744,7 +1756,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [geoHeading, setGeoHeading] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
-  const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
+  const { sheetRef, dragging, snapTo, handleProps, gestureProps } = useSheetGesture({
     state: sheetState,
     onChange: setSheetState,
     enabled: isMobile,
@@ -2097,10 +2109,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // toggling tracking off→on briefly produced a window with no
     // marker. Eager creation makes the whole thing deterministic.
     // ────────────────────────────────────────────────────────────
-    const { root, scaler, cone } = buildLiveLocationEl();
+    const { root, scaler, cone, arrow } = buildLiveLocationEl();
     root.style.visibility = "hidden";
     scalerRef.current = scaler;
     coneRef.current = cone;
+    arrowRef.current = arrow;
     const marker = new maplibregl.Marker({
       element: root,
       anchor: "center",
@@ -2146,6 +2159,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         if (!m || !c) return;
         m.setRotation(heading);
         c.hidden = false;
+        const a = arrowRef.current;
+        if (a) a.hidden = false;
         const rounded = Math.round(heading);
         if (Math.abs(rounded - lastRoundedState) < 2) return;
         lastRoundedState = rounded;
@@ -2256,6 +2271,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         liveMarkerRef.current = null;
       }
       coneRef.current = null;
+      arrowRef.current = null;
       scalerRef.current = null;
       setLivePos(null);
       setLiveHeadingDeg(null);
@@ -3426,6 +3442,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             : "md:translate-x-[calc(100%+12px)]",
         ].join(" ")}
       >
+        <div className="hud-sheet-header" {...gestureProps}>
         {/* Drag handle — pointer-driven sheet resize with tap-to-toggle. */}
         <button
           type="button"
@@ -3469,6 +3486,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             <CloseIcon size={18} />
           </button>
         </nav>
+        </div>
 
         {/* Panel body — on desktop this is the full-height drawer. */}
         <div
@@ -3476,10 +3494,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           inert={!sidebarOpen}
           aria-hidden={!sidebarOpen}
         >
-          {/* Pane signature tape — desktop only; phones use the tab tint. */}
-          <div className="hidden px-4 pt-3 md:block">
-          </div>
-
           {/* Desktop pane switcher lives inside the panel. */}
           <div className="hidden px-4 pb-3 md:block">
             <nav className="hud-panel-tabs" aria-label="Panel switcher">

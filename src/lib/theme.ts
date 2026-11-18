@@ -24,7 +24,7 @@ export const THEME = {
   warn: "#D8A25F",
   danger: "#DE8A7E",
   info: "#8FBCDE",
-  locator: "#C98274",
+  locator: "#E4574A",
   glass: "rgba(14,18,21,.84)",
   glassStrong: "rgba(14,18,21,.92)",
   casing: "#0B0E10",

@@ -11,6 +11,11 @@ describe("shell", () => {
     expect(css).not.toContain(".ui-logo");
   });
 
+  it("draws a heading arrow in the live marker", () => {
+    expect(map).toContain("live-location-arrow");
+    expect(css).toContain(".live-location-arrow");
+  });
+
   it("leads the top bar with search and keeps the basemap switch after it", () => {
     const start = map.indexOf('className={["ui-topbar"');
     const end = map.indexOf("{/* Rail-network loading pill", start);

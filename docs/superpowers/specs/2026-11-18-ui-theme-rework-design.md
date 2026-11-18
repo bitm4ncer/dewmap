@@ -113,7 +113,7 @@ from its parent — spacing and one ramp step do that.
 | `--warn` | `#D8A25F` | 7.2:1 on s1 |
 | `--danger` | `#DE8A7E` | 6.2:1 on s1 |
 | `--info` | `#8FBCDE` | 8.1:1 on s1 |
-| `--locator` | `#C98274` | own position only |
+| `--locator` | `#E4574A` | own position only |
 
 `--locator` is the **only warm hue in the product** and is reserved
 exclusively for the user's own position marker. No other map dot, route,
@@ -141,6 +141,9 @@ Applied with `backdrop-filter: blur(18px) saturate(1.08)` (strong:
 map controls, desktop drawer, navigation overlay, toasts, map popups.
 Static in-panel cards use solid `surf-1` — no blur inside blur. The
 mobile sheet is solid `surf-0`, because it is a full-height reading
+surface. Its peek/half/full states can be changed by a vertical swipe on
+the sheet header (grabber and tab row): at least 10 px of clearly vertical
+movement drags the sheet; horizontal movement remains a tab tap.
 surface, not a floating control.
 
 **Text over glass.** The values above are the worst case: glass at `.84`
@@ -223,9 +226,11 @@ asserts each value is present, so CSS and TS cannot drift silently.
 - **Sector outline**: accent, 2px, opacity .9. No fill.
 - **Search pin**: accent fill, `--surf-0` inner dot, dark drop shadow for
   legibility. Hover scale 1.06.
-- **Live location marker (own position)**: fill `--locator` `#C98274`,
+- **Live location marker (own position)**: fill `--locator` `#E4574A`,
   white ring, dark drop shadow, heading cone in `--locator` at 55%
-  opacity, accuracy circle `--locator` at 16%. Slow, subtle pulse: scale
+  opacity, and a constant-size heading arrow above the dot (locator fill,
+  white casing) that appears once a compass heading exists. Accuracy circle
+  `--locator` at 16%. Slow, subtle pulse: scale
   1 → 1.5 with opacity .3 → 0 over 2.6s, `prefers-reduced-motion`
   respected. This is the only warm-red point in the UI.
 - **Rail**: rail `#8DACBB`, light rail `#A9C3CF`, tram `#7E9FB0`, narrow

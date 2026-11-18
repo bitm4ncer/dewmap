@@ -59,7 +59,7 @@ const PAIRS: [string, string, string][] = [
   ["--warn", "#D8A25F", THEME.warn],
   ["--danger", "#DE8A7E", THEME.danger],
   ["--info", "#8FBCDE", THEME.info],
-  ["--locator", "#C98274", THEME.locator],
+  ["--locator", "#E4574A", THEME.locator],
   ["--map-casing", "#0B0E10", THEME.casing],
 ];
 

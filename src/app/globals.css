@@ -66,7 +66,7 @@ body {
 
   /* Map casing and warm-red own position */
   --map-casing: #0B0E10;
-  --locator:    #C98274;
+  --locator:    #E4574A;
 
   --warn:   #D8A25F;
   --danger: #DE8A7E;
@@ -218,6 +218,20 @@ body {
   display: block;
 }
 .live-location-cone[hidden] { display: none; }
+.live-location-arrow {
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  color: var(--locator);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  z-index: 3;
+}
+.live-location-arrow[hidden] { display: none; }
+
+.hud-sheet-header { touch-action: none; }
 
 .maplibregl-user-location-dot,
 .maplibregl-user-location-dot::after,
