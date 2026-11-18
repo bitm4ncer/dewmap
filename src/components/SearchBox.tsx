@@ -52,7 +52,7 @@ export function SearchBox({ onSelect, getNearby }: Props) {
       try {
         const results = await geocode(query, {
           signal: controller.signal,
-          limit: 8,
+          limit: 12,
           nearby: getNearbyRef.current?.(),
         });
         if (!controller.signal.aborted) {

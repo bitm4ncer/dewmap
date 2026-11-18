@@ -4603,15 +4603,6 @@ function ViewPanel({
   poiOn,
   onPoiChange,
 }: ViewPanelProps) {
-  const fullscreen = () => {
-    if (typeof document === "undefined") return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen?.().catch(() => {});
-    } else {
-      void document.documentElement.requestFullscreen?.().catch(() => {});
-    }
-  };
-
   return (
     <HudPanel label="View">
       <div className="ui-section">
@@ -4711,14 +4702,6 @@ function ViewPanel({
             <span className="hud-switch-thumb" aria-hidden />
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={fullscreen}
-          className="ui-btn w-full"
-        >
-          Toggle fullscreen
-        </button>
       </div>
     </HudPanel>
   );
