@@ -4541,15 +4541,6 @@ function ViewPanel({
   basemapMode,
   onBasemapModeChange,
 }: ViewPanelProps) {
-  const fullscreen = () => {
-    if (typeof document === "undefined") return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen?.().catch(() => {});
-    } else {
-      void document.documentElement.requestFullscreen?.().catch(() => {});
-    }
-  };
-
   return (
     <HudPanel label="View">
       <div className="ui-section">
@@ -4629,14 +4620,6 @@ function ViewPanel({
             ))}
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={fullscreen}
-          className="ui-btn w-full"
-        >
-          Toggle fullscreen
-        </button>
       </div>
     </HudPanel>
   );
