@@ -49,7 +49,13 @@ import {
   RAIL_VECTOR_STATIONS_LAYER,
   RAIL_VECTOR_TILEJSON_URL,
 } from "@/lib/railway";
-import { ensurePoiLayers, removePoiLayers } from "@/lib/poi/poiLayer";
+import {
+  POI_HIT_LAYER_ID,
+  POI_ICON_LAYER_ID,
+  POI_LABEL_LAYER_ID,
+  ensurePoiLayers,
+  removePoiLayers,
+} from "@/lib/poi/poiLayer";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
@@ -2843,13 +2849,50 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     waitForStyle();
     map.on("style.load", apply);
     map.once("idle", apply);
+
+    const openPlace = (event: maplibregl.MapLayerMouseEvent) => {
+      const feature = event.features?.[0];
+      if (!feature) return;
+      const props = feature.properties ?? {};
+      const stringValue = (...keys: string[]) => {
+        for (const key of keys) {
+          const value = props[key];
+          if (typeof value === "string" && value.trim()) return value;
+        }
+        return undefined;
+      };
+      const name = stringValue("name", "name:latin", "name_en", "name_de");
+      const category = stringValue("class", "subclass");
+      event.preventDefault();
+      event.originalEvent?.stopPropagation();
+      openPoi({
+        lon: event.lngLat.lng,
+        lat: event.lngLat.lat,
+        ...(name ? { name } : {}),
+        ...(category ? { category } : {}),
+      });
+    };
+    const showPointer = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const hidePointer = () => {
+      map.getCanvas().style.cursor = "";
+    };
+    const layers = [POI_HIT_LAYER_ID, POI_ICON_LAYER_ID, POI_LABEL_LAYER_ID];
+    for (const layer of layers) map.on("click", layer, openPlace);
+    map.on("mouseenter", POI_HIT_LAYER_ID, showPointer);
+    map.on("mouseleave", POI_HIT_LAYER_ID, hidePointer);
+
     return () => {
       cancelled = true;
       if (frame) cancelAnimationFrame(frame);
       map.off("style.load", apply);
       map.off("idle", apply);
+      for (const layer of layers) map.off("click", layer, openPlace);
+      map.off("mouseenter", POI_HIT_LAYER_ID, showPointer);
+      map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
     };
-  }, [poiOn, active, mapInstance]);
+  }, [poiOn, active, mapInstance, openPoi]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────
   useEffect(() => {
@@ -3626,6 +3669,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const interactiveLayers = new Set([
       RAIL_VECTOR_STATION_HIT_LAYER_ID,
       HISTORY_LANDMARKS_HIT_LAYER_ID,
+      POI_HIT_LAYER_ID,
+      POI_ICON_LAYER_ID,
+      POI_LABEL_LAYER_ID,
       historyLayers.siteLayer,
       ...historyLayers.clusterDots,
     ]);

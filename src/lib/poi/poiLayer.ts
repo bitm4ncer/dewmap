@@ -13,6 +13,7 @@ import { THEME } from "../theme";
 export const POI_SOURCE_ID = "poi-vector-src";
 export const POI_ICON_LAYER_ID = "poi-icons";
 export const POI_LABEL_LAYER_ID = "poi-labels";
+export const POI_HIT_LAYER_ID = "poi-hit";
 export const POI_MIN_ZOOM = 15;
 export const POI_LABEL_MIN_ZOOM = 16;
 export const POI_TILEJSON_URL = "https://tiles.openfreemap.org/planet";
@@ -263,13 +264,6 @@ const iconExpression = [
   ICONS.default.id,
 ] as ExpressionSpecification;
 
-function insertBeforeFirstSymbol(map: MLMap): string | undefined {
-  return map
-    .getStyle()
-    ?.layers?.find((layer) => layer.type === "symbol" && layer.id !== POI_LABEL_LAYER_ID)
-    ?.id;
-}
-
 export function ensurePoiLayers(map: MLMap) {
   if (!map.getSource(POI_SOURCE_ID)) {
     map.addSource(POI_SOURCE_ID, {
@@ -310,7 +304,6 @@ export function ensurePoiLayers(map: MLMap) {
           "symbol-sort-key": ["coalesce", ["get", "rank"], 0],
         },
       },
-      insertBeforeFirstSymbol(map),
     );
   }
 
@@ -358,13 +351,42 @@ export function ensurePoiLayers(map: MLMap) {
           "text-halo-blur": 0.3,
         },
       },
-      insertBeforeFirstSymbol(map),
     );
+  }
+
+  // Invisible, larger touch target. Keep it above the icons so a tap
+  // does not have to land on the 18–24 px glyph itself.
+  if (!map.getLayer(POI_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: POI_HIT_LAYER_ID,
+      type: "circle",
+      source: POI_SOURCE_ID,
+      "source-layer": "poi",
+      minzoom: POI_MIN_ZOOM,
+      filter: categoryFilter,
+      paint: {
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          15,
+          18,
+          18,
+          22,
+        ],
+        "circle-color": "rgba(0,0,0,0.01)",
+        "circle-stroke-width": 0,
+      },
+    });
   }
 }
 
 export function removePoiLayers(map: MLMap) {
-  for (const id of [POI_LABEL_LAYER_ID, POI_ICON_LAYER_ID]) {
+  for (const id of [
+    POI_HIT_LAYER_ID,
+    POI_LABEL_LAYER_ID,
+    POI_ICON_LAYER_ID,
+  ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
   if (map.getSource(POI_SOURCE_ID)) map.removeSource(POI_SOURCE_ID);

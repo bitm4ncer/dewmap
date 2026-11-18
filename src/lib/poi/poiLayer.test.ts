@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Map as MLMap } from "maplibre-gl";
 import {
+  POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
   POI_LABEL_LAYER_ID,
   POI_SOURCE_ID,
@@ -75,8 +76,9 @@ describe("POI vector layer", () => {
     expect(images.size).toBe(6);
     expect(layers.has(POI_ICON_LAYER_ID)).toBe(true);
     expect(layers.has(POI_LABEL_LAYER_ID)).toBe(true);
-    // The first symbol layer belongs to the basemap; POIs slot beneath it.
-    expect(layers.get(POI_ICON_LAYER_ID)?.before).toBe("basemap-labels");
+    expect(layers.has(POI_HIT_LAYER_ID)).toBe(true);
+    // POIs must sit above the basemap, not beneath later fill layers.
+    expect(layers.get(POI_ICON_LAYER_ID)?.before).toBeUndefined();
   });
 
   it("is idempotent and removes everything on toggle off", () => {
@@ -84,7 +86,7 @@ describe("POI vector layer", () => {
     ensurePoiLayers(map);
     ensurePoiLayers(map);
     expect(sources.size).toBe(1);
-    expect(layers.size).toBe(2);
+    expect(layers.size).toBe(3);
     expect(images.size).toBe(6);
 
     removePoiLayers(map);
