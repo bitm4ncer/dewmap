@@ -19,5 +19,12 @@ describe("rail data path", () => {
     expect(mapSource).toContain("RAIL_VECTOR_TILEJSON_URL");
     expect(mapSource).toContain("RAIL_VECTOR_LINES_LAYER");
     expect(mapSource).toContain("RAIL_VECTOR_STATIONS_LAYER");
+    expect(mapSource).not.toContain("RAILWAY_TILE_URLS");
+    expect(mapSource).not.toContain("ensureRailwayLayer");
+  });
+
+  it("asks the browser to keep immutable OpenFreeMap tiles", () => {
+    expect(mapSource).toContain("tiles.openfreemap.org");
+    expect(mapSource).toContain('cache: "force-cache"');
   });
 });
