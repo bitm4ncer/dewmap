@@ -174,8 +174,8 @@ interface PaneSpec {
 // pane only needs to be added in one place.
 const SIDEBAR_PANES: PaneSpec[] = [
   {
-    key: "control",
-    label: "Map",
+    key: "history",
+    label: "History",
     icon: (
       <svg
         width="22"
@@ -185,12 +185,10 @@ const SIDEBAR_PANES: PaneSpec[] = [
         stroke="currentColor"
         strokeWidth="1.4"
         strokeLinecap="round"
+        strokeLinejoin="round"
         aria-hidden
       >
-        <circle cx="8" cy="8" r="6.2" />
-        <ellipse cx="8" cy="8" rx="6.2" ry="2.6" />
-        <ellipse cx="8" cy="8" rx="2.6" ry="6.2" />
-        <line x1="1.8" y1="8" x2="14.2" y2="8" />
+        <path d="M4 2 L12 2 L12 5 L8 8 L12 11 L12 14 L4 14 L4 11 L8 8 L4 5 Z" />
       </svg>
     ),
   },
@@ -215,8 +213,8 @@ const SIDEBAR_PANES: PaneSpec[] = [
     ),
   },
   {
-    key: "history",
-    label: "History",
+    key: "control",
+    label: "Map",
     icon: (
       <svg
         width="22"
@@ -226,10 +224,12 @@ const SIDEBAR_PANES: PaneSpec[] = [
         stroke="currentColor"
         strokeWidth="1.4"
         strokeLinecap="round"
-        strokeLinejoin="round"
         aria-hidden
       >
-        <path d="M4 2 L12 2 L12 5 L8 8 L12 11 L12 14 L4 14 L4 11 L8 8 L4 5 Z" />
+        <circle cx="8" cy="8" r="6.2" />
+        <ellipse cx="8" cy="8" rx="6.2" ry="2.6" />
+        <ellipse cx="8" cy="8" rx="2.6" ry="6.2" />
+        <line x1="1.8" y1="8" x2="14.2" y2="8" />
       </svg>
     ),
   },

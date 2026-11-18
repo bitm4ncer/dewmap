@@ -26,6 +26,13 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("orders the pane tabs History, Nature, Map, Routes", () => {
+    const start = map.indexOf("const SIDEBAR_PANES");
+    const block = map.slice(start, map.indexOf("\n];", start) + 3);
+    const order = [...block.matchAll(/key: "(\w+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(["history", "biosphere", "control", "hiking"]);
+  });
+
   it("opens place details when a search result is selected", () => {
     const search = map.slice(
       map.indexOf("const handleSearchSelect"),
