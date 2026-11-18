@@ -63,6 +63,21 @@ export interface ShareParams {
 const WALK_SPEED_MPS = 1.35;
 const TRANSFER_WARN_MIN = 5;
 
+/** 0 → amber, 1 → danger; 12+ minutes is the top of the ramp. */
+export function delayIntensity(minutes: number): number {
+  if (!Number.isFinite(minutes) || minutes <= 0) return 0;
+  return Math.min(1, minutes / 12);
+}
+
+export type TransferSeverity = "none" | "tight" | "critical";
+
+export function transferSeverity(minutes: number | null): TransferSeverity {
+  if (minutes == null) return "none";
+  if (minutes < 2) return "critical";
+  if (minutes < TRANSFER_WARN_MIN) return "tight";
+  return "none";
+}
+
 function minutesBetween(start: string, end: string): number {
   const a = Date.parse(start);
   const b = Date.parse(end);

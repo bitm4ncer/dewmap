@@ -7,6 +7,7 @@ import type { RoutePlan, TransitStopRef } from "@/lib/routing";
 import {
   allowsBikes,
   isAccessibleJourney,
+  delayIntensity,
   isLiveJourney,
   journeyDelayMinutes,
   legDelayMinutes,
@@ -20,6 +21,7 @@ import {
   needsReservation,
   stopLabel,
   transferMinutes,
+  transferSeverity,
   transferWarnings,
   walkTotals,
 } from "@/lib/planner/transitFormat";
@@ -86,13 +88,27 @@ export function JourneyDetail({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {delay > 0 && <span className="ui-badge" data-tone="warn">+{delay} min</span>}
+        {delay > 0 && (
+          <span
+            className="ui-badge"
+            data-tone="delay"
+            style={{ ["--delay" as string]: delayIntensity(delay) }}
+            title="Delay grows from amber to red with every minute"
+          >
+            +{delay} min
+          </span>
+        )}
         {cancelled && <span className="ui-badge" data-tone="danger">Cancelled</span>}
         {live && <span className="ui-badge" data-tone="info">Live</span>}
         {isAccessibleJourney(journey) && <span className="ui-badge">Step-free</span>}
         {allowsBikes(journey) && <span className="ui-badge">Bike</span>}
         {needsReservation(journey) && (
-          <span className="ui-badge" data-tone="warn">Reservation required</span>
+          <span
+            className="ui-badge"
+            title="Seat reservation required — book before boarding"
+          >
+            Reservation required
+          </span>
         )}
         {walk.minutes > 0 && (
           <span className="ui-badge">
@@ -100,6 +116,12 @@ export function JourneyDetail({
           </span>
         )}
       </div>
+
+      {needsReservation(journey) && (
+        <p className="text-[10.5px] leading-relaxed text-[color:var(--ink-mute)]">
+          Reservation required: book a seat before boarding.
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2 py-1">
         <button
@@ -213,13 +235,29 @@ export function JourneyDetail({
                     </span>
                   )}
                   {departureDelay !== 0 && (
-                    <span className="ui-badge" data-tone={departureDelay > 0 ? "warn" : "info"}>
+                    <span
+                      className="ui-badge"
+                      data-tone={departureDelay > 0 ? "delay" : "info"}
+                      style={
+                        departureDelay > 0
+                          ? { ["--delay" as string]: delayIntensity(departureDelay) }
+                          : undefined
+                      }
+                    >
                       {departureDelay > 0 ? "+" : ""}
                       {departureDelay} min
                     </span>
                   )}
                   {arrivalDelay !== 0 && arrivalDelay !== departureDelay && (
-                    <span className="ui-badge" data-tone={arrivalDelay > 0 ? "warn" : "info"}>
+                    <span
+                      className="ui-badge"
+                      data-tone={arrivalDelay > 0 ? "delay" : "info"}
+                      style={
+                        arrivalDelay > 0
+                          ? { ["--delay" as string]: delayIntensity(arrivalDelay) }
+                          : undefined
+                      }
+                    >
                       arr {arrivalDelay > 0 ? "+" : ""}
                       {arrivalDelay} min
                     </span>
@@ -228,7 +266,12 @@ export function JourneyDetail({
                     <span className="ui-badge" data-tone="danger">Cancelled</span>
                   )}
                   {leg.reservation && (
-                    <span className="ui-badge" data-tone="warn">Reservation</span>
+                    <span
+                      className="ui-badge"
+                      title="Seat reservation required — book before boarding"
+                    >
+                      Reservation
+                    </span>
                   )}
                   {leg.bikesAllowed === false && (
                     <span className="ui-badge">No bike</span>
@@ -286,14 +329,23 @@ export function JourneyDetail({
               const next = transit.legs[i + 1];
               const gap = transferMinutes(leg, next);
               if (gap == null) return null;
+              const severity = transferSeverity(gap);
               return (
-                <div className="flex gap-3 py-1">
+                <div className="transfer-row flex gap-3 py-1" data-tone={severity}>
                   <div className="w-14 shrink-0" />
                   <div className="flex w-4 shrink-0 justify-center">
-                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[color:var(--ink-mute)]" />
+                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-current" />
                   </div>
-                  <div className="min-w-0 flex-1 text-[11px] text-[color:var(--ink-dim)]">
+                  <div className="min-w-0 flex-1 text-[11px]">
                     Transfer · {gap} min
+                    {severity !== "none" && (
+                      <span
+                        className="ui-badge ml-1"
+                        data-tone={severity === "critical" ? "danger" : "warn"}
+                      >
+                        {severity === "critical" ? "very tight" : "tight"}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -306,25 +358,44 @@ export function JourneyDetail({
       {warnings.length > 0 && (
         <div className="flex flex-col gap-1 rounded-[10px] bg-[color:var(--surf-2)] p-2">
           <span className="ui-kicker">Transfers</span>
-          {warnings.map((warning, i) => (
-            <div key={`${warning.at}-${i}`} className="text-[11.5px]">
-              <span className="font-semibold text-[color:var(--ink)]">
-                {warning.at}
-              </span>
-              <span className="text-[color:var(--ink-dim)]">
-                {" · "}
-                {warning.missed
-                  ? "connection may be missed"
-                  : `${Math.max(0, Math.round(warning.minutes))} min`}
-                {warning.platformChange
-                  ? ` · platform ${warning.fromPlatform} → ${warning.toPlatform}`
-                  : ""}
-              </span>
-              {warning.tight && !warning.missed && (
-                <span className="ui-badge ml-1" data-tone="warn">tight</span>
-              )}
-            </div>
-          ))}
+          {warnings.map((warning, i) => {
+            const severity = transferSeverity(warning.minutes);
+            return (
+              <div
+                key={`${warning.at}-${i}`}
+                className="transfer-warning text-[11.5px]"
+                data-tone={severity}
+              >
+                <span className="font-semibold text-[color:var(--ink)]">
+                  {warning.at}
+                </span>
+                <span>
+                  {" · "}
+                  {warning.missed
+                    ? "connection may be missed"
+                    : `${Math.max(0, Math.round(warning.minutes))} min`}
+                  {warning.platformChange
+                    ? ` · platform ${warning.fromPlatform} → ${warning.toPlatform}`
+                    : ""}
+                </span>
+                {severity !== "none" && (
+                  <span
+                    className="ui-badge ml-1"
+                    data-tone={severity === "critical" ? "danger" : "warn"}
+                  >
+                    {warning.missed
+                      ? "missed"
+                      : severity === "critical"
+                        ? "very tight"
+                        : "tight"}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          <p className="text-[10px] leading-relaxed text-[color:var(--ink-mute)]">
+            Transfer colours: amber under 5 min, red under 2 min or missed.
+          </p>
         </div>
       )}
 
