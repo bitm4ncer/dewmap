@@ -45,6 +45,10 @@ function phoneHref(value: string): string {
   return `tel:${value.replace(/[^\d+]/g, "")}`;
 }
 
+function googleStreetViewUrl(lat: number, lon: number): string {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
+}
+
 function osmPath(type: "N" | "W" | "R"): string {
   return type === "W" ? "way" : type === "R" ? "relation" : "node";
 }
@@ -105,6 +109,7 @@ function PoiDetailContent({
   const [resizing, setResizing] = useState(false);
   const [closing, setClosing] = useState(false);
   const [streetView, setStreetView] = useState<PanoramaxStreetView | null>(null);
+  const [streetViewChecked, setStreetViewChecked] = useState(false);
   const [streetViewOpen, setStreetViewOpen] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{
@@ -144,14 +149,24 @@ function PoiDetailContent({
 
   useEffect(() => {
     const ctrl = new AbortController();
+    const revealFallback = window.setTimeout(() => {
+      if (!ctrl.signal.aborted) setStreetViewChecked(true);
+    }, 2500);
     findPanoramaxStreetView(selection.lon, selection.lat, ctrl.signal)
       .then((value) => {
         if (!ctrl.signal.aborted) setStreetView(value);
       })
       .catch(() => {
         // A missing Street View must never block the place card.
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setStreetViewChecked(true);
+        window.clearTimeout(revealFallback);
       });
-    return () => ctrl.abort();
+    return () => {
+      ctrl.abort();
+      window.clearTimeout(revealFallback);
+    };
   }, [selection.lon, selection.lat]);
 
   useEffect(() => {
@@ -446,6 +461,19 @@ function PoiDetailContent({
     setStreetViewOpen(false);
   }, []);
 
+  const openStreetView = useCallback(() => {
+    haptic("tap");
+    if (streetView) {
+      setStreetViewOpen(true);
+      return;
+    }
+    window.open(
+      googleStreetViewUrl(selection.lat, selection.lon),
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }, [streetView, selection.lat, selection.lon]);
+
   const planRoute = () => {
     haptic("tap");
     onPlanRoute?.(routeSelection);
@@ -541,7 +569,7 @@ function PoiDetailContent({
                 )}
               </span>
             </button>
-            {(onPlanRoute || streetView) && (
+            {(onPlanRoute || streetViewChecked) && (
               <div className="poi-mini-secondary">
                 {onPlanRoute && (
                   <button
@@ -554,16 +582,17 @@ function PoiDetailContent({
                     <RouteIcon size={15} />
                   </button>
                 )}
-                {streetView && (
+                {streetViewChecked && (
                   <button
                     type="button"
                     className="poi-mini-subbtn"
-                    onClick={() => {
-                      haptic("tap");
-                      setStreetViewOpen(true);
-                    }}
+                    onClick={openStreetView}
                     aria-label="Open Street View"
-                    title="Open Street View"
+                    title={
+                      streetView
+                        ? "Open Panoramax Street View"
+                        : "Open Street View on Google Maps"
+                    }
                   >
                     <StreetViewIcon size={15} />
                   </button>
@@ -775,12 +804,16 @@ function PoiDetailContent({
                       Plan Route
                     </button>
                   )}
-                  {streetView && (
+                  {streetViewChecked && (
                     <button
                       type="button"
                       className="poi-action"
-                      onClick={() => setStreetViewOpen(true)}
-                      title="Open Panoramax Street View"
+                      onClick={openStreetView}
+                      title={
+                        streetView
+                          ? "Open Panoramax Street View"
+                          : "Open Street View on Google Maps"
+                      }
                     >
                       <StreetViewIcon />
                       Street View
