@@ -11,6 +11,16 @@ function walk(dir: string): string[] {
 const files = walk(root).map((p) => ({ path: p, text: readFileSync(p, "utf8") }));
 
 describe("component chrome", () => {
+  it("has no removed token names in components", () => {
+    const bad = files.filter((f) => /var\(--(hairline|shadow-|surf-glass)/.test(f.text));
+    expect(bad.map((f) => f.path)).toEqual([]);
+  });
+
+  it("keeps ink-mute off glass chrome", () => {
+    const search = files.find((f) => f.path.endsWith("/SearchBox.tsx"));
+    expect(search?.text ?? "").not.toContain("--ink-mute");
+  });
+
   it("has no corner marks, tape or scanlines", () => {
     const bad = files.filter((f) => /hud-corner|pane-tape|hud-scanlines/.test(f.text));
     expect(bad.map((f) => f.path)).toEqual([]);

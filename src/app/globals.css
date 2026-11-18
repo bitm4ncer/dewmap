@@ -103,6 +103,13 @@ body {
   --z-toast: 60;
 }
 
+/* Clipped rows/containers would cut a child's ring; lift it to the container. */
+.hud-tab-row:focus-within,
+.hud-basemap-switch:focus-within,
+.ui-search-dropdown:focus-within {
+  box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent);
+}
+
 /* Global focus language — visible on every control, incl. inside clips. */
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
   outline: none;
@@ -671,7 +678,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
 .maplibregl-ctrl-geolocate-background .maplibregl-ctrl-icon {
-  filter: none !important;
+  filter: brightness(0) !important;
 }
 
 .maplibregl-ctrl-projection {

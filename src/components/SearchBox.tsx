@@ -135,7 +135,7 @@ export function SearchBox({ onSelect, getNearby }: Props) {
       <div className="ui-search-pill">
         <svg
           viewBox="0 0 16 16"
-          className="h-[18px] w-[18px] shrink-0 text-[color:var(--ink-mute)]"
+          className="h-[18px] w-[18px] shrink-0 text-[color:var(--ink-dim)]"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.6"
@@ -175,7 +175,7 @@ export function SearchBox({ onSelect, getNearby }: Props) {
               setState({ kind: "idle" });
               abortRef.current?.abort();
             }}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[color:var(--ink-mute)] transition-colors hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[color:var(--ink-dim)] transition-colors hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
             aria-label="Clear search"
           >
             <svg
@@ -228,7 +228,7 @@ export function SearchBox({ onSelect, getNearby }: Props) {
             </div>
           )}
           {state.kind === "ok" && state.results.length === 0 && (
-            <div className="px-4 py-4 text-[12.5px] text-[color:var(--ink-mute)]">
+            <div className="px-4 py-4 text-[12.5px] text-[color:var(--ink-dim)]">
               No matches. Try a place, street, or station.
             </div>
           )}

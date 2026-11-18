@@ -499,7 +499,7 @@ function JourneyDetail({ journey }: { journey: RoutePlan }) {
                     }}
                   />
                   {i < t.legs.length - 1 && (
-                    <span className="absolute top-5 h-[calc(100%-8px)] w-px bg-[color:var(--hairline-strong)]" />
+                    <span className="absolute top-5 h-[calc(100%-8px)] w-px bg-[color:var(--surf-3)]" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1 pb-1">

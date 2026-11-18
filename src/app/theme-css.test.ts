@@ -33,6 +33,17 @@ describe("flat CSS invariants", () => {
     expect(bad).toEqual([]);
   });
 
+  it("keeps geolocate icons dark on the accent fill", () => {
+    const rule = blocks.find((b) => b.selector.includes("geolocate-active .maplibregl-ctrl-icon"));
+    expect(rule?.body).toContain("brightness(0)");
+  });
+
+  it("keeps the focus ring visible inside clipped containers", () => {
+    for (const sel of [".hud-tab-row:focus-within", ".hud-basemap-switch:focus-within", ".ui-search-dropdown:focus-within"]) {
+      expect(css).toContain(sel);
+    }
+  });
+
   it("uses a two-ring focus indicator", () => {
     expect(css).toContain("0 0 0 2px var(--surf-0)");
     expect(css).toContain("0 0 0 4px var(--accent)");
