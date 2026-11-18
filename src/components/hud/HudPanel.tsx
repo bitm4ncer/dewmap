@@ -20,10 +20,10 @@ export function HudPanel({
 }: HudPanelProps) {
   return (
     <div
-      className={`hud-panel ${pointerEvents ? "pointer-events-auto" : "pointer-events-none"} p-2 text-xs ${className}`}
+      className={`hud-panel ${pointerEvents ? "pointer-events-auto" : "pointer-events-none"} text-xs ${className}`}
     >
       {label && (
-        <div className="mb-1.5 flex items-center gap-2 px-1">
+        <div className="mb-2 flex items-center gap-2">
           <span className="hud-label">{label}</span>
           <span className="hud-label-bar flex-1" aria-hidden />
         </div>

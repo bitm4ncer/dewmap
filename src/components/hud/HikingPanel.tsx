@@ -292,11 +292,11 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
           )}
 
           {/* Add row */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleAddGps}
-              className="hud-btn-ghost !w-auto justify-center gap-1.5 px-2 text-[12px] font-medium"
+              className="hud-btn-ghost !w-auto justify-center gap-2 px-2 text-[12px] font-medium"
               title="Add my current location"
             >
               <GpsIcon /> GPS
@@ -309,7 +309,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
       {/* Candidates / actions */}
       {candidates.length > 0 && (
         <HudPanel label={finalized ? "Final route" : `Options · ${candidates.length}`}>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             {phase.kind === "error" && (
               <p className="break-words text-[12px] text-[color:var(--danger)]">
                 {phase.message}
@@ -400,7 +400,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               {!finalized ? (
                 <button
                   type="button"
@@ -453,7 +453,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
 
       {/* Settings */}
       <HudPanel label="Settings">
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <span className="hud-label text-[11px]">Round-trip</span>
             <ToggleSwitch
@@ -466,7 +466,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
             type="button"
             onClick={reverseWaypoints}
             disabled={waypoints.length < 2}
-            className="hud-btn-ghost !w-auto justify-center gap-1.5 self-start px-2 text-[12px] font-medium"
+            className="hud-btn-ghost !w-auto justify-center gap-2 self-start px-2 text-[12px] font-medium"
           >
             <ReverseIcon /> Reverse order
           </button>
@@ -486,7 +486,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
             clearWaypoints();
             setNotice(null);
           }}
-          className="hud-btn-ghost !w-auto justify-center gap-1.5 self-end px-3 text-[12px] font-medium"
+          className="hud-btn-ghost !w-auto justify-center gap-2 self-end px-3 text-[12px] font-medium"
           aria-label="Clear all waypoints and routes"
         >
           <svg
@@ -570,7 +570,7 @@ function RouteSummary({
     ? null
     : Math.round(candidate.greenRatio * 100);
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-2">
         <span className="hud-mono text-[14px] text-[color:var(--accent)]">
           {candidate.distanceKm.toFixed(1)} km
@@ -697,7 +697,7 @@ function WaypointRow({
         ? COLOR_END
         : viaColor(index);
   return (
-    <div className="flex items-center gap-1.5 rounded-full bg-[color:var(--surf-3)] px-2 py-1">
+    <div className="flex items-center gap-2 rounded-full bg-[color:var(--surf-3)] px-2 py-1">
       <span
         aria-hidden
         className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold text-[color:var(--accent-ink)]"
@@ -919,11 +919,11 @@ function SearchAdd({
                     setResults([]);
                     setOpen(false);
                   }}
-                  className="flex w-full items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12px] text-[color:var(--ink)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--accent)]"
+                  className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-[12px] text-[color:var(--ink)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--accent)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{r.label || r.name}</span>
                   {prettyCategory(r.category) && (
-                    <span className="shrink-0 rounded-full bg-[color:var(--surf-3)] px-1.5 py-0.5 text-[11px] text-[color:var(--ink-dim)]">
+                    <span className="shrink-0 rounded-full bg-[color:var(--surf-3)] px-2 py-1 text-[11px] text-[color:var(--ink-dim)]">
                       {prettyCategory(r.category)}
                     </span>
                   )}

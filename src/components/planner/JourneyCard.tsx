@@ -111,7 +111,7 @@ export function JourneyCard({ journey, best, active, onSelect }: Props) {
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {best && <span className="ui-badge" data-tone="accent">Best</span>}
         {delay > 0 && (
           <span className="ui-badge" data-tone="warn">+{delay} min</span>

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const css = readFileSync(new URL("./globals.css", import.meta.url), "utf8");
@@ -7,6 +7,9 @@ interface Block { selector: string; body: string }
 const blocks: Block[] = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .map((m) => ({ selector: m[1].trim(), body: m[2] }))
   .filter((b) => !b.selector.startsWith("%"));
+
+const block = (selector: string) =>
+  blocks.find((b) => b.selector.split("\n").pop()?.trim() === selector);
 
 const declarations = blocks.flatMap((b) =>
   b.body.split(";").map((d) => d.trim()).filter(Boolean).map((d) => {
@@ -43,6 +46,53 @@ describe("flat CSS invariants", () => {
     expect(pill?.body).toContain("var(--accent-soft)");
     expect(pill?.body).not.toContain("0 0 0 2px var(--surf-0)");
     expect(css).toContain(".ui-search-pill input:focus-visible");
+  });
+
+  it("puts the panel UI on a 4px spacing grid", () => {
+    expect(css).toMatch(/--sp-4:\s*16px/);
+    expect(block(".hud-panel")?.body).toContain(
+      "padding: var(--sp-4)",
+    );
+    expect(block(".ui-panel-body")?.body).toContain(
+      "gap: var(--sp-3)",
+    );
+    expect(block(".ui-row")?.body).toContain(
+      "min-height: 48px",
+    );
+    expect(block(".ui-seg")?.body).toContain(
+      "min-height: 36px",
+    );
+    expect(block(".hud-basemap-btn")?.body).toContain(
+      "padding: var(--sp-2) var(--sp-4)",
+    );
+    expect(block(".ui-chip")?.body).toContain("min-height: 32px");
+    expect(block(".ui-btn")?.body).toContain("min-height: 44px");
+    expect(block(".hud-btn-primary:disabled")?.body).toContain("opacity: 1");
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.trim().endsWith(".hud-panel-tab") &&
+          b.body.includes("padding: 0 var(--sp-2)"),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps panel component spacing on the 4px scale", () => {
+    for (const dir of ["hud", "planner"]) {
+      const base = new URL(`../components/${dir}/`, import.meta.url);
+      for (const file of readdirSync(base).filter((f) => f.endsWith(".tsx"))) {
+        const src = readFileSync(new URL(file, base), "utf8");
+        expect(src, file).not.toMatch(
+          /\b(?:gap|space-y|m[btlrx]?|p[btlrx]?)-[0-9]+\.5\b/,
+        );
+      }
+    }
+    const hud = readFileSync(
+      new URL("../components/hud/HudPanel.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(hud).not.toContain(" p-2 ");
+    expect(hud).not.toContain("px-1");
   });
 
   it("keeps the focus ring visible inside clipped containers", () => {

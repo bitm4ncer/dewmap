@@ -86,7 +86,7 @@ export function DataSourcesPanel() {
           {SOURCES.map((s) => (
             <li
               key={s.name}
-              className="flex flex-col gap-0.5 rounded-lg px-3 py-2.5 hover:bg-[color:var(--surf-2)]"
+              className="flex flex-col gap-1 rounded-lg px-3 py-3 hover:bg-[color:var(--surf-2)]"
             >
               <a
                 href={s.href}

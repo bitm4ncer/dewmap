@@ -373,18 +373,18 @@ export function PlacePicker({
           type="button"
           onClick={locate}
           disabled={locating}
-          className="ui-badge hover:bg-[color:var(--surf-3)] disabled:opacity-40"
+          className="ui-chip"
         >
-          <RecenterIcon size={12} className="mr-1 inline" />
+          <RecenterIcon size={12} />
           My location
         </button>
         {onPickOnMap && (
           <button
             type="button"
             onClick={onPickOnMap}
-            className="ui-badge hover:bg-[color:var(--surf-3)]"
+            className="ui-chip"
           >
-            <MapPinIcon size={12} className="mr-1 inline" />
+            <MapPinIcon size={12} />
             Map
           </button>
         )}

@@ -118,7 +118,7 @@ export function RoutesPanel({
             aria-pressed={mode === m.id}
             onClick={() => choose(m.id)}
           >
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-2">
               {m.icon}
               {m.label}
             </span>

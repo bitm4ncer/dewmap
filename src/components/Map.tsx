@@ -3492,7 +3492,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         && (railNetworkStatus.inFlight > 0
           || railNetworkStatus.cooldownUntil > Date.now()) && (
         <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-[color:var(--ink)]">
+          <div className="hud-panel hud-mono flex items-center gap-2 px-4 py-2 text-[11.5px] text-[color:var(--ink)]">
             <span
               aria-hidden
               className="hud-loading-dot"
@@ -3614,7 +3614,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           aria-hidden={!sidebarOpen}
         >
           {/* Desktop pane switcher lives inside the panel. */}
-          <div className="hidden px-4 pb-3 md:block">
+          <div className="hidden px-4 md:block">
             <nav className="hud-panel-tabs" aria-label="Panel switcher">
               {SIDEBAR_PANES.map((p) => (
                 <PaneToggle
@@ -3915,7 +3915,7 @@ function BasemapPanel({
           )}
           <span className="line" aria-hidden />
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {items.map((b) => {
             const selected = effectiveId === b.id;
             const variant = getActiveVariant(b, variants[b.id]);
@@ -3950,7 +3950,7 @@ function BasemapPanel({
 
   return (
     <HudPanel label="Basemap">
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-3">
         {renderGroup(
           "Vector Maps",
           vectorMaps,
@@ -4134,10 +4134,8 @@ function ViewPanel({
   };
 
   return (
-    <HudPanel>
+    <HudPanel label="View">
       <div className="ui-section">
-        <span className="ui-kicker">View</span>
-
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Mode</span>
           <div className="ui-segmented w-[156px]" role="group" aria-label="Basemap mode">
@@ -4218,7 +4216,7 @@ function ViewPanel({
         <button
           type="button"
           onClick={fullscreen}
-          className="mt-1 inline-flex min-h-10 items-center justify-center gap-2 rounded-[12px] bg-[color:var(--surf-2)] px-3 text-[12.5px] font-semibold text-[color:var(--ink-dim)] transition-colors hover:bg-[color:var(--surf-3)] hover:text-[color:var(--ink)]"
+          className="ui-btn w-full"
         >
           Toggle fullscreen
         </button>
@@ -4326,7 +4324,7 @@ function RailsPanel({
                 {Math.round(opacity * 100)}%
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11.5px] text-[color:var(--ink-dim)]">
+            <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
               {railStyle === "lines"
                         && (railNetworkStatus.inFlight > 0
                   || railNetworkStatus.cooldownUntil > Date.now()) && (
@@ -4780,7 +4778,7 @@ function SnapshotCalendar({ snapshots, activeIndex, onSelect }: SnapshotCalendar
   return (
     <div className="flex flex-col gap-2 pt-1">
       <div
-        className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1"
+        className="no-scrollbar flex gap-2 overflow-x-auto pb-1"
         role="listbox"
         aria-label="Available snapshots"
       >

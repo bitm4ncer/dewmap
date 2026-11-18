@@ -191,7 +191,7 @@ export function CarPanel({ mapRef }: Props) {
             {waypoints.map((w, i) => (
               <li
                 key={w.id}
-                className="flex items-center gap-2 rounded-[10px] bg-[color:var(--surf-0)] px-2 py-1.5"
+                className="flex items-center gap-2 rounded-[10px] bg-[color:var(--surf-0)] px-2 py-2"
               >
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--surf-2)] text-[11px] font-bold text-[color:var(--ink-dim)]">
                   {i + 1}
@@ -199,7 +199,7 @@ export function CarPanel({ mapRef }: Props) {
                 <span className="min-w-0 flex-1 truncate text-[12.5px] text-[color:var(--ink)]">
                   {w.label}
                 </span>
-                <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => moveWaypoint(w.id, -1)}

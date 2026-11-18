@@ -588,7 +588,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           </div>
 
           {mapPick && (
-            <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--accent-soft)] px-2 py-1.5 text-[11.5px]">
+            <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--accent-soft)] px-2 py-2 text-[11.5px]">
               <span>
                 Click the map to set {mapPick === "from" ? "A" : "B"}.
               </span>
