@@ -45,10 +45,6 @@ function phoneHref(value: string): string {
   return `tel:${value.replace(/[^\d+]/g, "")}`;
 }
 
-function googleStreetViewUrl(lat: number, lon: number): string {
-  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}`;
-}
-
 function osmPath(type: "N" | "W" | "R"): string {
   return type === "W" ? "way" : type === "R" ? "relation" : "node";
 }
@@ -109,7 +105,6 @@ function PoiDetailContent({
   const [resizing, setResizing] = useState(false);
   const [closing, setClosing] = useState(false);
   const [streetView, setStreetView] = useState<PanoramaxStreetView | null>(null);
-  const [streetViewChecked, setStreetViewChecked] = useState(false);
   const [streetViewOpen, setStreetViewOpen] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{
@@ -149,24 +144,14 @@ function PoiDetailContent({
 
   useEffect(() => {
     const ctrl = new AbortController();
-    const revealFallback = window.setTimeout(() => {
-      if (!ctrl.signal.aborted) setStreetViewChecked(true);
-    }, 2500);
     findPanoramaxStreetView(selection.lon, selection.lat, ctrl.signal)
       .then((value) => {
         if (!ctrl.signal.aborted) setStreetView(value);
       })
       .catch(() => {
         // A missing Street View must never block the place card.
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setStreetViewChecked(true);
-        window.clearTimeout(revealFallback);
       });
-    return () => {
-      ctrl.abort();
-      window.clearTimeout(revealFallback);
-    };
+    return () => ctrl.abort();
   }, [selection.lon, selection.lat]);
 
   useEffect(() => {
@@ -462,17 +447,10 @@ function PoiDetailContent({
   }, []);
 
   const openStreetView = useCallback(() => {
+    if (!streetView) return;
     haptic("tap");
-    if (streetView) {
-      setStreetViewOpen(true);
-      return;
-    }
-    window.open(
-      googleStreetViewUrl(selection.lat, selection.lon),
-      "_blank",
-      "noopener,noreferrer",
-    );
-  }, [streetView, selection.lat, selection.lon]);
+    setStreetViewOpen(true);
+  }, [streetView]);
 
   const planRoute = () => {
     haptic("tap");
@@ -569,7 +547,7 @@ function PoiDetailContent({
                 )}
               </span>
             </button>
-            {(onPlanRoute || streetViewChecked) && (
+            {(onPlanRoute || streetView) && (
               <div className="poi-mini-secondary">
                 {onPlanRoute && (
                   <button
@@ -582,17 +560,13 @@ function PoiDetailContent({
                     <RouteIcon size={15} />
                   </button>
                 )}
-                {streetViewChecked && (
+                {streetView && (
                   <button
                     type="button"
                     className="poi-mini-subbtn"
                     onClick={openStreetView}
                     aria-label="Open Street View"
-                    title={
-                      streetView
-                        ? "Open Panoramax Street View"
-                        : "Open Street View on Google Maps"
-                    }
+                    title="Open Panoramax Street View"
                   >
                     <StreetViewIcon size={15} />
                   </button>
@@ -804,16 +778,12 @@ function PoiDetailContent({
                       Plan Route
                     </button>
                   )}
-                  {streetViewChecked && (
+                  {streetView && (
                     <button
                       type="button"
                       className="poi-action"
                       onClick={openStreetView}
-                      title={
-                        streetView
-                          ? "Open Panoramax Street View"
-                          : "Open Street View on Google Maps"
-                      }
+                      title="Open Panoramax Street View"
                     >
                       <StreetViewIcon />
                       Street View
