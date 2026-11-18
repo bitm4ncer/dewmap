@@ -171,6 +171,16 @@ export const BASEMAPS: Basemap[] = [
   },
 ];
 
+/** Only annual Sentinel-2 and the daily GIBS layer expose timeline settings. */
+export function basemapUsesTimeline(
+  imageId: string,
+  mode: "photo" | "hybrid" | "vector",
+): boolean {
+  return (
+    mode !== "vector" && (imageId === "s2cloudless" || imageId === "gibs-today")
+  );
+}
+
 export const DEFAULT_IMAGE_BASEMAP_ID = "esri-imagery";
 export const DEFAULT_VECTOR_BASEMAP_ID = "streets-dark";
 

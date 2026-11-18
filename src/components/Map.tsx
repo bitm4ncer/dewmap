@@ -9,6 +9,7 @@ import {
   DEFAULT_IMAGE_BASEMAP_ID,
   DEFAULT_VECTOR_BASEMAP_ID,
   getActiveVariant,
+  basemapUsesTimeline,
   resolveBasemapSubtitle,
   resolveBasemapUrl,
   type Basemap,
@@ -3686,47 +3687,49 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   }}
                 />
 
-                <TimelinePanel
-                  s2ActiveVariant={
-                    basemapVariants["s2cloudless"] ?? "2024"
-                  }
-                  isS2Active={
-                    imageBasemapId === "s2cloudless"
-                    && basemapMode !== "vector"
-                  }
-                  onSelectYear={(variantId) => {
-                    setImageBasemapId("s2cloudless");
-                    if (basemapMode === "vector") setBasemapMode("photo");
-                    setBasemapVariant("s2cloudless", variantId);
-                  }}
-                  liveDayOffset={liveBasemapDayOffset}
-                  onLiveDayOffsetChange={(offset) => {
-                    setImageBasemapId("gibs-today");
-                    if (basemapMode === "vector") setBasemapMode("photo");
-                    setLiveBasemapDayOffset(offset);
-                  }}
-                  isLiveActive={
-                    imageBasemapId === "gibs-today"
-                    && basemapMode !== "vector"
-                  }
-                  onActivateLive={() => {
-                    setImageBasemapId("gibs-today");
-                    if (basemapMode === "vector") setBasemapMode("photo");
-                  }}
-                  credentials={credentials !== null}
-                  onOpenSettings={onOpenSettings}
-                  zoomOk={(mapInstance?.getZoom() ?? INITIAL_VIEW.zoom) >= MIN_FETCH_ZOOM}
-                  minZoom={MIN_FETCH_ZOOM}
-                  state={timelineState}
-                  sector={sector}
-                  snapshots={snapshots}
-                  snapshotIndex={snapshotIndex}
-                  onStart={handleStartTimeline}
-                  onSelect={handleSelectSnapshot}
-                  onClear={handleClearTimeline}
-                  opacity={overlayOpacity}
-                  onOpacityChange={setOverlayOpacity}
-                />
+                {basemapUsesTimeline(imageBasemapId, basemapMode) && (
+                  <TimelinePanel
+                    s2ActiveVariant={
+                      basemapVariants["s2cloudless"] ?? "2024"
+                    }
+                    isS2Active={
+                      imageBasemapId === "s2cloudless"
+                      && basemapMode !== "vector"
+                    }
+                    onSelectYear={(variantId) => {
+                      setImageBasemapId("s2cloudless");
+                      if (basemapMode === "vector") setBasemapMode("photo");
+                      setBasemapVariant("s2cloudless", variantId);
+                    }}
+                    liveDayOffset={liveBasemapDayOffset}
+                    onLiveDayOffsetChange={(offset) => {
+                      setImageBasemapId("gibs-today");
+                      if (basemapMode === "vector") setBasemapMode("photo");
+                      setLiveBasemapDayOffset(offset);
+                    }}
+                    isLiveActive={
+                      imageBasemapId === "gibs-today"
+                      && basemapMode !== "vector"
+                    }
+                    onActivateLive={() => {
+                      setImageBasemapId("gibs-today");
+                      if (basemapMode === "vector") setBasemapMode("photo");
+                    }}
+                    credentials={credentials !== null}
+                    onOpenSettings={onOpenSettings}
+                    zoomOk={(mapInstance?.getZoom() ?? INITIAL_VIEW.zoom) >= MIN_FETCH_ZOOM}
+                    minZoom={MIN_FETCH_ZOOM}
+                    state={timelineState}
+                    sector={sector}
+                    snapshots={snapshots}
+                    snapshotIndex={snapshotIndex}
+                    onStart={handleStartTimeline}
+                    onSelect={handleSelectSnapshot}
+                    onClear={handleClearTimeline}
+                    opacity={overlayOpacity}
+                    onOpacityChange={setOverlayOpacity}
+                  />
+                )}
                 <RailsPanel
                   on={railOn}
                   onChange={setRailOn}
