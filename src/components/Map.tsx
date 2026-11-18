@@ -1695,7 +1695,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
-  const [historyCategories] = useState<HistoricCategory[]>([]);
+  const [historyCategories, setHistoryCategories] = useState<HistoricCategory[]>([]);
   const historyGlobalActive = activePane === "history" && sidebarOpen;
   const historyGlobal = useHistoryLayers(mapInstance, {
     enabled: historyGlobalActive,
@@ -3693,6 +3693,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 globalCount={historyGlobal.count}
                 globalTotal={historyGlobal.total}
                 globalDataAsOf={historyGlobal.dataAsOf}
+                categories={historyCategories}
+                onCategoriesChange={setHistoryCategories}
                 heritageOnly={historyHeritageOnly}
                 onHeritageOnlyChange={setHistoryHeritageOnly}
                 unescoOnly={historyUnescoOnly}

@@ -1,7 +1,10 @@
 "use client";
 
 import { HudPanel } from "./HudPanel";
+import { HistoryFilters } from "./HistoryFilters";
 import { HistoryTimeline } from "./HistoryTimeline";
+import { panelSummary } from "@/lib/history/panel-state";
+import type { HistoricCategory } from "@/lib/history/types";
 
 interface HistoryPanelProps {
   year: number;
@@ -14,6 +17,8 @@ interface HistoryPanelProps {
   globalCount: number;
   globalTotal: number;
   globalDataAsOf: string | null;
+  categories: readonly HistoricCategory[];
+  onCategoriesChange: (categories: HistoricCategory[]) => void;
   heritageOnly: boolean;
   onHeritageOnlyChange: (on: boolean) => void;
   unescoOnly: boolean;
@@ -78,7 +83,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
             earliestVisibleYear={props.earliestVisibleYear}
             visibleCount={shownCount}
             loading={
-              props.loading ||
+              (!globalReady && props.loading) ||
               (props.globalStatus === "loading" && !props.landmarksOn)
             }
           />
@@ -121,13 +126,18 @@ export function HistoryPanel(props: HistoryPanelProps) {
               className="hud-mono text-[11px] text-[color:var(--ink-dim)]"
               data-state={props.globalStatus}
             >
-              {props.globalStatus === "loading"
-                ? "loading…"
-                : props.globalStatus === "error"
-                  ? "offline"
-                  : props.globalStatus === "ready"
-                    ? `${props.globalCount > 0 ? props.globalCount : props.globalTotal} sites`
-                    : ""}
+              {props.globalStatus === "error"
+                ? "offline"
+                : panelSummary({
+                    status: props.globalStatus,
+                    count: props.globalCount,
+                    total: props.globalTotal,
+                    filters: {
+                      heritageOnly: props.heritageOnly,
+                      unescoOnly: props.unescoOnly,
+                      categories: props.categories,
+                    },
+                  })}
             </span>
           </div>
 
@@ -165,6 +175,10 @@ export function HistoryPanel(props: HistoryPanelProps) {
                   onChange={props.onUnescoOnlyChange}
                 />
               </div>
+              <HistoryFilters
+                categories={props.categories}
+                onCategoriesChange={props.onCategoriesChange}
+              />
               <p className="hud-mono text-[11px] text-[color:var(--ink-dim)]">
                 Year and category filters apply from city zoom (z8).
                 {dataAsOf ? ` Data as of ${dataAsOf}.` : ""}
