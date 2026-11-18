@@ -77,7 +77,7 @@ honesty issues. Fixed and re-verified:
 - **UI:** English category labels, muted undated dots, Commons link,
   coordinate-based OSM link, PMTiles/Tippecanoe attribution.
 
-Gate after these fixes: **282 Vitest tests**, **33 `node:test` script
+Gate after these fixes: **253 Vitest tests**, **33 `node:test` script
 tests**, `tsc`, `eslint` (history files), `check:no-emoji`, and
 `next build` pass. Browser check at z12 shows **0 sites** with the
 category chips enabled; the old 199-total substitution is gone.
