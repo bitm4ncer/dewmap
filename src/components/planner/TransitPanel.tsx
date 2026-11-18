@@ -13,15 +13,17 @@ import { JourneyCard } from "./JourneyCard";
 import { JourneyDetail } from "./JourneyDetail";
 import { useNavigation } from "@/lib/navigation/store";
 import { ChevronDownIcon, SwapIcon } from "@/components/ui/icons";
-import { planRoutes, isAbortError } from "@/lib/routing";
+import { formatDuration, planRoutes, isAbortError } from "@/lib/routing";
 import {
   bestJourneyId,
   buildIcs,
   buildShareUrl,
   describeTransitError,
   filterJourneys,
+  journeyTimeZone,
   parseShareParams,
   sortJourneys,
+  stopClock,
   type JourneySort,
 } from "@/lib/planner/transitFormat";
 
@@ -627,6 +629,40 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
 
       {journey && (
         <div ref={detailRef} className="scroll-mt-3">
+          <div
+            className="journey-switcher"
+            role="group"
+            aria-label="Next departures"
+          >
+            {visibleJourneys.slice(0, 8).map((entry) => {
+              const transit = entry.transit;
+              if (!transit) return null;
+              const firstLeg = transit.legs[0];
+              const departure = firstLeg
+                ? stopClock(
+                    transit.departure,
+                    firstLeg.from,
+                    journeyTimeZone(entry),
+                  )
+                : "—";
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  aria-pressed={entry.id === journey.id}
+                  data-active={entry.id === journey.id}
+                  onClick={() => selectJourney(entry.id)}
+                  className="journey-chip"
+                  title={`${departure} · ${formatDuration(transit.durationMin)}`}
+                >
+                  <span>{departure}</span>
+                  <span className="journey-chip-dur">
+                    {formatDuration(transit.durationMin)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
           <HudPanel>
             <JourneyDetail
               journey={journey}

@@ -1569,6 +1569,39 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .ui-btn:hover { background: var(--surf-3); color: var(--ink); }
 
+/* Journey switcher — compact departure chips above the detail card ----- */
+.journey-switcher {
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  padding-bottom: var(--sp-1);
+  scrollbar-width: none;
+}
+.journey-switcher::-webkit-scrollbar { display: none; }
+.journey-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border-radius: 10px;
+  background: var(--surf-2);
+  color: var(--ink-dim);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.journey-chip:hover { background: var(--surf-3); color: var(--ink); }
+.journey-chip[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.journey-chip-dur { font-size: 10.5px; color: var(--ink-mute); }
+.journey-chip[data-active="true"] .journey-chip-dur { color: var(--accent); }
+
 /* Small inline actions (search shortcuts, map picks) ------------------ */
 .ui-chip {
   display: inline-flex;
