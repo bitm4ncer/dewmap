@@ -149,7 +149,7 @@ export function ensureGlobalLayers(
           source: sourceId,
           "source-layer": "history_clusters",
           minzoom: cluster.minzoom,
-          maxzoom: cluster.maxzoom,
+          maxzoom: cluster.maxzoom + 1,
           paint: {
             "circle-radius": [
               "interpolate",
@@ -178,7 +178,7 @@ export function ensureGlobalLayers(
           source: sourceId,
           "source-layer": "history_clusters",
           minzoom: cluster.minzoom,
-          maxzoom: cluster.maxzoom,
+          maxzoom: cluster.maxzoom + 1,
           layout: {
             "text-field": ["to-string", ["get", "count"]],
             "text-font": [font],
