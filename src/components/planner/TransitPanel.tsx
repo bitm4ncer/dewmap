@@ -538,9 +538,23 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     <div className="flex flex-col gap-3">
       <HudPanel>
         <div className="ui-section">
-          <span className="ui-kicker">Train &amp; local transit</span>
-          <div className="flex items-stretch gap-2">
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="ui-kicker">Train &amp; local transit</span>
+            <button
+              type="button"
+              onClick={() => {
+                const hadBoth = Boolean(from && to);
+                swap();
+                if (hadBoth) setSwapTick((tick) => tick + 1);
+              }}
+              aria-label="Swap origin and destination"
+              title="Swap origin and destination"
+              className="ui-input-action"
+            >
+              <SwapIcon size={16} />
+            </button>
+          </div>
+          <div className="flex flex-col gap-2">
               <PlacePicker
                 placeholder="From station or address"
                 kind="transit"
@@ -583,19 +597,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                   return [c.lng, c.lat];
                 }}
               />
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const hadBoth = Boolean(from && to);
-                swap();
-                if (hadBoth) setSwapTick((tick) => tick + 1);
-              }}
-              aria-label="Swap origin and destination"
-              className="hud-icon-btn w-11 shrink-0 self-center"
-            >
-              <SwapIcon size={18} />
-            </button>
           </div>
 
           {mapPick && (

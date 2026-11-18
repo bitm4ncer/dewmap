@@ -4,7 +4,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { visibleQuickPlaces } from "@/lib/places/quickPlaces";
 import { geocode, prettyCategory } from "@/lib/geocode";
 import { geocodeStops, type MotisStop } from "@/lib/routing";
-import { CloseIcon, MapPinIcon, RecenterIcon, StarIcon } from "@/components/ui/icons";
+import {
+  ChevronDownIcon,
+  ClockIcon,
+  CloseIcon,
+  MapPinIcon,
+  RecenterIcon,
+  StarIcon,
+} from "@/components/ui/icons";
 
 export interface PickedPlace {
   name: string;
@@ -68,6 +75,7 @@ export function PlacePicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const listId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -286,6 +294,7 @@ export function PlacePicker({
   const showDropdown =
     open && (results.length > 0 || Boolean(error) || (q.trim().length >= 2 && !busy));
   const activeOption = results[highlight];
+  const recents = visibleQuickPlaces(quickPlaces);
 
   return (
     <div ref={boxRef} className="relative min-w-0 flex-1">
@@ -338,56 +347,13 @@ export function PlacePicker({
         autoComplete="off"
         spellCheck={false}
         enterKeyHint="search"
-        className="ui-input pr-11"
+        className="ui-input ui-input--actions"
       />
-      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center">
-        {busy || locating ? (
+      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
+        {busy && (
           <span className="px-1 text-[11px] text-[color:var(--ink-mute)]" aria-hidden>
             …
           </span>
-        ) : q ? (
-          <button
-            type="button"
-            onClick={clear}
-            aria-label="Clear place"
-            className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
-          >
-            <CloseIcon size={16} />
-          </button>
-        ) : null}
-      </div>
-      </div>
-
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        {visibleQuickPlaces(quickPlaces).map((place) => (
-          <button
-            key={`${place.id ?? place.name}-${place.lat}-${place.lon}`}
-            type="button"
-            onClick={() => choose(place)}
-            title={`${place.name}${place.city ? `, ${place.city}` : ""}`}
-            className="ui-chip max-w-[150px] truncate"
-          >
-            {place.name}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={locate}
-          disabled={locating}
-          className="ui-chip"
-        >
-          <RecenterIcon size={12} />
-          My location
-        </button>
-        {onPickOnMap && (
-          <button
-            type="button"
-            onClick={onPickOnMap}
-            className="ui-chip"
-          >
-            <MapPinIcon size={12} />
-            Map
-          </button>
         )}
         {selectedPlace && onToggleFavorite && (
           <button
@@ -395,18 +361,81 @@ export function PlacePicker({
             onClick={onToggleFavorite}
             aria-pressed={favorite}
             aria-label={favorite ? "Remove saved place" : "Save place"}
-            className={[
-              "ui-badge",
-              favorite
-                ? "bg-[color:var(--accent-soft)] text-[color:var(--accent)]"
-                : "hover:bg-[color:var(--surf-3)]",
-            ].join(" ")}
+            title={favorite ? "Remove saved place" : "Save place"}
+            className="ui-input-action"
+            data-active={favorite}
           >
-            <StarIcon size={12} filled={favorite} className="mr-1 inline" />
-            {favorite ? "Saved" : "Save"}
+            <StarIcon size={15} filled={favorite} />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={locate}
+          disabled={locating}
+          aria-label="Use my location"
+          title="Use my location"
+          className="ui-input-action"
+        >
+          {locating ? "…" : <RecenterIcon size={15} />}
+        </button>
+        {onPickOnMap && (
+          <button
+            type="button"
+            onClick={onPickOnMap}
+            aria-label="Pick on map"
+            title="Pick on map"
+            className="ui-input-action"
+          >
+            <MapPinIcon size={15} />
+          </button>
+        )}
+        {q && (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Clear place"
+            title="Clear place"
+            className="ui-input-action"
+          >
+            <CloseIcon size={15} />
           </button>
         )}
       </div>
+      </div>
+
+      {recents.length > 0 && (
+        <div className="mt-1">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((open) => !open)}
+            aria-expanded={historyOpen}
+            className="ui-history-toggle"
+          >
+            <ClockIcon size={13} />
+            <span>History</span>
+            <span className="ui-history-count">{recents.length}</span>
+            <ChevronDownIcon
+              size={13}
+              className={historyOpen ? "rotate-180 transition-transform" : "transition-transform"}
+            />
+          </button>
+          {historyOpen && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {recents.map((place) => (
+                <button
+                  key={`${place.id ?? place.name}-${place.lat}-${place.lon}`}
+                  type="button"
+                  onClick={() => choose(place)}
+                  title={`${place.name}${place.city ? `, ${place.city}` : ""}`}
+                  className="ui-chip max-w-[150px] truncate"
+                >
+                  {place.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <span className="sr-only" aria-live="polite">
         {busy

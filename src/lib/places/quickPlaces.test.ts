@@ -15,6 +15,14 @@ describe("visibleQuickPlaces", () => {
     ]);
   });
 
+  it("drops My location because the input owns that action", () => {
+    expect(
+      visibleQuickPlaces([{ name: "My location" }, { name: "Köln Hbf" }]).map(
+        (p) => p.name,
+      ),
+    ).toEqual(["Köln Hbf"]);
+  });
+
   it("keeps at most four shortcuts", () => {
     const places = Array.from({ length: 6 }, (_, i) => ({ name: `P${i}` }));
     expect(visibleQuickPlaces(places)).toHaveLength(4);

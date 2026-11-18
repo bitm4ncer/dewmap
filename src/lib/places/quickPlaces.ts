@@ -1,8 +1,8 @@
-/** A map pick is an ephemeral value, not a saved shortcut. */
-const EPHEMERAL_NAME = "map point";
+/** Values the station input itself can produce are not history entries. */
+const HIDDEN_NAMES = new Set(["map point", "my location"]);
 
 export function visibleQuickPlaces<T extends { name: string }>(places: T[]): T[] {
   return places
-    .filter((p) => p.name.trim().toLowerCase() !== EPHEMERAL_NAME)
+    .filter((p) => !HIDDEN_NAMES.has(p.name.trim().toLowerCase()))
     .slice(0, 4);
 }
