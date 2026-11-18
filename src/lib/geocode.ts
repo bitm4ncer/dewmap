@@ -9,6 +9,8 @@ export interface GeocodeResult {
   city?: string;
   country?: string;
   postcode?: string;
+  osmType?: "N" | "W" | "R";
+  osmId?: number;
 }
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
@@ -92,6 +94,7 @@ export async function geocode(
   return data.features.map((f, i) => {
     const p = f.properties;
     const coordinates = f.geometry.coordinates;
+    const osmType = p.osm_type?.toUpperCase();
     const id = `${p.osm_type ?? "?"}-${p.osm_id ?? i}`;
     const label = buildLabel(p);
     return {
@@ -105,6 +108,10 @@ export async function geocode(
       city: p.city ?? p.district,
       country: p.country,
       postcode: p.postcode,
+      ...(osmType === "N" || osmType === "W" || osmType === "R"
+        ? { osmType }
+        : {}),
+      ...(typeof p.osm_id === "number" ? { osmId: p.osm_id } : {}),
     } satisfies GeocodeResult;
   });
 }

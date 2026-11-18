@@ -105,19 +105,40 @@ The client currently talks to Transitous directly, so the app stays lean.
   on purpose (size, freshness and licensing).
 - Registered only in production builds via `ServiceWorkerRegister`.
 
+## Place details (POI)
+
+- Tapping a search result or a map location opens a clean detail card.
+- Nominatim `extratags` supplies opening hours, phone, email, website,
+  address, wheelchair/payment facts and `contact:*` social tags. Results are
+  cached for 24 hours and requests are serialised to respect Nominatim's
+  1 request/second policy.
+- Wikidata fills official websites, descriptions, social profiles and
+  Commons images; Wikipedia supplies a fallback description and thumbnail.
+  Brand-level Wikidata entities are not used as place photos or place
+  descriptions (for example a REWE branch does not show another store).
+- Opening hours are parsed into a weekly grid with an "open now" state for
+  common OSM syntax; complex rules fall back to the raw value.
+- Photos come from OSM, Wikimedia Commons and Wikipedia, with a link to the
+  original file and its licence. The card uses the flat surface system, a
+  78dvh mobile sheet and a 380px desktop card.
+- `src/lib/poi/*` contains the data layer, parser and cache;
+  `src/components/poi/PoiDetail.tsx` the UI.
+
 ## Verification
 
 - `npx tsc --noEmit` — clean.
 - `npm run lint` — 0 errors, 0 warnings.
-- `npm test` — 63 tests passing (format, HTTP, engine, BRouter, Valhalla,
-  MOTIS, hiking routing smoke).
+- `npm test` — 169 tests passing (format, HTTP, engine, BRouter, Valhalla,
+  MOTIS, hiking routing, POI parsing and opening-hours rules).
 - `npm run build` — static export succeeds.
 - Lighthouse (production export): Accessibility 100, Best Practices 100,
   SEO 100.
 - Browser QA at 390×700 and desktop: drag sheet peek↔half↔full, mobile
   panes, car Berlin→Hamburg (289 km / 3 h 05), transit Berlin→Hamburg
   (ICE 872, platforms, real-time fields), car navigation simulation with
-  turn instruction and ETA, hiking route with waypoints and alternatives.
+  turn instruction and ETA, hiking route with waypoints and alternatives,
+  POI detail cards for a museum and a supermarket (photo, hours, contact,
+  socials), map-click reverse lookup.
 
 ## Known limitations
 

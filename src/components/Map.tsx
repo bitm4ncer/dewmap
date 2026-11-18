@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/purity -- map chrome renders live countdowns and clock labels */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import maplibregl, { Map as MLMap, ScaleControl } from "maplibre-gl";
+import maplibregl, { Map as MLMap, ScaleControl, type MapMouseEvent } from "maplibre-gl";
 import { THEME } from "@/lib/theme";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
@@ -25,6 +25,8 @@ import { searchCatalog, type Snapshot } from "@/lib/sentinel/catalog";
 import type { Bbox, Credentials } from "@/types/sentinel";
 import { SettingsGear } from "./SettingsGear";
 import { SearchBox } from "./SearchBox";
+import { PoiDetail } from "./poi/PoiDetail";
+import type { PoiSelection } from "@/lib/poi";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
 import { RAILWAY_TILE_URLS, RAILWAY_ATTRIBUTION, RAILWAY_MAX_ZOOM } from "@/lib/railway";
@@ -1558,6 +1560,7 @@ function buildLiveLocationEl(): {
 
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
+  const [poiSelection, setPoiSelection] = useState<PoiSelection | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
@@ -1803,6 +1806,34 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
   const toggleFull = () => snapTo(sheetState === "full" ? "half" : "full");
   const collapseToPeek = useCallback(() => snapTo("peek"), [snapTo]);
+
+  const closePoi = useCallback(() => setPoiSelection(null), []);
+  const centerPoi = useCallback((lon: number, lat: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({
+      center: [lon, lat],
+      zoom: Math.max(map.getZoom(), 16),
+      duration: 700,
+    });
+  }, []);
+
+  const handleSearchSelect = useCallback(
+    (result: GeocodeResult) => {
+      setFlyTarget(result);
+      setPoiSelection({
+        ...(result.osmType && result.osmId
+          ? { osmType: result.osmType, osmId: result.osmId }
+          : {}),
+        lon: result.coordinates[0],
+        lat: result.coordinates[1],
+        ...(result.name ? { name: result.name } : {}),
+        ...(result.city ? { city: result.city } : {}),
+        ...(result.category ? { category: result.category } : {}),
+      });
+    },
+    [],
+  );
   const handleTransitSearchComplete = useCallback(() => {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
@@ -3321,6 +3352,31 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [flyTarget]);
 
+  // Tapping empty map opens place details. Clicks that hit an interactive
+  // rail-station or history-landmark layer are left to their own popups.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    const onClick = (event: MapMouseEvent) => {
+      if (event.defaultPrevented) return;
+      const hit = map
+        .queryRenderedFeatures(event.point)
+        .some(
+          (feature) =>
+            feature.layer?.id === RAIL_STATIONS_HIT_LAYER_ID
+            || feature.layer?.id === HISTORY_LANDMARKS_HIT_LAYER_ID,
+        );
+      if (hit) return;
+      setPoiSelection({
+        lon: event.lngLat.lng,
+        lat: event.lngLat.lat,
+      });
+    };
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+    };
+  }, [mapInstance]);
 
   return (
     <div
@@ -3336,7 +3392,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         className={["ui-topbar", sidebarOpen ? "ui-topbar--with-panel" : ""].join(" ")}
       >
         <div className="ui-search-wrap">
-          <SearchBox onSelect={setFlyTarget} getNearby={() => { const m = mapRef.current; if (!m) return undefined; const c = m.getCenter(); return [c.lng, c.lat]; }} />
+          <SearchBox onSelect={handleSearchSelect} getNearby={() => { const m = mapRef.current; if (!m) return undefined; const c = m.getCenter(); return [c.lng, c.lat]; }} />
         </div>
         <div className="pointer-events-auto hidden shrink-0 md:block">
           <BasemapSwitch mode={basemapMode} onModeChange={setBasemapMode} />
@@ -3700,6 +3756,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           </div>
         </div>
       </aside>
+
+      <PoiDetail
+        selection={poiSelection}
+        onClose={closePoi}
+        onCenter={centerPoi}
+      />
 
       <NavigationOverlay
         progress={navigation.progress}

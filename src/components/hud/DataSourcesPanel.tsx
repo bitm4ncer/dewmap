@@ -60,9 +60,21 @@ const SOURCES: Source[] = [
     href: "https://photon.komoot.io/",
   },
   {
+    name: "Nominatim",
+    detail:
+      "Place details, opening hours, contact tags and addresses from OpenStreetMap.",
+    href: "https://nominatim.org/",
+  },
+  {
     name: "Wikipedia · Wikidata",
-    detail: "Historic landmark descriptions and dates.",
+    detail:
+      "Descriptions, dates, official websites and social profiles. Photos from Wikimedia Commons.",
     href: "https://www.wikidata.org/",
+  },
+  {
+    name: "Wikimedia Commons",
+    detail: "Place photos with a link to the original file and its licence.",
+    href: "https://commons.wikimedia.org/",
   },
   {
     name: "OpenHistoricalMap",
