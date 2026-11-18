@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import maplibregl, { Map as MLMap, ScaleControl } from "maplibre-gl";
+import { THEME } from "@/lib/theme";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   BASEMAPS,
@@ -339,7 +340,7 @@ function ensureRailLinesLayer(map: MLMap, opacity: number) {
       source: RAIL_LINES_SOURCE_ID,
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#0e0f0c",
+        "line-color": THEME.casing,
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
           9, 1.8,
@@ -360,12 +361,12 @@ function ensureRailLinesLayer(map: MLMap, opacity: number) {
         "line-color": [
           "match",
           ["get", "kind"],
-          "rail", "#d8ef6a",
-          "light_rail", "#b8e6ff",
-          "subway", "#b8e6ff",
-          "tram", "#9dd4ff",
-          "narrow_gauge", "#e2b8ff",
-          "#d8ef6a",
+          "rail", THEME.accent,
+          "light_rail", THEME.lightRail,
+          "subway", THEME.lightRail,
+          "tram", THEME.tram,
+          "narrow_gauge", THEME.narrowGauge,
+          THEME.accent,
         ],
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
@@ -452,8 +453,8 @@ function ensureRailStationsLayer(map: MLMap) {
           14, 4.5,
           17, 6,
         ],
-        "circle-color": "#d8ef6a",
-        "circle-stroke-color": "#0e0f0c",
+        "circle-color": THEME.accent,
+        "circle-stroke-color": THEME.casing,
         "circle-stroke-width": 1.5,
         "circle-opacity": 0.95,
       },
@@ -481,8 +482,8 @@ function ensureRailStationsLayer(map: MLMap) {
         "text-padding": 4,
       },
       paint: {
-        "text-color": "#e8f0d9",
-        "text-halo-color": "#0e0f0c",
+        "text-color": THEME.ink,
+        "text-halo-color": THEME.casing,
         "text-halo-width": 1.4,
       },
     });
@@ -708,10 +709,10 @@ function ensureHistoryLandmarksLayer(map: MLMap, opacity: number) {
         "circle-color": [
           "match",
           ["get", "source"],
-          "wikidata", "#ff5ea8", // hot pink → Wikidata (dated, named, has article)
-          "#4fd1e8",             // cyan      → OSM (community heritage)
+          "wikidata", THEME.landmarkWikidata, // dated, named, has an article
+          THEME.landmarkOsm,                 // OSM community heritage
         ],
-        "circle-stroke-color": "#ffffff",
+        "circle-stroke-color": THEME.white,
         "circle-stroke-width": 1.6,
         "circle-opacity": opacity,
       },
@@ -741,8 +742,8 @@ function ensureHistoryLandmarksLayer(map: MLMap, opacity: number) {
         "text-padding": 4,
       },
       paint: {
-        "text-color": "#e8f0d9",
-        "text-halo-color": "#0e0f0c",
+        "text-color": THEME.ink,
+        "text-halo-color": THEME.casing,
         "text-halo-width": 1.4,
         "text-opacity": opacity,
       },
@@ -1487,7 +1488,7 @@ function setSectorOutline(map: MLMap, bbox: Bbox) {
     type: "line",
     source: SECTOR_SOURCE_ID,
     paint: {
-      "line-color": "#ffffff",
+      "line-color": THEME.accent,
       "line-width": 2,
       "line-opacity": 0.9,
     },
@@ -3261,8 +3262,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     el.title = flyTarget.label;
     el.innerHTML = `
       <svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M14 0 C 5 0 0 5 0 13 C 0 24 14 36 14 36 C 14 36 28 24 28 13 C 28 5 23 0 14 0 Z" fill="#d8ef6a" stroke="rgba(8,10,6,0.85)" stroke-width="1.5" />
-        <circle cx="14" cy="13" r="5" fill="#0e0f0c" />
+        <path d="M14 0 C 5 0 0 5 0 13 C 0 24 14 36 14 36 C 14 36 28 24 28 13 C 28 5 23 0 14 0 Z" fill="var(--accent)" stroke="var(--map-casing)" stroke-width="1.5" />
+        <circle cx="14" cy="13" r="5" fill="var(--surf-0)" />
       </svg>
     `;
     el.addEventListener("click", (e) => {

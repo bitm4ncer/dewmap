@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { THEME } from "@/lib/theme";
 import type { Map as MLMap } from "maplibre-gl";
 import { useCar } from "@/lib/planner/carStore";
 import { useTransit } from "@/lib/planner/transitStore";
@@ -13,10 +14,10 @@ const WALK = "planner-route-walk";
 const STOPS = "planner-stops";
 const STOP_DOTS = "planner-stop-dots";
 
-const ACCENT = "#d8ef6a";
-const TRANSIT = "#8cc8ff";
-const WALK_COLOR = "#b9bbad";
-const INK = "#f4f3ea";
+const ACCENT = THEME.accent;
+const TRANSIT = THEME.info;
+const WALK_COLOR = THEME.inkDim;
+const INK = THEME.ink;
 
 type Data =
   | GeoJSON.Feature
@@ -131,7 +132,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
           source: SRC,
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#0e0f0c",
+            "line-color": THEME.casing,
             "line-width": 9,
             "line-opacity": 0.9,
           },
@@ -151,7 +152,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
           paint: {
             "circle-radius": 6,
             "circle-color": ACCENT,
-            "circle-stroke-color": "#0e0f0c",
+            "circle-stroke-color": THEME.casing,
             "circle-stroke-width": 2,
           },
         });
@@ -192,7 +193,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
           paint: {
             "circle-radius": 4,
             "circle-color": INK,
-            "circle-stroke-color": "#0e0f0c",
+            "circle-stroke-color": THEME.casing,
             "circle-stroke-width": 1.5,
           },
         });
@@ -211,7 +212,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
               paint: {
                 "circle-radius": 7,
                 "circle-color": ACCENT,
-                "circle-stroke-color": "#13140d",
+                "circle-stroke-color": THEME.casing,
                 "circle-stroke-width": 3,
               },
             });

@@ -29,6 +29,13 @@ export const THEME = {
   glassStrong: "rgba(14,18,21,.92)",
   casing: "#0B0E10",
   white: "#FFFFFF",
+
+  // Map-only paint values (no CSS counterpart; guarded by map-theme.test.ts).
+  lightRail: "#A9C3CF",
+  tram: "#7E9FB0",
+  narrowGauge: "#9DB0A8",
+  landmarkWikidata: "#C08FA3",
+  landmarkOsm: "#7FB3C4",
 } as const;
 
 /** Desaturated cool tones for alternative hiking routes and via points. */

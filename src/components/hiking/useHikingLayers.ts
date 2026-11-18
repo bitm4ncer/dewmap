@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { useHiking } from "@/lib/hiking/store";
+import { THEME, VIA_PALETTE } from "@/lib/theme";
 import type { RouteCandidate, Waypoint } from "@/lib/hiking/types";
 
 const WAYPOINT_SOURCE = "hiking-waypoints";
@@ -16,62 +17,16 @@ const ROUTE_LAYER_CASING = "hiking-routes-casing";
 const ROUTE_LAYER_ALT = "hiking-routes-alt";
 const ROUTE_LAYER_ALT_CASING = "hiking-routes-alt-casing";
 
-export const COLOR_START = "#7df09e";
-export const COLOR_END = "#ff6b82";
+export const COLOR_START = THEME.accent;
+export const COLOR_END = THEME.warn;
 
-/** Per-route pastel palette. Each candidate (Route 1, 2, 3…) gets its
- *  own bright-but-soft colour so the line on the map and the matching
- *  card in the side panel are visually paired. Order matters — keep it
- *  high-contrast hue-to-hue so adjacent routes never read as the same
- *  swatch. Cycles past length-1 are extremely rare in practice. */
-export const ROUTE_PALETTE: readonly string[] = [
-  "#9ee7c5", // mint
-  "#f5c2a0", // peach
-  "#c8b3e8", // lavender
-  "#a8d4f0", // sky
-  "#f5d985", // butter
-  "#f0a8c0", // rose
-];
+/** Six cool tones shared by alternative routes and via waypoints. */
+export function viaColor(index: number): string {
+  return VIA_PALETTE[index % VIA_PALETTE.length];
+}
 
 export function colorForCandidate(index: number): string {
-  return ROUTE_PALETTE[index % ROUTE_PALETTE.length];
-}
-
-function hashStr(s: string): number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-// Map [0..360) into the hue ranges that don't clash with start-green or
-// end-red: [30..80] (warm yellows/oranges) ∪ [185..330] (cyan→pink).
-function safeHue(rawHue: number): number {
-  const total = 50 + 145; // 195 deg of usable hue
-  const x = ((rawHue % 360) / 360) * total;
-  if (x < 50) return 30 + x;
-  return 185 + (x - 50);
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    return Math.round(255 * c)
-      .toString(16)
-      .padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-/** Stable pastel hex color for a via waypoint. Spaced by golden angle so
- *  consecutive vias never collide visually even if their ids hash close. */
-export function pastelForWaypoint(id: string, index: number): string {
-  const base = (hashStr(id) % 360) + index * 137.508;
-  return hslToHex(safeHue(base), 0.78, 0.76);
+  return viaColor(index);
 }
 
 const HIKING_Z_ORDER: string[] = [
@@ -130,7 +85,7 @@ function waypointFeatures(waypoints: Waypoint[]): GeoJSON.FeatureCollection {
           ? COLOR_START
           : role === "end"
             ? COLOR_END
-            : pastelForWaypoint(w.id, i);
+            : viaColor(i);
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [w.lon, w.lat] },
@@ -237,7 +192,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           paint: {
             "circle-radius": 10,
             "circle-color": ["get", "color"],
-            "circle-stroke-color": "#0e0f0c",
+            "circle-stroke-color": THEME.casing,
             "circle-stroke-width": 2,
             "circle-opacity": 0.95,
           },
@@ -256,7 +211,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
             "text-font": ["Noto Sans Bold"],
           },
           paint: {
-            "text-color": "#0e0f0c",
+            "text-color": THEME.bg,
           },
         });
       }
@@ -324,7 +279,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           filter: ["!", ["get", "selected"]],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#0e0f0c",
+            "line-color": THEME.casing,
             "line-width": 5,
             "line-opacity": 0.55,
           },
@@ -353,7 +308,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           filter: ["==", ["get", "selected"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": "#0e0f0c",
+            "line-color": THEME.casing,
             "line-width": 7,
             "line-opacity": 0.8,
           },

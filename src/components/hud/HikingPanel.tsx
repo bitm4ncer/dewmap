@@ -18,7 +18,7 @@ import {
   COLOR_END,
   COLOR_START,
   colorForCandidate,
-  pastelForWaypoint,
+  viaColor,
 } from "@/components/hiking/useHikingLayers";
 import { ElevationChart } from "@/components/hiking/ElevationChart";
 import { geocode, prettyCategory, type GeocodeResult } from "@/lib/geocode";
@@ -278,7 +278,6 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
               {waypoints.map((w, i) => (
                 <li key={w.id}>
                   <WaypointRow
-                    id={w.id}
                     index={i}
                     total={waypoints.length}
                     label={w.label}
@@ -352,7 +351,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
                     <span className="flex items-center gap-2 text-[12px] font-semibold">
                       <span
                         aria-hidden
-                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full"
                         style={{ backgroundColor: routeColor }}
                       />
                       {finalized ? "Selected" : `Route ${i + 1}`}
@@ -674,7 +673,6 @@ function ModeAndProfilePicker({
 }
 
 function WaypointRow({
-  id,
   index,
   total,
   label,
@@ -683,7 +681,6 @@ function WaypointRow({
   onDown,
   onDelete,
 }: {
-  id: string;
   index: number;
   total: number;
   label: string;
@@ -698,7 +695,7 @@ function WaypointRow({
       ? COLOR_START
       : role === "end"
         ? COLOR_END
-        : pastelForWaypoint(id, index);
+        : viaColor(index);
   return (
     <div className="flex items-center gap-1.5 rounded-full bg-[color:var(--surf-3)] px-2 py-1">
       <span

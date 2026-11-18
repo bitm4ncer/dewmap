@@ -72,8 +72,8 @@ body {
   --danger: #DE8A7E;
   --info:   #8FBCDE;
   /* Data-viz accents (landmark provenance) */
-  --landmark-wikidata: #ff5ea8;
-  --landmark-osm: #4fd1e8;
+  --landmark-wikidata: #C08FA3;
+  --landmark-osm: #7FB3C4;
 
   /* Geometry */
   --r-card:  14px;
@@ -1179,15 +1179,10 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .hud-card-flat {
   background: var(--surf-2) !important;
 }
-/* When active, prefer the card's own --route-color (set inline per
-   route option in HikingPanel) so each route reads in its signature
-   pastel. Falls back to the pane accent for non-route uses. */
+/* Selected route card: calm accent tint, identity stays in the dot. */
 .hud-card-flat[data-active="true"] {
-  background: var(--route-color, var(--accent)) !important;
-  color: var(--accent-ink) !important;
-}
-.hud-card-flat[data-active="true"] * {
-  color: var(--accent-ink) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
 }
 
 /* Scrollbar */
