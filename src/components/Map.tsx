@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/purity -- map chrome renders live countdowns and clock labels */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import maplibregl, { Map as MLMap, ScaleControl, type MapMouseEvent } from "maplibre-gl";
@@ -12,6 +11,7 @@ import {
   DEFAULT_VECTOR_BASEMAP_ID,
   basemapsInGroup,
   getActiveVariant,
+  basemapUsesTimeline,
   resolveBasemapSubtitle,
   resolveBasemapUrl,
   type Basemap,
@@ -34,19 +34,23 @@ import { prefersReducedMotion } from "@/lib/motion";
 import type { PoiSelection } from "@/lib/poi";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
-import { RAILWAY_TILE_URLS, RAILWAY_ATTRIBUTION, RAILWAY_MAX_ZOOM } from "@/lib/railway";
-import { fetchRailNetwork } from "@/lib/hiking/overpass";
 import {
-  railTileGet,
-  railTilePurgeExpired,
-  railTileSet,
-} from "@/lib/hiking/railTileStore";
+  RAILWAY_TILE_URLS,
+  RAILWAY_ATTRIBUTION,
+  RAILWAY_MAX_ZOOM,
+  RAIL_VECTOR_ATTRIBUTION,
+  RAIL_VECTOR_LINES_LAYER,
+  RAIL_VECTOR_MAX_ZOOM,
+  RAIL_VECTOR_STATIONS_LAYER,
+  RAIL_VECTOR_TILEJSON_URL,
+} from "@/lib/railway";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
+import { formatCoordinates } from "@/lib/map/coordinates";
 import type { RoutePoint } from "@/lib/routing/routeInput";
 import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
@@ -55,18 +59,26 @@ import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
 import {
+  CheckIcon,
   ChevronDownIcon,
+  CopyIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
   CloseIcon,
+  AirQualityIcon,
   CompassIcon,
   FlatIcon,
+  ForestLossIcon,
   GlobeIcon,
   HeadingIcon,
   HybridIcon,
   ImageIcon,
+  LandCoverIcon,
+  NaturaIcon,
+  NdviIcon,
   RouteIcon,
+  SpeciesIcon,
   VectorIcon,
 } from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
@@ -361,133 +373,127 @@ function removeRailwayLayer(map: MLMap) {
   if (map.getSource(RAILWAY_SOURCE_ID)) map.removeSource(RAILWAY_SOURCE_ID);
 }
 
-// Clean rail view — custom OSM lines fetched from Overpass, no text labels.
-const RAIL_LINES_SOURCE_ID = "rail-lines-src";
-const RAIL_LINES_CASING_LAYER_ID = "rail-lines-casing";
-const RAIL_LINES_MAIN_LAYER_ID = "rail-lines-main";
-const RAIL_LINES_MIN_ZOOM = 9;
+// ── Rail vector detail ───────────────────────────────────────────────
+// OpenFreeMap vector tiles carry the OSM rail network in `transportation`
+// (class=rail/transit) and stations in `poi` (class=railway). The tiles are
+// generalized per zoom, including low zoom, and MapLibre only fetches the
+// visible tiles. This replaces both the old Overpass batches and the coarse
+// ORM raster fallback.
+const RAIL_VECTOR_SOURCE_ID = "rail-vector-src";
+const RAIL_VECTOR_CASING_LAYER_ID = "rail-vector-casing";
+const RAIL_VECTOR_MAIN_LAYER_ID = "rail-vector-main";
+const RAIL_VECTOR_STATION_HIT_LAYER_ID = "rail-vector-station-hit";
+const RAIL_VECTOR_STATION_DOT_LAYER_ID = "rail-vector-station-dot";
+const RAIL_VECTOR_STATION_LABEL_LAYER_ID = "rail-vector-station-label";
+const RAIL_VECTOR_MIN_ZOOM = 4;
+const RAIL_VECTOR_STATION_MIN_ZOOM = 10;
 
-function ensureRailLinesLayer(map: MLMap, opacity: number) {
-  if (!map.getSource(RAIL_LINES_SOURCE_ID)) {
-    map.addSource(RAIL_LINES_SOURCE_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-      attribution: RAILWAY_ATTRIBUTION,
+function ensureRailVectorLayers(map: MLMap, opacity: number) {
+  if (!map.getSource(RAIL_VECTOR_SOURCE_ID)) {
+    map.addSource(RAIL_VECTOR_SOURCE_ID, {
+      type: "vector",
+      url: RAIL_VECTOR_TILEJSON_URL,
+      maxzoom: RAIL_VECTOR_MAX_ZOOM,
+      attribution: RAIL_VECTOR_ATTRIBUTION,
     });
   }
-  if (!map.getLayer(RAIL_LINES_CASING_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_CASING_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_LINES_CASING_LAYER_ID,
+      id: RAIL_VECTOR_CASING_LAYER_ID,
       type: "line",
-      source: RAIL_LINES_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_LINES_LAYER,
+      minzoom: RAIL_VECTOR_MIN_ZOOM,
+      filter: ["in", ["get", "class"], ["literal", ["rail", "transit"]]],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": THEME.casing,
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
-          9, 1.8,
-          12, 2.8,
-          16, 4,
+          4, 1.3,
+          8, 2.0,
+          12, 3.2,
+          16, 4.8,
         ],
         "line-opacity": opacity,
       },
     });
   }
-  if (!map.getLayer(RAIL_LINES_MAIN_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_LINES_MAIN_LAYER_ID,
+      id: RAIL_VECTOR_MAIN_LAYER_ID,
       type: "line",
-      source: RAIL_LINES_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_LINES_LAYER,
+      minzoom: RAIL_VECTOR_MIN_ZOOM,
+      filter: ["in", ["get", "class"], ["literal", ["rail", "transit"]]],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": [
           "match",
-          ["get", "kind"],
-          "rail", THEME.accent,
-          "light_rail", THEME.lightRail,
-          "subway", THEME.lightRail,
-          "tram", THEME.tram,
-          "narrow_gauge", THEME.narrowGauge,
-          THEME.accent,
+          ["get", "class"],
+          "transit",
+          [
+            "match",
+            ["get", "subclass"],
+            "tram", THEME.tram,
+            "narrow_gauge", THEME.narrowGauge,
+            "monorail", THEME.narrowGauge,
+            THEME.lightRail,
+          ],
+          THEME.info,
         ],
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
-          9, 0.6,
-          12, 1.2,
-          16, 2,
+          4, 0.55,
+          8, 0.95,
+          12, 1.65,
+          16, 2.8,
         ],
         "line-opacity": opacity,
         "line-dasharray": [
           "case",
-          ["==", ["get", "tunnel"], true], ["literal", [2, 2]],
+          ["==", ["get", "brunnel"], "tunnel"], ["literal", [2, 2]],
           ["literal", [1, 0]],
         ],
       },
     });
   }
-}
 
-function updateRailLinesOpacity(map: MLMap, opacity: number) {
-  if (map.getLayer(RAIL_LINES_MAIN_LAYER_ID)) {
-    map.setPaintProperty(RAIL_LINES_MAIN_LAYER_ID, "line-opacity", opacity);
-  }
-  if (map.getLayer(RAIL_LINES_CASING_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_LINES_CASING_LAYER_ID,
-      "line-opacity",
-      opacity,
-    );
-  }
-}
-
-function setRailLinesData(map: MLMap, data: GeoJSON.FeatureCollection) {
-  const src = map.getSource(RAIL_LINES_SOURCE_ID) as unknown as
-    | { setData?: (d: GeoJSON.FeatureCollection) => void }
-    | undefined;
-  if (src?.setData) src.setData(data);
-}
-
-function removeRailLinesLayer(map: MLMap) {
-  if (map.getLayer(RAIL_LINES_MAIN_LAYER_ID))
-    map.removeLayer(RAIL_LINES_MAIN_LAYER_ID);
-  if (map.getLayer(RAIL_LINES_CASING_LAYER_ID))
-    map.removeLayer(RAIL_LINES_CASING_LAYER_ID);
-  if (map.getSource(RAIL_LINES_SOURCE_ID))
-    map.removeSource(RAIL_LINES_SOURCE_ID);
-}
-
-// Stations rendered alongside the rail-lines overlay. Tap = add as waypoint.
-const RAIL_STATIONS_SOURCE_ID = "rail-stations-src";
-const RAIL_STATIONS_DOT_LAYER_ID = "rail-stations-dot";
-const RAIL_STATIONS_HIT_LAYER_ID = "rail-stations-hit";
-const RAIL_STATIONS_LABEL_LAYER_ID = "rail-stations-label";
-const RAIL_STATIONS_MIN_ZOOM = 10;
-
-function ensureRailStationsLayer(map: MLMap) {
-  if (!map.getSource(RAIL_STATIONS_SOURCE_ID)) {
-    map.addSource(RAIL_STATIONS_SOURCE_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-    });
-  }
-  if (!map.getLayer(RAIL_STATIONS_HIT_LAYER_ID)) {
-    // Invisible larger circle to make tap targets thumb-friendly on mobile
+  if (!map.getLayer(RAIL_VECTOR_STATION_HIT_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_STATIONS_HIT_LAYER_ID,
+      id: RAIL_VECTOR_STATION_HIT_LAYER_ID,
       type: "circle",
-      source: RAIL_STATIONS_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_STATIONS_LAYER,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      filter: [
+        "all",
+        ["==", ["get", "class"], "railway"],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+      ],
       paint: {
-        "circle-radius": 16,
+        "circle-radius": 18,
         "circle-color": "transparent",
         "circle-stroke-width": 0,
       },
     });
   }
-  if (!map.getLayer(RAIL_STATIONS_DOT_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_STATION_DOT_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_STATIONS_DOT_LAYER_ID,
+      id: RAIL_VECTOR_STATION_DOT_LAYER_ID,
       type: "circle",
-      source: RAIL_STATIONS_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_STATIONS_LAYER,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      filter: [
+        "all",
+        ["==", ["get", "class"], "railway"],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+      ],
       paint: {
         "circle-radius": [
           "interpolate", ["linear"], ["zoom"],
@@ -498,22 +504,29 @@ function ensureRailStationsLayer(map: MLMap) {
         "circle-color": THEME.accent,
         "circle-stroke-color": THEME.casing,
         "circle-stroke-width": 1.5,
-        "circle-opacity": 0.95,
+        "circle-opacity": opacity,
       },
     });
   }
-  if (!map.getLayer(RAIL_STATIONS_LABEL_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_STATION_LABEL_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_STATIONS_LABEL_LAYER_ID,
+      id: RAIL_VECTOR_STATION_LABEL_LAYER_ID,
       type: "symbol",
-      source: RAIL_STATIONS_SOURCE_ID,
-      minzoom: 10,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_STATIONS_LAYER,
+      minzoom: 11,
+      filter: [
+        "all",
+        ["==", ["get", "class"], "railway"],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+      ],
       layout: {
-        "text-field": ["get", "name"],
+        "text-field": ["coalesce", ["get", "name"], ""],
         "text-font": ["Noto Sans Regular"],
         "text-size": [
           "interpolate", ["linear"], ["zoom"],
-          10, 9,
+          11, 9,
           14, 11,
           17, 13,
         ],
@@ -522,162 +535,54 @@ function ensureRailStationsLayer(map: MLMap) {
         "text-optional": true,
         "text-allow-overlap": false,
         "text-padding": 4,
+        "symbol-sort-key": ["coalesce", ["get", "rank"], 0],
       },
       paint: {
         "text-color": THEME.ink,
         "text-halo-color": THEME.casing,
         "text-halo-width": 1.4,
+        "text-opacity": opacity,
       },
     });
   }
 }
 
-function setRailStationsData(map: MLMap, data: GeoJSON.FeatureCollection) {
-  const src = map.getSource(RAIL_STATIONS_SOURCE_ID) as unknown as
-    | { setData?: (d: GeoJSON.FeatureCollection) => void }
-    | undefined;
-  if (src?.setData) src.setData(data);
-}
-
-// ── Tile-based rail cache ───────────────────────────────────────────────
-// Keyed by slippy-map tile coords at a fixed zoom. Each cached tile is a
-// ~80 km × 50 km Overpass response, so any later pan within an
-// already-loaded tile renders instantly from cache. Tile zoom 9 keeps
-// the total request count low (most viewports = 1 tile) at the cost of
-// a bigger response per request, which Overpass handles fine.
-const RAIL_TILE_ZOOM = 9;
-const RAIL_MAX_PARALLEL = 2;
-const RAIL_RATE_LIMIT_BACKOFF_MS = 15_000;
-type RailTileData = {
-  lines: GeoJSON.Feature<GeoJSON.LineString>[];
-  stations: { id: string; name: string; lat: number; lon: number }[];
-};
-const railTileCache = new Map<string, RailTileData>();
-const railTileInFlight = new Set<string>();
-/**
- * Timestamp until which we suspend new Overpass queries because a
- * recent request was rate-limited (429) or had its TCP connection
- * closed mid-flight (ERR_CONNECTION_CLOSED). Without this guard the
- * map would re-issue the failing fetch on every moveend, hammering
- * Overpass and producing the 2-minute "loading" spirals the user saw.
- */
-let railRateLimitedUntil = 0;
-function isRateLimitError(err: unknown): boolean {
-  const msg = (err as Error)?.message ?? "";
-  return (
-    msg.includes("429") ||
-    msg.includes("CONNECTION_CLOSED") ||
-    msg.includes("Failed to fetch") ||
-    msg.includes("NetworkError")
-  );
-}
-
-/**
- * Lightweight pub/sub so React can render a loading badge without
- * polling. Fires whenever a tile fetch starts/finishes or the cooldown
- * flips on/off.
- */
-const railNetworkSubscribers = new Set<() => void>();
-function notifyRailNetworkStatus() {
-  railNetworkSubscribers.forEach((cb) => cb());
-}
-export interface RailNetworkStatus {
-  inFlight: number;
-  cooldownUntil: number;
-}
-function getRailNetworkStatus(): RailNetworkStatus {
-  return {
-    inFlight: railTileInFlight.size,
-    cooldownUntil: railRateLimitedUntil,
-  };
-}
-function subscribeRailNetwork(cb: () => void): () => void {
-  railNetworkSubscribers.add(cb);
-  return () => {
-    railNetworkSubscribers.delete(cb);
-  };
-}
-
-function useRailNetworkStatus(): RailNetworkStatus {
-  const [status, setStatus] = useState<RailNetworkStatus>(() =>
-    getRailNetworkStatus(),
-  );
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      setStatus(getRailNetworkStatus());
-      // While we're in a cooldown window, repaint roughly every second so
-      // the countdown text in the panel ticks down.
-      if (railRateLimitedUntil > Date.now()) {
-        raf = window.setTimeout(update, 500) as unknown as number;
-      }
-    };
-    const unsub = subscribeRailNetwork(update);
-    update();
-    return () => {
-      unsub();
-      if (raf) clearTimeout(raf);
-    };
-  }, []);
-  return status;
-}
-
-function lon2tileX(lon: number, z: number): number {
-  return Math.floor(((lon + 180) / 360) * (1 << z));
-}
-function lat2tileY(lat: number, z: number): number {
-  const rad = (lat * Math.PI) / 180;
-  return Math.floor(
-    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) *
-      (1 << z),
-  );
-}
-function tileX2lon(x: number, z: number): number {
-  return (x / (1 << z)) * 360 - 180;
-}
-function tileY2lat(y: number, z: number): number {
-  const n = Math.PI - (2 * Math.PI * y) / (1 << z);
-  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-}
-function railTileBbox(
-  z: number,
-  x: number,
-  y: number,
-): [number, number, number, number] {
-  // Overpass order: [south, west, north, east]
-  return [
-    tileY2lat(y + 1, z),
-    tileX2lon(x, z),
-    tileY2lat(y, z),
-    tileX2lon(x + 1, z),
-  ];
-}
-function tilesForBounds(
-  bounds: maplibregl.LngLatBounds,
-  z: number,
-): { x: number; y: number }[] {
-  const xMin = lon2tileX(bounds.getWest(), z);
-  const xMax = lon2tileX(bounds.getEast(), z);
-  const yMin = lat2tileY(bounds.getNorth(), z);
-  const yMax = lat2tileY(bounds.getSouth(), z);
-  const out: { x: number; y: number }[] = [];
-  for (let x = xMin; x <= xMax; x += 1) {
-    for (let y = yMin; y <= yMax; y += 1) {
-      out.push({ x, y });
-    }
+function updateRailVectorOpacity(map: MLMap, opacity: number) {
+  if (map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
+    map.setPaintProperty(RAIL_VECTOR_MAIN_LAYER_ID, "line-opacity", opacity);
   }
-  return out;
+  if (map.getLayer(RAIL_VECTOR_CASING_LAYER_ID)) {
+    map.setPaintProperty(RAIL_VECTOR_CASING_LAYER_ID, "line-opacity", opacity);
+  }
+  if (map.getLayer(RAIL_VECTOR_STATION_DOT_LAYER_ID)) {
+    map.setPaintProperty(
+      RAIL_VECTOR_STATION_DOT_LAYER_ID,
+      "circle-opacity",
+      opacity,
+    );
+  }
+  if (map.getLayer(RAIL_VECTOR_STATION_LABEL_LAYER_ID)) {
+    map.setPaintProperty(
+      RAIL_VECTOR_STATION_LABEL_LAYER_ID,
+      "text-opacity",
+      opacity,
+    );
+  }
 }
 
-function removeRailStationsLayer(map: MLMap) {
-  if (map.getLayer(RAIL_STATIONS_LABEL_LAYER_ID))
-    map.removeLayer(RAIL_STATIONS_LABEL_LAYER_ID);
-  if (map.getLayer(RAIL_STATIONS_DOT_LAYER_ID))
-    map.removeLayer(RAIL_STATIONS_DOT_LAYER_ID);
-  if (map.getLayer(RAIL_STATIONS_HIT_LAYER_ID))
-    map.removeLayer(RAIL_STATIONS_HIT_LAYER_ID);
-  if (map.getSource(RAIL_STATIONS_SOURCE_ID))
-    map.removeSource(RAIL_STATIONS_SOURCE_ID);
+function removeRailVectorLayers(map: MLMap) {
+  for (const id of [
+    RAIL_VECTOR_STATION_LABEL_LAYER_ID,
+    RAIL_VECTOR_STATION_DOT_LAYER_ID,
+    RAIL_VECTOR_STATION_HIT_LAYER_ID,
+    RAIL_VECTOR_MAIN_LAYER_ID,
+    RAIL_VECTOR_CASING_LAYER_ID,
+  ]) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(RAIL_VECTOR_SOURCE_ID)) {
+    map.removeSource(RAIL_VECTOR_SOURCE_ID);
+  }
 }
 
 // ── History · OpenHistoricalMap basemap swap ──────────────────────────
@@ -1609,6 +1514,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const liveMarkerRef = useRef<maplibregl.Marker | null>(null);
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const poiMarkerRef = useRef<maplibregl.Marker | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
   const coneRef = useRef<HTMLDivElement | null>(null);
   const arrowRef = useRef<HTMLDivElement | null>(null);
@@ -1988,15 +1894,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     routesMode === "car" ? "car" : routesMode === "transit" ? "transit" : null,
   );
   useLiveVehiclesLayer(mapInstance);
-  const railNetworkStatus = useRailNetworkStatus();
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
-
-  // One-shot purge of expired rail tiles on mount. Best-effort, no
-  // blocking on the result.
-  useEffect(() => {
-    railTilePurgeExpired().catch(() => {});
-  }, []);
 
   // Long-press anywhere on the map → drop a waypoint at that location.
   useLongPress(mapInstance, true, useCallback((lng: number, lat: number) => {
@@ -2047,99 +1946,83 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (isMobile && previous) snapTo(previous);
   }, [isMobile, snapTo]);
 
+  const centerPoi = useCallback((lon: number, lat: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({
+      center: [lon, lat],
+      zoom: Math.max(map.getZoom(), 16),
+      duration: prefersReducedMotion() ? 0 : 600,
+    });
+  }, []);
+
   const handleTransitSearchComplete = useCallback(() => {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
 
-  /** Replace the fallback start with the real GPS fix when available. */
-  const refreshPinStart = useCallback(() => {
-    if (livePos || typeof navigator === "undefined" || !navigator.geolocation) {
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        setPendingPin((prev) =>
-          prev
-            ? {
-                ...prev,
-                start: {
-                  name: "My location",
-                  lat: pos.coords.latitude,
-                  lon: pos.coords.longitude,
-                },
-              }
-            : prev,
-        ),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
-    );
-  }, [livePos]);
-
-  const startPointFor = useCallback(
-    (lon: number, lat: number): RoutePoint => {
-      if (livePos) {
-        return { name: "My location", lat: livePos[1], lon: livePos[0] };
-      }
+  /** A POI detail becomes the destination in the expanded route planner. */
+  const planPoiRoute = useCallback(
+    (poi: PoiSelection) => {
+      setPoiSelection(null);
       const center = mapRef.current?.getCenter();
-      return center
-        ? { name: "Map center", lat: center.lat, lon: center.lng }
-        : { name: "Map center", lat, lon };
+      const start: RoutePoint = livePos
+        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+        : center
+          ? { name: "Map center", lat: center.lat, lon: center.lng }
+          : { name: "Map center", lat: poi.lat, lon: poi.lon };
+      setPendingPin({
+        dest: {
+          name: poi.name || "Place",
+          lat: poi.lat,
+          lon: poi.lon,
+          city: poi.city,
+          kind: "address",
+        },
+        start,
+      });
+      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) =>
+            setPendingPin((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    start: {
+                      name: "My location",
+                      lat: pos.coords.latitude,
+                      lon: pos.coords.longitude,
+                    },
+                  }
+                : prev,
+            ),
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
+        );
+      }
+      if (activePane !== "hiking") setActivePane("hiking");
+      snapTo(isMobile ? "modes" : "half");
     },
-    [livePos],
+    [activePane, isMobile, livePos, snapTo],
   );
 
-  /** A search result opens a compact place card immediately. */
+  /** A search result opens its place card, with Plan Route as the action. */
   const handleSearchSelect = useCallback(
     (result: GeocodeResult) => {
       setFlyTarget(result);
-      openPoi({
-        ...(result.osmType && result.osmId
-          ? { osmType: result.osmType, osmId: result.osmId }
-          : {}),
+      setPendingPin(null);
+      setPoiSelection({
+        osmType: result.osmType,
+        osmId: result.osmId,
         lon: result.coordinates[0],
         lat: result.coordinates[1],
         name: result.name || result.label,
-        label: result.label,
-        ...(result.city ? { city: result.city } : {}),
-        ...(result.category ? { category: result.category } : {}),
+        category: result.category,
+        city: result.city,
       });
-      setPendingPin({
-        dest: {
-          name: result.name || result.label,
-          lat: result.coordinates[1],
-          lon: result.coordinates[0],
-          city: result.city,
-          kind: "address",
-        },
-        start: startPointFor(result.coordinates[0], result.coordinates[1]),
-      });
-      refreshPinStart();
+      if (isMobile) snapTo("peek");
     },
-    [openPoi, refreshPinStart, startPointFor],
+    [isMobile, snapTo],
   );
-
-  const handlePoiDirections = useCallback(
-    (selection: PoiSelection) => {
-      setPendingPin({
-        dest: {
-          name: selection.name ?? "Destination",
-          lat: selection.lat,
-          lon: selection.lon,
-          city: selection.city,
-          kind: "address",
-        },
-        start: startPointFor(selection.lon, selection.lat),
-      });
-      refreshPinStart();
-      setActivePane("hiking");
-      sheetBeforePoiRef.current = null;
-      setPoiSelection(null);
-      snapTo(isMobile ? "modes" : "half");
-    },
-    [isMobile, refreshPinStart, snapTo, startPointFor],
-  );
-
-
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -2207,6 +2090,19 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
     map.addControl(geolocate, "bottom-left");
     geolocateRef.current = geolocate;
+
+    // MapLibre opens the compact attribution on first paint. Keep the
+    // phone map clean: start collapsed, and let the info button expand it.
+    const collapseAttribution = () => {
+      if (typeof window === "undefined") return;
+      if (!window.matchMedia("(max-width: 767px)").matches) return;
+      map
+        .getContainer()
+        .querySelector(".maplibregl-ctrl-attrib")
+        ?.classList.remove("maplibregl-compact-show");
+    };
+    collapseAttribution();
+    map.once("load", collapseAttribution);
 
     // iOS DeviceOrientationEvent.requestPermission() must be invoked while
     // transient user-activation is still fresh. MapLibre's GeolocateControl
@@ -2490,9 +2386,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
     };
     if (map.isStyleLoaded()) apply();
-    else map.once("style.load", apply);
+    // Always listen for the next style: switching back from another
+    // vector basemap replaces the style and drops all paint overrides.
+    map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
   }, [active, mapInstance]);
 
@@ -2653,6 +2552,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
   }, [projection]);
 
@@ -2773,8 +2673,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const apply = () => ensureRailwayLayer(map, railwayOpacity);
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [railwayOn, railStyle, active]);
@@ -2785,165 +2689,38 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     updateRailwayOpacity(map, railwayOpacity);
   }, [railwayOn, railStyle, railwayOpacity]);
 
-  // Combined Overpass effect: fetches rail lines + stations in ONE query and
-  // updates both layers. Halves the request rate and avoids the previous
-  // race where two parallel fetches both hit Overpass and tripped 429s.
+  // Vector rail detail. CARTO/Protomaps tiles stream only the visible,
+  // zoom-generalized features. There is no Overpass request, no multi-MB
+  // z9 batch and no rate-limit cooldown.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const linesActive = railwayOn && railStyle === "lines";
     if (!linesActive) {
-      removeRailLinesLayer(map);
-      removeRailStationsLayer(map);
+      removeRailVectorLayers(map);
       return;
     }
 
-    let cancelled = false;
-    let renderRaf = 0;
-    const inflightControllers = new Set<AbortController>();
-
-    const renderFromCache = () => {
-      if (cancelled) return;
-      if (renderRaf) cancelAnimationFrame(renderRaf);
-      renderRaf = requestAnimationFrame(() => {
-        if (cancelled) return;
-        const z = map.getZoom();
-        if (z < RAIL_LINES_MIN_ZOOM) {
-          setRailLinesData(map, { type: "FeatureCollection", features: [] });
-          setRailStationsData(map, { type: "FeatureCollection", features: [] });
-          return;
-        }
-        const tiles = tilesForBounds(map.getBounds(), RAIL_TILE_ZOOM);
-        const lineFeatures: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-        const lineSeen = new Set<string | number>();
-        const stationFeatures: GeoJSON.Feature[] = [];
-        const stationSeen = new Set<string>();
-        for (const t of tiles) {
-          const data = railTileCache.get(`${t.x}/${t.y}`);
-          if (!data) continue;
-          for (const f of data.lines) {
-            const id = f.properties?.id as string | number | undefined;
-            if (id != null) {
-              if (lineSeen.has(id)) continue;
-              lineSeen.add(id);
-            }
-            lineFeatures.push(f);
-          }
-          for (const s of data.stations) {
-            if (stationSeen.has(s.id)) continue;
-            stationSeen.add(s.id);
-            stationFeatures.push({
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [s.lon, s.lat] },
-              properties: { id: s.id, name: s.name },
-            });
-          }
-        }
-        setRailLinesData(map, {
-          type: "FeatureCollection",
-          features: lineFeatures,
-        });
-        setRailStationsData(map, {
-          type: "FeatureCollection",
-          features: z >= RAIL_STATIONS_MIN_ZOOM ? stationFeatures : [],
-        });
-      });
-    };
-
-    const fetchMissingTiles = () => {
-      if (cancelled) return;
-      if (map.getZoom() < RAIL_LINES_MIN_ZOOM) return;
-      // Honour the rate-limit cooldown — Overpass needs breathing room
-      // after a 429 or a closed connection.
-      const now = Date.now();
-      if (now < railRateLimitedUntil) {
-        const wait = railRateLimitedUntil - now + 50;
-        window.setTimeout(() => {
-          if (!cancelled) fetchMissingTiles();
-        }, wait);
-        return;
-      }
-      const tiles = tilesForBounds(map.getBounds(), RAIL_TILE_ZOOM);
-      const toFetch = tiles.filter((t) => {
-        const key = `${RAIL_TILE_ZOOM}/${t.x}/${t.y}`;
-        return !railTileCache.has(key) && !railTileInFlight.has(key);
-      });
-      const slots = Math.max(0, RAIL_MAX_PARALLEL - railTileInFlight.size);
-      for (const t of toFetch.slice(0, slots)) {
-        const key = `${RAIL_TILE_ZOOM}/${t.x}/${t.y}`;
-        railTileInFlight.add(key);
-        notifyRailNetworkStatus();
-        const ctrl = new AbortController();
-        inflightControllers.add(ctrl);
-        const bbox = railTileBbox(RAIL_TILE_ZOOM, t.x, t.y);
-
-        // Two-tier cache: try IndexedDB first (instant after the user has
-        // visited an area before, even across page reloads). On miss,
-        // fall through to Overpass and persist the result for next time.
-        const handleTile = async () => {
-          let success = false;
-          try {
-            const stored = await railTileGet(key);
-            if (cancelled || ctrl.signal.aborted) return;
-            if (stored) {
-              railTileCache.set(key, {
-                lines: stored.lines,
-                stations: stored.stations,
-              });
-              success = true;
-            } else {
-              const { lines, stations } = await fetchRailNetwork(
-                bbox,
-                ctrl.signal,
-              );
-              if (cancelled || ctrl.signal.aborted) return;
-              railTileCache.set(key, { lines: lines.features, stations });
-              success = true;
-              // Fire-and-forget IDB write; never blocks rendering.
-              railTileSet(key, { lines: lines.features, stations }).catch(
-                () => {},
-              );
-            }
-          } catch (err) {
-            if ((err as Error).name === "AbortError") {
-              // silent
-            } else if (isRateLimitError(err)) {
-              railRateLimitedUntil =
-                Date.now() + RAIL_RATE_LIMIT_BACKOFF_MS;
-            } else {
-              console.warn("[rail-network]", err);
-            }
-          } finally {
-            inflightControllers.delete(ctrl);
-            railTileInFlight.delete(key);
-            notifyRailNetworkStatus();
-            if (success) {
-              renderFromCache();
-              fetchMissingTiles();
-            }
-          }
-        };
-        handleTile();
-      }
-    };
-
-    const onMoveEnd = () => {
-      // Render immediately from whatever's cached; missing tiles fetch
-      // asynchronously in the background and re-render on completion.
-      renderFromCache();
-      fetchMissingTiles();
-    };
-
     const apply = () => {
-      ensureRailLinesLayer(map, railwayOpacity);
-      ensureRailStationsLayer(map);
-      renderFromCache();
-      fetchMissingTiles();
+      try {
+        ensureRailVectorLayers(map, railwayOpacity);
+      } catch {
+        // A style swap can remove the source between the check and add.
+      }
     };
+    // `isStyleLoaded()` can stay false while tiles are still streaming even
+    // though the style and its layers already exist. Apply immediately, then
+    // retry on style reloads and when the map becomes idle.
+    apply();
+    map.on("style.load", apply);
+    map.once("idle", apply);
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const feats = map.queryRenderedFeatures(e.point, {
-        layers: [RAIL_STATIONS_HIT_LAYER_ID, RAIL_STATIONS_DOT_LAYER_ID],
+        layers: [
+          RAIL_VECTOR_STATION_HIT_LAYER_ID,
+          RAIL_VECTOR_STATION_DOT_LAYER_ID,
+        ],
       });
       if (feats.length === 0) return;
       const f = feats[0];
@@ -2965,31 +2742,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.getCanvas().style.cursor = "";
     };
 
-    if (map.isStyleLoaded()) apply();
-    map.on("style.load", apply);
-    map.on("moveend", onMoveEnd);
-    map.on("click", RAIL_STATIONS_HIT_LAYER_ID, onClick);
-    map.on("mouseenter", RAIL_STATIONS_HIT_LAYER_ID, onEnter);
-    map.on("mouseleave", RAIL_STATIONS_HIT_LAYER_ID, onLeave);
+    map.on("click", RAIL_VECTOR_STATION_HIT_LAYER_ID, onClick);
+    map.on("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
+    map.on("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
 
     return () => {
-      cancelled = true;
-      inflightControllers.forEach((c) => c.abort());
-      inflightControllers.clear();
-      if (renderRaf) cancelAnimationFrame(renderRaf);
       map.off("style.load", apply);
-      map.off("moveend", onMoveEnd);
-      map.off("click", RAIL_STATIONS_HIT_LAYER_ID, onClick);
-      map.off("mouseenter", RAIL_STATIONS_HIT_LAYER_ID, onEnter);
-      map.off("mouseleave", RAIL_STATIONS_HIT_LAYER_ID, onLeave);
+      map.off("idle", apply);
+      map.off("click", RAIL_VECTOR_STATION_HIT_LAYER_ID, onClick);
+      map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
+      map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [railwayOn, railStyle, active]);
+  }, [railwayOn, railStyle, active, railwayOpacity]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !railwayOn || railStyle !== "lines") return;
-    updateRailLinesOpacity(map, railwayOpacity);
+    updateRailVectorOpacity(map, railwayOpacity);
   }, [railwayOn, railStyle, railwayOpacity]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────
@@ -3019,11 +2788,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speciesOn, active, speciesTaxonKey]);
+  }, [speciesOn, active, speciesTaxonKey, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3068,11 +2841,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forestLossOn, active, forestLossResolved]);
+  }, [forestLossOn, active, forestLossResolved, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3298,6 +3075,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     map.on("moveend", onMoveEnd);
     map.on("click", HISTORY_LANDMARKS_HIT_LAYER_ID, onClick);
     map.on("mouseenter", HISTORY_LANDMARKS_HIT_LAYER_ID, onEnter);
@@ -3394,11 +3174,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [no2On, active, no2Resolved]);
+  }, [no2On, active, no2Resolved, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3445,11 +3229,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naturaSitesOn, active, naturaResolved]);
+  }, [naturaSitesOn, active, naturaResolved, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3482,11 +3270,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landCoverOn, active]);
+  }, [landCoverOn, active, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3513,11 +3305,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ensureGibsOverlay(map, NDVI_SOURCE_ID, NDVI_LAYER_ID, url, ndviOpacity, NDVI_ATTRIBUTION);
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ndviOn, active]);
+  }, [ndviOn, active, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3737,7 +3533,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (!map) return;
     const historyLayers = globalLayerIds();
     const interactiveLayers = new Set([
-      RAIL_STATIONS_HIT_LAYER_ID,
+      RAIL_VECTOR_STATION_HIT_LAYER_ID,
       HISTORY_LANDMARKS_HIT_LAYER_ID,
       historyLayers.siteLayer,
       ...historyLayers.clusterDots,
@@ -3759,10 +3555,86 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [mapInstance, openPoi]);
 
+  // Mark the selected place with a warm red crosshair until the card closes.
+  useEffect(() => {
+    const map = mapInstance;
+    poiMarkerRef.current?.remove();
+    poiMarkerRef.current = null;
+    if (!map || !poiSelection) return;
+    const el = document.createElement("div");
+    el.className = "poi-crosshair";
+    el.setAttribute("aria-hidden", "true");
+    el.innerHTML = `
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="19" cy="19" r="8" stroke="currentColor" stroke-width="2.4" />
+        <circle cx="19" cy="19" r="2.4" fill="currentColor" />
+        <path d="M19 1.5v8M19 28.5v8M1.5 19h8M28.5 19h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+      </svg>
+    `;
+    const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+      .setLngLat([poiSelection.lon, poiSelection.lat])
+      .addTo(map);
+    poiMarkerRef.current = marker;
+    return () => {
+      marker.remove();
+      if (poiMarkerRef.current === marker) poiMarkerRef.current = null;
+    };
+  }, [mapInstance, poiSelection]);
+
+  const activeOverlays: {
+    key: string;
+    label: string;
+    icon: ReactNode;
+    onDismiss: () => void;
+  }[] = [
+    landCoverOn && {
+      key: "land-cover",
+      label: "Land Cover",
+      icon: <LandCoverIcon size={16} />,
+      onDismiss: () => setLandCoverOn(false),
+    },
+    ndviOn && {
+      key: "ndvi",
+      label: "NDVI",
+      icon: <NdviIcon size={16} />,
+      onDismiss: () => setNdviOn(false),
+    },
+    speciesOn && {
+      key: "species",
+      label: "Species",
+      icon: <SpeciesIcon size={16} />,
+      onDismiss: () => setSpeciesOn(false),
+    },
+    forestLossOn && {
+      key: "forest-loss",
+      label: "Forest Loss",
+      icon: <ForestLossIcon size={16} />,
+      onDismiss: () => setForestLossOn(false),
+    },
+    no2On && {
+      key: "air-quality",
+      label: "Air Quality",
+      icon: <AirQualityIcon size={16} />,
+      onDismiss: () => setNo2On(false),
+    },
+    naturaSitesOn && {
+      key: "protected-areas",
+      label: "Protected Areas",
+      icon: <NaturaIcon size={16} />,
+      onDismiss: () => setNaturaSitesOn(false),
+    },
+  ].filter(Boolean) as {
+    key: string;
+    label: string;
+    icon: ReactNode;
+    onDismiss: () => void;
+  }[];
+
   return (
     <div
       className="relative h-full w-full"
       data-navigating={navActive}
+      data-panel-open={sidebarOpen ? "true" : undefined}
     >
       <div ref={containerRef} className="h-full w-full" />
       <button
@@ -3782,6 +3654,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         <ChevronRightIcon size={18} />
       </button>
 
+      {activeOverlays.length > 0 && (
+        <div className="map-overlay-badges" role="group" aria-label="Active map overlays">
+          {activeOverlays.map((overlay) => (
+            <button
+              key={overlay.key}
+              type="button"
+              className="map-overlay-badge"
+              onClick={overlay.onDismiss}
+              aria-label={`Turn off ${overlay.label}`}
+              title={`Turn off ${overlay.label}`}
+            >
+              {overlay.icon}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Floating top bar — search, and (desktop only) the basemap-mode
           switch. On phones the Map tab owns basemap chrome, so the search
           keeps the full width. */}
@@ -3795,48 +3684,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           <BasemapSwitch mode={basemapMode} onModeChange={setBasemapMode} />
         </div>
       </div>
-
-      {/* Rail-network loading pill — sits below the floating top bar. */}
-      {railwayOn
-        && railStyle === "lines"
-        && (railNetworkStatus.inFlight > 0
-          || railNetworkStatus.cooldownUntil > Date.now()) && (
-        <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div
-            className="hud-panel hud-mono flex items-center gap-2 px-4 py-2 text-[11.5px] text-[color:var(--ink)]"
-            role={
-              railNetworkStatus.cooldownUntil > Date.now()
-                ? undefined
-                : "status"
-            }
-            aria-live={
-              railNetworkStatus.cooldownUntil > Date.now() ? "off" : "polite"
-            }
-          >
-            {railNetworkStatus.cooldownUntil > Date.now() ? (
-              <span
-                aria-hidden
-                className="hud-loading-dot"
-                data-state="throttled"
-              />
-            ) : (
-              <Spinner size={13} />
-            )}
-            <span>
-              {railNetworkStatus.cooldownUntil > Date.now()
-                ? `Overpass throttled · ${Math.max(
-                    0,
-                    Math.ceil(
-                      (railNetworkStatus.cooldownUntil - Date.now()) / 1000,
-                    ),
-                  )}s`
-                : `Loading rails · ${railNetworkStatus.inFlight} tile${
-                    railNetworkStatus.inFlight === 1 ? "" : "s"
-                  }`}
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Desktop: one calm reopen affordance when the panel is closed. */}
       {!sidebarOpen && (
@@ -3933,29 +3780,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           inert={!sidebarOpen}
           aria-hidden={!sidebarOpen}
         >
-          {/* Desktop pane switcher lives inside the panel. */}
-          <div className="hidden px-4 md:block">
-            <nav className="hud-panel-tabs" aria-label="Panel switcher">
-              {SIDEBAR_PANES.map((p) => (
-                <PaneToggle
-                  key={p.key}
-                  active={activePane === p.key && sidebarOpen}
-                  label={p.label}
-                  onToggle={() => selectPane(p.key)}
-                  variant="panel"
-                    >
-                  {p.icon}
-                </PaneToggle>
-              ))}
-            </nav>
-          </div>
-
           <div className="ui-panel-header hidden md:flex">
             <h2 className="ui-panel-title">
               {activePane === "hiking"
                 ? "Routes"
                 : activePane === "biosphere"
-                  ? "Biosphere"
+                  ? "Nature"
                   : activePane === "history"
                     ? "History"
                     : "Map"}
@@ -3986,6 +3816,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 </svg>
               </button>
             </div>
+          </div>
+
+          {/* Desktop pane switcher lives inside the panel. */}
+          <div className="hidden px-4 md:block">
+            <nav className="hud-panel-tabs" aria-label="Panel switcher">
+              {SIDEBAR_PANES.map((p) => (
+                <PaneToggle
+                  key={p.key}
+                  active={activePane === p.key && sidebarOpen}
+                  label={p.label}
+                  onToggle={() => selectPane(p.key)}
+                  variant="panel"
+                    >
+                  {p.icon}
+                </PaneToggle>
+              ))}
+            </nav>
           </div>
 
           <div className="hud-scrollbar ui-panel-body">
@@ -4097,47 +3944,49 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   }
                 />
 
-                <TimelinePanel
-                  s2ActiveVariant={
-                    basemapVariants["s2cloudless"] ?? "2024"
-                  }
-                  isS2Active={
-                    imageBasemapId === "s2cloudless"
-                    && basemapMode !== "vector"
-                  }
-                  onSelectYear={(variantId) => {
-                    setImageBasemapId("s2cloudless");
-                    if (basemapMode === "vector") setBasemapMode("photo");
-                    setBasemapVariant("s2cloudless", variantId);
-                  }}
-                  liveDayOffset={liveBasemapDayOffset}
-                  onLiveDayOffsetChange={(offset) => {
-                    setImageBasemapId("gibs-today");
-                    if (basemapMode === "vector") setBasemapMode("photo");
-                    setLiveBasemapDayOffset(offset);
-                  }}
-                  isLiveActive={
-                    imageBasemapId === "gibs-today"
-                    && basemapMode !== "vector"
-                  }
-                  onActivateLive={() => {
-                    setImageBasemapId("gibs-today");
-                    if (basemapMode === "vector") setBasemapMode("photo");
-                  }}
-                  credentials={credentials !== null}
-                  onOpenSettings={onOpenSettings}
-                  zoomOk={(mapInstance?.getZoom() ?? INITIAL_VIEW.zoom) >= MIN_FETCH_ZOOM}
-                  minZoom={MIN_FETCH_ZOOM}
-                  state={timelineState}
-                  sector={sector}
-                  snapshots={snapshots}
-                  snapshotIndex={snapshotIndex}
-                  onStart={handleStartTimeline}
-                  onSelect={handleSelectSnapshot}
-                  onClear={handleClearTimeline}
-                  opacity={overlayOpacity}
-                  onOpacityChange={setOverlayOpacity}
-                />
+                {basemapUsesTimeline(imageBasemapId, basemapMode) && (
+                  <TimelinePanel
+                    s2ActiveVariant={
+                      basemapVariants["s2cloudless"] ?? "2024"
+                    }
+                    isS2Active={
+                      imageBasemapId === "s2cloudless"
+                      && basemapMode !== "vector"
+                    }
+                    onSelectYear={(variantId) => {
+                      setImageBasemapId("s2cloudless");
+                      if (basemapMode === "vector") setBasemapMode("photo");
+                      setBasemapVariant("s2cloudless", variantId);
+                    }}
+                    liveDayOffset={liveBasemapDayOffset}
+                    onLiveDayOffsetChange={(offset) => {
+                      setImageBasemapId("gibs-today");
+                      if (basemapMode === "vector") setBasemapMode("photo");
+                      setLiveBasemapDayOffset(offset);
+                    }}
+                    isLiveActive={
+                      imageBasemapId === "gibs-today"
+                      && basemapMode !== "vector"
+                    }
+                    onActivateLive={() => {
+                      setImageBasemapId("gibs-today");
+                      if (basemapMode === "vector") setBasemapMode("photo");
+                    }}
+                    credentials={credentials !== null}
+                    onOpenSettings={onOpenSettings}
+                    zoomOk={(mapInstance?.getZoom() ?? INITIAL_VIEW.zoom) >= MIN_FETCH_ZOOM}
+                    minZoom={MIN_FETCH_ZOOM}
+                    state={timelineState}
+                    sector={sector}
+                    snapshots={snapshots}
+                    snapshotIndex={snapshotIndex}
+                    onStart={handleStartTimeline}
+                    onSelect={handleSelectSnapshot}
+                    onClear={handleClearTimeline}
+                    opacity={overlayOpacity}
+                    onOpacityChange={setOverlayOpacity}
+                  />
+                )}
                 <RailsPanel
                   on={railOn}
                   onChange={setRailOn}
@@ -4145,7 +3994,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onOpacityChange={setRailwayOpacity}
                   railStyle={railStyle}
                   onRailStyleChange={setRailStyle}
-                  railNetworkStatus={railNetworkStatus}
                 />
 
 
@@ -4159,7 +4007,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       <PoiDetail
         selection={poiSelection}
         onClose={closePoi}
-        onDirections={handlePoiDirections}
+        onCenter={centerPoi}
+        onPlanRoute={planPoiRoute}
       />
 
       <NavigationOverlay
@@ -4345,6 +4194,8 @@ function BasemapPanel({
       ? selectedId
       : "";
     const showActive = isActive && effectiveId !== "";
+    const selectedBasemap =
+      items.find((b) => b.id === effectiveId) ?? null;
     return (
       <div className="flex flex-col gap-1">
         <div className="hud-section-heading">
@@ -4365,7 +4216,7 @@ function BasemapPanel({
           )}
           <span className="line" aria-hidden />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="hud-basemap-grid">
           {items.map((b) => {
             const selected = effectiveId === b.id;
             const variant = getActiveVariant(b, variants[b.id]);
@@ -4374,46 +4225,46 @@ function BasemapPanel({
               variants[b.id],
               b.id === "gibs-today" ? liveBasemapDayOffset : undefined,
             );
-            const meta = [subtitle, b.coverage].filter(Boolean).join(" · ");
             return (
-              <div key={b.id} className="flex flex-col">
-                <button
-                  type="button"
-                  onClick={() => onSelect(b.id)}
-                  data-active={selected}
-                  data-live={selected && isActive}
-                  className="hud-basemap-btn flex flex-col items-stretch"
-                  aria-pressed={selected}
-                  title={[b.provider, b.license].filter(Boolean).join(" · ")}
-                >
-                  <span className="leading-tight">
-                    {variant ? `${b.label} · ${variant.label}` : b.label}
-                  </span>
-                  {meta && (
-                    <span className="hud-basemap-btn-subtitle">{meta}</span>
-                  )}
-                </button>
-                {selected && b.variants && (
-                  <BasemapVariantControl
-                    basemap={b}
-                    value={variants[b.id]}
-                    onChange={(variantId) => onSelectVariant(b.id, variantId)}
-                  />
-                )}
-                {selected && (b.provider || b.license) && (
-                  <span className="px-1 pb-1 text-[10.5px] text-[color:var(--ink-mute)]">
-                    {[b.provider, b.license].filter(Boolean).join(" · ")}
-                  </span>
-                )}
-                {selected && outsideCoverage(b) && (
-                  <span className="px-1 pb-1 text-[10.5px] text-[color:var(--warn)]">
-                    Outside coverage ({b.coverage})
-                  </span>
-                )}
-              </div>
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => onSelect(b.id)}
+                data-active={selected}
+                data-live={selected && isActive}
+                className="hud-basemap-btn"
+                aria-pressed={selected}
+                title={subtitle ? `${b.label} — ${subtitle}` : b.label}
+              >
+                <span className="leading-tight">
+                  {variant ? `${b.label} · ${variant.label}` : b.label}
+                </span>
+              </button>
             );
           })}
         </div>
+        {selectedBasemap?.variants && (
+          <BasemapVariantControl
+            basemap={selectedBasemap}
+            value={variants[selectedBasemap.id]}
+            onChange={(variantId) =>
+              onSelectVariant(selectedBasemap.id, variantId)
+            }
+          />
+        )}
+        {selectedBasemap &&
+          (selectedBasemap.provider || selectedBasemap.license) && (
+            <span className="px-1 text-[10.5px] text-[color:var(--ink-mute)]">
+              {[selectedBasemap.provider, selectedBasemap.license]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          )}
+        {selectedBasemap && outsideCoverage(selectedBasemap) && (
+          <span className="px-1 text-[10.5px] text-[color:var(--warn)]">
+            Outside coverage ({selectedBasemap.coverage})
+          </span>
+        )}
       </div>
     );
   };
@@ -4560,6 +4411,7 @@ function BasemapSwitch({ mode, onModeChange }: BasemapSwitchProps) {
 
 function MapReadout({ map }: { map: MLMap | null }) {
   const [view, setView] = useState<ViewState>(INITIAL_VIEW);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!map) return;
@@ -4587,12 +4439,36 @@ function MapReadout({ map }: { map: MLMap | null }) {
     };
   }, [map]);
 
+  const copyCoordinates = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        formatCoordinates(view.center[1], view.center[0]),
+      );
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be denied; leave the readout untouched.
+    }
+  };
+
   return (
     <HudPanel className="hud-mono">
-      <span className="text-[13px] text-[color:var(--ink)]">
-        {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
-        {view.zoom.toFixed(1)}
-      </span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] text-[color:var(--ink)]">
+          {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
+          {view.zoom.toFixed(1)}
+        </span>
+        <button
+          type="button"
+          onClick={() => void copyCoordinates()}
+          aria-label="Copy coordinates"
+          title="Copy coordinates"
+          className="ui-input-action"
+          data-active={copied}
+        >
+          {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+        </button>
+      </div>
     </HudPanel>
   );
 }
@@ -4722,7 +4598,6 @@ interface RailsPanelProps {
   onOpacityChange: (o: number) => void;
   railStyle: "tiles" | "lines";
   onRailStyleChange: (s: "tiles" | "lines") => void;
-  railNetworkStatus: RailNetworkStatus;
 }
 
 function RailsPanel({
@@ -4732,21 +4607,11 @@ function RailsPanel({
   onOpacityChange,
   railStyle,
   onRailStyleChange,
-  railNetworkStatus,
 }: RailsPanelProps) {
-  const cooldownLeft = Math.max(
-    0,
-    Math.ceil((railNetworkStatus.cooldownUntil - Date.now()) / 1000),
-  );
-  const railLineCaption =
-    cooldownLeft > 0
-      ? `Overpass throttled · retrying in ${cooldownLeft}s`
-      : railNetworkStatus.inFlight > 0
-        ? `Loading rails… (${railNetworkStatus.inFlight} tile${railNetworkStatus.inFlight === 1 ? "" : "s"})`
-        : "OSM rail lines · Overpass · cached per tile";
-
   const caption =
-    railStyle === "lines" ? railLineCaption : "OpenRailwayMap raster · OSM";
+    railStyle === "lines"
+      ? "Vector tiles · OpenFreeMap · OSM"
+      : "OpenRailwayMap raster · OSM";
 
   return (
     <HudPanel>
@@ -4781,7 +4646,7 @@ function RailsPanel({
                 data-active={railStyle === "lines"}
                 onClick={() => onRailStyleChange("lines")}
               >
-                Lines
+                Vector
               </button>
               <button
                 type="button"
@@ -4815,19 +4680,6 @@ function RailsPanel({
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
-              {railStyle === "lines"
-                        && (railNetworkStatus.inFlight > 0
-                  || railNetworkStatus.cooldownUntil > Date.now()) && (
-                  <span
-                    aria-hidden
-                    className="hud-loading-dot"
-                    data-state={
-                      railNetworkStatus.cooldownUntil > Date.now()
-                        ? "throttled"
-                        : "loading"
-                    }
-                  />
-                )}
               <span>{caption}</span>
             </div>
           </>

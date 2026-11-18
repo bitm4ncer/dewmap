@@ -49,6 +49,62 @@ function buildLabel(p: PhotonFeature["properties"]): string {
   return parts.filter(Boolean).join(", ");
 }
 
+export function reverseAddressName(
+  p: PhotonFeature["properties"],
+): string {
+  const street = p.street
+    ? `${p.street}${p.housenumber ? ` ${p.housenumber}` : ""}`
+    : "";
+  // The caller adds the city separately (e.g. "Street 5 · City").
+  return street || p.name || buildLabel(p);
+}
+
+const PHOTON_REVERSE_URL = "https://photon.komoot.io/reverse";
+
+/** Resolve coordinates to the nearest street address (Photon). */
+export async function reverseGeocode(
+  lon: number,
+  lat: number,
+  options: { signal?: AbortSignal; lang?: string } = {},
+): Promise<GeocodeResult | null> {
+  const params = new URLSearchParams({
+    lon: String(lon),
+    lat: String(lat),
+    limit: "1",
+  });
+  if (options.lang) params.set("lang", options.lang);
+  try {
+    const res = await fetch(`${PHOTON_REVERSE_URL}?${params}`, {
+      signal: options.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { features: PhotonFeature[] };
+    const f = data.features?.[0];
+    if (!f) return null;
+    const p = f.properties;
+    const coordinates = f.geometry.coordinates;
+    const osmType = p.osm_type?.toUpperCase();
+    return {
+      id: `${p.osm_type ?? "?"}-${p.osm_id ?? "reverse"}`,
+      name: reverseAddressName(p),
+      label: buildLabel(p) || reverseAddressName(p),
+      coordinates,
+      type: p.type,
+      category: p.osm_value ?? p.osm_key,
+      city: p.city ?? p.district,
+      country: p.country,
+      postcode: p.postcode,
+      ...(osmType === "N" || osmType === "W" || osmType === "R"
+        ? { osmType }
+        : {}),
+      ...(typeof p.osm_id === "number" ? { osmId: p.osm_id } : {}),
+    } satisfies GeocodeResult;
+  } catch {
+    return null;
+  }
+}
+
 export async function geocode(
   query: string,
   options: {

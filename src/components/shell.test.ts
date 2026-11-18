@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+const poi = readFileSync(
+  new URL("./poi/PoiDetail.tsx", import.meta.url),
+  "utf8",
+);
+
 const map = readFileSync(new URL("./Map.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
@@ -19,6 +24,40 @@ describe("shell", () => {
 
   it("opens on the Routes pane", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
+  });
+
+  it("opens place details when a search result is selected", () => {
+    const search = map.slice(
+      map.indexOf("const handleSearchSelect"),
+      map.indexOf("const handleStartTimeline"),
+    );
+    expect(search).toContain("setPoiSelection");
+    expect(search).toContain("setPendingPin(null)");
+    expect(search).not.toContain("setPendingPin({");
+  });
+
+  it("retries overlay layers once the map becomes idle", () => {
+    const retries = map.match(/map\.once\("idle", apply\)/g) ?? [];
+    expect(retries.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("lets active overlay badges be dismissed from the map", () => {
+    expect(map).toContain("onDismiss: () => setLandCoverOn(false)");
+    expect(map).toContain("onClick={overlay.onDismiss}");
+    expect(map).toContain("Turn off ${overlay.label}");
+  });
+
+  it("marks a selected place and offers route planning from its card", () => {
+    expect(map).toContain("poi-crosshair");
+    expect(map).toContain("planPoiRoute");
+    expect(map).toContain("onPlanRoute={planPoiRoute}");
+    expect(poi).toContain("Plan Route");
+  });
+
+  it("puts the desktop header above the pane tabs", () => {
+    expect(map.indexOf('className="ui-panel-header hidden md:flex"')).toBeLessThan(
+      map.indexOf('className="hud-panel-tabs"'),
+    );
   });
 
   it("uses live-capable overlay endpoints", () => {

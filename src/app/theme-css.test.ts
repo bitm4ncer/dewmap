@@ -36,9 +36,43 @@ describe("flat CSS invariants", () => {
     expect(bad).toEqual([]);
   });
 
-  it("keeps geolocate icons dark on the accent fill", () => {
+  it("keeps the active geolocate icon light on its soft accent fill", () => {
+    const button = blocks.find((b) => b.selector.includes("geolocate-active,"));
     const rule = blocks.find((b) => b.selector.includes("geolocate-active .maplibregl-ctrl-icon"));
-    expect(rule?.body).toContain("brightness(0)");
+    expect(button?.body).toContain("var(--accent-soft)");
+    expect(rule?.body).toContain("invert(1)");
+  });
+
+  it("gives the search field the full pill height", () => {
+    const input = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".ui-search-pill input") &&
+        b.body.includes("height: 46px"),
+    );
+    expect(input).toBeTruthy();
+    expect(input?.body).toContain("align-self: stretch");
+    expect(input?.body).toContain("line-height: 20px");
+  });
+
+  it("keeps the search glass off the input's ancestor chain", () => {
+    const base = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".ui-search-pill") &&
+        b.body.includes("isolation: isolate"),
+    );
+    expect(base).toBeTruthy();
+    expect(base?.body).not.toContain("backdrop-filter");
+    const glass = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".ui-search-pill::before") &&
+        b.body.includes("backdrop-filter"),
+    );
+    expect(glass).toBeTruthy();
+  });
+
+  it("flattens the mobile search pill so Safari keeps the caret inside", () => {
+    expect(css).toMatch(/\.ui-search-pill::before \{ display: none;/);
+    expect(css).toMatch(/\.ui-search-pill \{ background: var\(--glass-strong\);/);
   });
 
   it("keeps search focus soft and free of an inner ring", () => {
@@ -62,10 +96,13 @@ describe("flat CSS invariants", () => {
     expect(block(".ui-seg")?.body).toContain(
       "min-height: 36px",
     );
-    expect(block(".hud-basemap-btn")?.body).toContain(
-      "padding: var(--sp-2) var(--sp-4)",
+    expect(block(".hud-basemap-grid")?.body).toContain(
+      "repeat(3, minmax(0, 1fr))",
     );
+    expect(block(".hud-basemap-btn")?.body).toContain("padding: var(--sp-2)");
     expect(block(".ui-chip")?.body).toContain("min-height: 28px");
+    expect(block(".ui-input-action")?.body).toContain("width: 30px");
+    expect(block(".ui-history-toggle")?.body).toContain("min-height: 28px");
     expect(block(".ui-btn")?.body).toContain("min-height: 44px");
     expect(block(".hud-btn-primary:disabled")?.body).toContain("opacity: 1");
     expect(
@@ -152,5 +189,94 @@ describe("flat CSS invariants", () => {
   it("keeps row separators out of the UI", () => {
     expect(css).not.toMatch(/\.ui-row\s*\+\s*\.ui-row\s*\{[^}]*border/);
     expect(css).not.toContain(".ui-divider");
+  });
+});
+
+describe("sheet chrome and compact date field", () => {
+  it("removes the handle and moves the sheet actions left", () => {
+    expect(block(".hud-bottom-sheet-grabber::before")?.body).toContain(
+      "display: none",
+    );
+    expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
+  });
+
+  it("keeps a fixed gap under the mobile sheet tabs", () => {
+    const tabs = blocks.find(
+      (b) => b.selector.trim().endsWith(".hud-sheet-tabs"),
+    );
+    expect(tabs?.body).toContain("padding: 0 var(--sp-2) var(--sp-3)");
+    expect(css).toContain(".hud-bottom-sheet .ui-panel-body { padding-top: 0; }");
+  });
+
+  it("styles the selected-place crosshair and route CTA", () => {
+    expect(block(".poi-crosshair")?.body).toContain("color: var(--danger)");
+    expect(block(".poi-crosshair")?.body).toContain("width: 38px");
+    expect(block(".poi-plan-route")?.body).toContain("background: var(--accent)");
+    expect(block(".poi-plan-route")?.body).toContain("min-height: 48px");
+  });
+
+  it("stacks active overlay badges above the locate control", () => {
+    expect(block(".map-overlay-badges")?.body).toContain("display: none");
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.trim().endsWith(".map-overlay-badges") &&
+          b.body.includes("bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 148px)") &&
+          b.body.includes("width: 36px") &&
+          b.body.includes("align-items: center"),
+      ),
+    ).toBe(true);
+    expect(block(".map-overlay-badge")?.body).toContain("width: 28px");
+  });
+
+  it("renders expanded map information as a card", () => {
+    const card = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".maplibregl-ctrl-attrib.maplibregl-compact-show"),
+    );
+    expect(card?.body).toContain("width: 280px");
+    expect(css).toContain('content: "Map information"');
+    expect(css).toContain("top: 8px !important");
+  });
+
+  it("has no empty POI hero and keeps the inline close compact", () => {
+    expect(css).not.toContain("poi-hero--empty");
+    expect(css).not.toContain("poi-hero-fallback");
+    expect(block(".poi-close--inline")?.body).toContain("position: static");
+    expect(block(".poi-close--inline")?.body).toContain("width: 32px");
+  });
+
+  it("starts map attribution collapsed and narrow on phones", () => {
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.trim().endsWith(".maplibregl-ctrl-attrib") &&
+          b.body.includes("max-width: 140px") &&
+          b.body.includes("padding: 4px 32px 4px 12px"),
+      ),
+    ).toBe(true);
+    expect(
+      blocks.some((b) => b.body.includes("translateY(-50%)")),
+    ).toBe(true);
+  });
+
+  it("keeps desktop attribution left of the open drawer", () => {
+    expect(css).toContain('[data-panel-open="true"] .maplibregl-ctrl-bottom-right');
+    expect(css).toContain("right: calc(var(--panel-w) + 24px)");
+  });
+
+  it("keeps map attribution clear of the right-side map controls", () => {
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.includes(".maplibregl-ctrl-bottom-right") &&
+          b.body.includes("left: 12px !important") &&
+          b.body.includes("right: auto !important"),
+      ),
+    ).toBe(true);
+  });
+
+  it("caps the When date field width", () => {
+    expect(block(".ui-input-date")?.body).toContain("max-width: 240px");
   });
 });

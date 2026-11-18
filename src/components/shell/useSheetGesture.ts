@@ -141,13 +141,15 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
 
   const heights = useCallback(() => {
     const vh = window.visualViewport?.height ?? window.innerHeight;
+    const topbar =
+      document.querySelector<HTMLElement>(".ui-topbar")?.offsetHeight ?? 56;
     const safe = safeBottomRef.current;
-    const peek = 76 + safe;
+    const peek = 88 + safe;
     return {
       peek,
       modes: peek + 60,
       half: Math.round(vh * 0.48),
-      full: vh,
+      full: Math.max(peek + 80, Math.round(vh - topbar)),
       vh,
     };
   }, []);

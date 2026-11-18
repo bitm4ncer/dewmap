@@ -19,18 +19,20 @@ import {
   ChevronUpIcon,
   ClockIcon,
   CloseIcon,
-  DirectionsIcon,
   ExternalLinkIcon,
   GlobeIcon,
   ImageIcon,
   MailIcon,
+  MapPinIcon,
   PhoneIcon,
+  RouteIcon,
 } from "@/components/ui/icons";
 
 interface Props {
   selection: PoiSelection | null;
   onClose: () => void;
-  onDirections?: (selection: PoiSelection) => void;
+  onCenter?: (lon: number, lat: number) => void;
+  onPlanRoute?: (selection: PoiSelection) => void;
 }
 
 interface ContentProps extends Omit<Props, "selection"> {
@@ -66,7 +68,12 @@ function safeInsetBottom(): number {
   return Number.isFinite(height) ? height : 0;
 }
 
-function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
+function PoiDetailContent({
+  selection,
+  onClose,
+  onCenter,
+  onPlanRoute,
+}: ContentProps) {
   const [details, setDetails] = useState<PoiDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -179,7 +186,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
         ? { label: "Closed", tone: "closed" as const }
         : null;
 
-  const directionsSelection: PoiSelection = {
+  const routeSelection: PoiSelection = {
     ...selection,
     name: details?.name ?? selection.name,
     city: details?.city ?? selection.city,
@@ -401,9 +408,9 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
     closeCard();
   };
 
-  const directions = () => {
+  const planRoute = () => {
     haptic("tap");
-    onDirections?.(directionsSelection);
+    onPlanRoute?.(routeSelection);
   };
 
   useEffect(() => {
@@ -490,15 +497,15 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             </span>
           </button>
           <div className="poi-mini-actions">
-            {onDirections && (
+            {onPlanRoute && (
               <button
                 type="button"
                 className="poi-mini-btn"
-                onClick={directions}
-                aria-label="Directions"
-                title="Directions"
+                onClick={planRoute}
+                aria-label="Plan route"
+                title="Plan route"
               >
-                <DirectionsIcon size={18} />
+                <RouteIcon size={18} />
               </button>
             )}
             <button
@@ -523,7 +530,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
       ) : (
         <div className="poi-scroll">
           <div
-            className={`poi-hero${hasImage ? "" : " poi-hero--empty"}`}
+            className="poi-hero"
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).closest("button, a")) return;
               beginResize("expanded", e);
@@ -552,12 +559,6 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
                 onError={() => onImageError(current.url)}
               />
             )}
-            {!hasImage || !imageReady ? (
-              <div className="poi-hero-fallback">
-                <ImageIcon size={26} />
-                <span>{category}</span>
-              </div>
-            ) : null}
             <div className="poi-hero-shade" />
             <button
               type="button"
@@ -571,7 +572,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             <button
               type="button"
               onClick={close}
-              className="poi-close"
+              className={`poi-close${hasImage ? "" : " poi-close--inline"}`}
               aria-label="Close place details"
             >
               <CloseIcon size={19} />
@@ -658,19 +659,19 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             {details && !loading && !error && (
               <>
                 <div className="poi-actions">
-                  {onDirections && (
+                  {onPlanRoute && (
                     <button
                       type="button"
                       className="poi-action poi-action--primary"
-                      onClick={directions}
+                      onClick={planRoute}
                     >
-                      <DirectionsIcon size={16} />
-                      Directions
+                      <RouteIcon size={16} />
+                      Plan Route
                     </button>
                   )}
                   {details.website && (
                     <a
-                      className={`poi-action${onDirections ? "" : " poi-action--primary"}`}
+                      className={`poi-action${onPlanRoute ? "" : " poi-action--primary"}`}
                       href={details.website}
                       target="_blank"
                       rel="noreferrer noopener"
@@ -678,6 +679,16 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
                       <GlobeIcon size={16} />
                       Website
                     </a>
+                  )}
+                  {onCenter && (
+                    <button
+                      type="button"
+                      className="poi-action"
+                      onClick={() => onCenter(details.lon, details.lat)}
+                    >
+                      <MapPinIcon size={16} />
+                      Show on map
+                    </button>
                   )}
                   <a
                     className="poi-action"

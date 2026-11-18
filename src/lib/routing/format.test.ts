@@ -4,6 +4,7 @@ import {
   formatDayOffset,
   formatDistance,
   formatDuration,
+  formatRouteLabel,
   formatRelativeDelay,
 } from "./format";
 
@@ -21,6 +22,13 @@ describe("formatDuration", () => {
     expect(formatDuration(60)).toBe("1 h");
     expect(formatDuration(75)).toBe("1 h 15 min");
     expect(formatDuration(125.2)).toBe("2 h 5 min");
+  });
+});
+
+describe("formatRouteLabel", () => {
+  it("combines distance and duration for map labels", () => {
+    expect(formatRouteLabel(12.4, 38)).toBe("12 km · 38 min");
+    expect(formatRouteLabel(0.35, 5)).toBe("350 m · 5 min");
   });
 });
 

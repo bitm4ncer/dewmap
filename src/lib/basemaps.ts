@@ -306,7 +306,21 @@ export const BASEMAPS: Basemap[] = [
   {
     id: "streets-dark",
     label: "Streets · dark",
-    subtitle: "CARTO Dark Matter · Graphite tint",
+    subtitle: "Graphite tint · softened labels",
+    kind: "style",
+    category: "vector",
+    group: "global",
+    provider: "CARTO / OSM",
+    license: "CARTO terms · ODbL",
+    coverage: "Welt",
+    url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+    maxzoom: 19,
+    attribution: CARTO_ATTRIB,
+  },
+  {
+    id: "dark-matter",
+    label: "Dark Matter",
+    subtitle: "CARTO original · untinted",
     kind: "style",
     category: "vector",
     group: "global",
@@ -1196,6 +1210,16 @@ export const BASEMAPS: Basemap[] = [
     attribution: GSI_ATTRIB,
   },
 ];
+
+/** Only annual Sentinel-2 and the daily GIBS layer expose timeline settings. */
+export function basemapUsesTimeline(
+  imageId: string,
+  mode: "photo" | "hybrid" | "vector",
+): boolean {
+  return (
+    mode !== "vector" && (imageId === "s2cloudless" || imageId === "gibs-today")
+  );
+}
 
 export const DEFAULT_IMAGE_BASEMAP_ID = "esri-imagery";
 export const DEFAULT_VECTOR_BASEMAP_ID = "streets-dark";

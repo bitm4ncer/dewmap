@@ -15,13 +15,23 @@ import {
   lineTextColor,
   stopLabel,
 } from "@/lib/planner/transitFormat";
-import type { RoutePlan, TransitLeg, TransitStopRef } from "@/lib/routing";
+import {
+  formatRouteLabel,
+  type RoutePlan,
+  type TransitLeg,
+  type TransitStopRef,
+} from "@/lib/routing";
 
 const SRC = "planner-route";
 const CASING = "planner-route-casing";
 const LINE = "planner-route-line";
 const LINE_LABELS = "planner-line-labels";
 const WALK = "planner-route-walk";
+const ALT = "planner-route-alt";
+const ALT_HIT = "planner-route-alt-hit";
+const ALT_CASING = "planner-route-alt-casing";
+const LABELS = "planner-route-labels";
+const LABELS_SRC = "planner-route-labels-src";
 const STOPS = "planner-stops";
 const STOP_DOTS = "planner-stop-dots";
 const STOP_LABELS = "planner-stop-labels";
@@ -52,19 +62,47 @@ function remove(map: MLMap, id: string, kind: "layer" | "source") {
   if (kind === "source" && map.getSource(id)) map.removeSource(id);
 }
 
-function carFeature(route: RoutePlan): GeoJSON.FeatureCollection {
+function carLabelFeatures(
+  routes: RoutePlan[],
+  selectedId: string | null,
+): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: route.coordinates.map(([lon, lat]) => [lon, lat]),
+    features: routes.map((route) => {
+      const point =
+        route.coordinates[Math.floor(route.coordinates.length / 2)] ??
+        route.coordinates[0];
+      return {
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [point[0], point[1]] },
+        properties: {
+          id: route.id,
+          selected: route.id === selectedId,
+          label: formatRouteLabel(route.distanceKm, route.durationMin),
         },
-        properties: {},
+      };
+    }),
+  };
+}
+
+function carFeatures(
+  routes: RoutePlan[],
+  selectedId: string | null,
+): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: routes.map((route) => ({
+      type: "Feature" as const,
+      geometry: {
+        type: "LineString" as const,
+        coordinates: route.coordinates.map(([lon, lat]) => [lon, lat]),
       },
-    ],
+      properties: {
+        id: route.id,
+        selected: route.id === selectedId,
+        label: formatRouteLabel(route.distanceKm, route.durationMin),
+      },
+    })),
   };
 }
 
@@ -262,6 +300,10 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
         LINE_LABELS,
         STOP_DOTS,
         WALK,
+        LABELS,
+        ALT_HIT,
+        ALT,
+        ALT_CASING,
         LINE,
         CASING,
         "planner-endpoints-layer",
@@ -270,6 +312,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       }
       for (const id of [
         STOPS,
+        LABELS_SRC,
         "planner-route-walk-src",
         SRC,
         "planner-endpoints",
@@ -278,13 +321,53 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       }
 
       if (mode === "car") {
-        const route = carRoutes.find((r) => r.id === carSelected);
+        const selected = carSelected ?? carRoutes[0]?.id ?? null;
+        const route = carRoutes.find((r) => r.id === selected);
         if (!route) return;
-        ensureSource(map, SRC, carFeature(route));
+        ensureSource(map, SRC, carFeatures(carRoutes, selected));
+        ensureSource(map, LABELS_SRC, carLabelFeatures(carRoutes, selected));
+        map.addLayer({
+          id: ALT_CASING,
+          type: "line",
+          source: SRC,
+          filter: ["!", ["get", "selected"]],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": THEME.casing,
+            "line-width": 5,
+            "line-opacity": 0.55,
+          },
+        });
+        map.addLayer({
+          id: ALT,
+          type: "line",
+          source: SRC,
+          filter: ["!", ["get", "selected"]],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": ACCENT,
+            "line-width": 2.5,
+            "line-opacity": 0.65,
+            "line-dasharray": [2, 1.5],
+          },
+        });
+        map.addLayer({
+          id: ALT_HIT,
+          type: "line",
+          source: SRC,
+          filter: ["!", ["get", "selected"]],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": THEME.casing,
+            "line-width": 18,
+            "line-opacity": 0.01,
+          },
+        });
         map.addLayer({
           id: CASING,
           type: "line",
           source: SRC,
+          filter: ["==", ["get", "selected"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": THEME.casing,
@@ -296,8 +379,26 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
           id: LINE,
           type: "line",
           source: SRC,
+          filter: ["==", ["get", "selected"], true],
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": ACCENT, "line-width": 5 },
+          paint: { "line-color": THEME.danger, "line-width": 5 },
+        });
+        map.addLayer({
+          id: LABELS,
+          type: "symbol",
+          source: LABELS_SRC,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 10.5,
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+            "text-padding": 2,
+          },
+          paint: {
+            "text-color": ["case", ["get", "selected"], INK, ACCENT],
+            "text-halo-color": THEME.casing,
+            "text-halo-width": 2.5,
+          },
         });
         ensureSource(map, STOPS, pointFeatures(carWaypoints));
         map.addLayer({
@@ -446,6 +547,17 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
         .setHTML(popupHtml(feature.properties ?? {}))
         .addTo(map);
     };
+    const onCarAltClick = (event: MapLayerMouseEvent) => {
+      const id = event.features?.[0]?.properties?.id;
+      if (typeof id !== "string") return;
+      event.preventDefault();
+      event.originalEvent?.stopPropagation();
+      useCar.getState().selectRoute(id);
+    };
+    const onCarPrimaryClick = (event: MapLayerMouseEvent) => {
+      event.preventDefault();
+      event.originalEvent?.stopPropagation();
+    };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
     };
@@ -467,12 +579,20 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
     map.on("click", STOP_DOTS, onStopClick);
     map.on("mouseenter", STOP_DOTS, onEnter);
     map.on("mouseleave", STOP_DOTS, onLeave);
+    map.on("click", ALT_HIT, onCarAltClick);
+    map.on("click", LINE, onCarPrimaryClick);
+    map.on("mouseenter", ALT_HIT, onEnter);
+    map.on("mouseleave", ALT_HIT, onLeave);
     return () => {
       map.off("load", safeApply);
       map.off("style.load", safeApply);
       map.off("click", STOP_DOTS, onStopClick);
       map.off("mouseenter", STOP_DOTS, onEnter);
       map.off("mouseleave", STOP_DOTS, onLeave);
+      map.off("click", ALT_HIT, onCarAltClick);
+      map.off("click", LINE, onCarPrimaryClick);
+      map.off("mouseenter", ALT_HIT, onEnter);
+      map.off("mouseleave", ALT_HIT, onLeave);
     };
   }, [
     map,

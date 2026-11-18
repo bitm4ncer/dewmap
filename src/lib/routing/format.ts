@@ -96,3 +96,9 @@ export function formatRelativeDelay(seconds: number): string {
   const minutes = Math.round(Math.abs(seconds) / 60);
   return seconds > 0 ? `+${minutes} min` : `-${minutes} min`;
 }
+
+
+/** Compact map label for a route: distance and travel time. */
+export function formatRouteLabel(km: number, minutes: number): string {
+  return `${formatDistance(km)} · ${formatDuration(minutes)}`;
+}

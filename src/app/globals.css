@@ -102,7 +102,7 @@ body {
   --topbar-h:     calc(56px + var(--safe-top));
   --hud-topbar-h: var(--topbar-h);
   --hud-nav-h:    calc(56px + var(--safe-bottom));
-  --hud-peek-h:   calc(76px + var(--safe-bottom));
+  --hud-peek-h:   calc(88px + var(--safe-bottom));
   --panel-w:      380px;
 
   /* Z scale */
@@ -402,7 +402,7 @@ body {
     contain: layout paint;
     /* Height is driven by the spring driver in useSheetGesture. */
     transition: none;
-    --hud-peek-h: calc(76px + var(--safe-bottom));
+    --hud-peek-h: calc(88px + var(--safe-bottom));
   }
 
   .hud-bottom-sheet[data-dragging="true"],
@@ -433,7 +433,9 @@ body {
 .hud-sheet-tabs {
   display: none;
   gap: var(--sp-1);
-  padding: 0 var(--sp-2);
+  /* The bottom pad is outside the scroll container, so content cannot
+     slide up into the gap while the panel is scrolled. */
+  padding: 0 var(--sp-2) var(--sp-3);
   flex-shrink: 0;
 }
 
@@ -548,7 +550,7 @@ body {
 .hud-sheet-actions {
   position: absolute;
   top: 2px;
-  right: 6px;
+  left: var(--sp-2);
   display: flex;
   gap: 2px;
 }
@@ -570,6 +572,7 @@ body {
 .hud-bottom-sheet-grabber:active { cursor: grabbing; }
 .hud-bottom-sheet-grabber::before {
   content: "";
+  display: none;
   width: 34px;
   height: 3px;
   border-radius: 999px;
@@ -612,10 +615,10 @@ body {
      The active tab already names the pane. */
   .hud-bottom-sheet .pane-tape { display: none; }
   .hud-bottom-sheet .ui-panel-header { display: none; }
+  .hud-bottom-sheet .ui-panel-body { padding-top: 0; }
   .hud-btn-ghost { min-width: 44px; min-height: 44px; width: auto; padding-inline: 12px; }
   .hud-btn-primary { min-height: 44px; padding: 0 20px; font-size: 13.5px; }
-  .hud-basemap-btn { padding: var(--sp-2) var(--sp-4); font-size: 13px; }
-  .hud-basemap-btn-subtitle { font-size: 11px; }
+
   .hud-variant-chip { min-height: 36px; padding: 0 var(--sp-4); font-size: 12px; }
   .hud-basemap-switch-btn { width: 44px; height: 44px; }
 
@@ -644,10 +647,20 @@ body {
     transition: opacity 180ms ease, margin-bottom 180ms ease;
   }
   .maplibregl-ctrl-bottom-right {
+    left: 12px !important;
+    right: auto !important;
+    align-items: flex-start;
     margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
     transition: opacity 180ms ease, margin-bottom 180ms ease;
   }
   .maplibregl-ctrl-scale { display: none !important; }
+
+  /* Safari misplaces the caret inside a blurred/composited pill. On
+     phones use a plain translucent fill with no pseudo layer. */
+  .ui-search-pill { background: var(--glass-strong); isolation: auto; }
+  .ui-search-pill::before { display: none; }
+  .ui-search-pill input { font-size: 16px; line-height: 20px; padding: 12px 0; }
+
 
   /* Keep the phone chrome minimal: advanced view controls live in the
      Map panel; only locate/zoom remain on the map. */
@@ -752,13 +765,13 @@ input[type="range"].hud-slider::-moz-range-thumb {
   filter: invert(1) brightness(0.92);
 }
 
-.maplibregl-ctrl-geolocate-active,
-.maplibregl-ctrl-geolocate-background {
-  background: var(--accent) !important;
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active,
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-background {
+  background: var(--accent-soft) !important;
 }
 .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
 .maplibregl-ctrl-geolocate-background .maplibregl-ctrl-icon {
-  filter: brightness(0) !important;
+  filter: brightness(0) invert(1) !important;
 }
 
 .maplibregl-ctrl-projection {
@@ -910,15 +923,21 @@ input[type="range"].hud-slider::-moz-range-thumb {
 /* ────────────────────────────────────────────────────────────────────────
    Basemap card — flat fill, no border
    ──────────────────────────────────────────────────────────────────── */
+.hud-basemap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
 .hud-basemap-btn {
   position: relative;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 52px;
-  padding: var(--sp-2) var(--sp-4);
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 64px;
+  padding: var(--sp-2);
   text-align: left;
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.3;
   background: var(--surf-2);
   color: var(--ink);
   border: 0;
@@ -1062,7 +1081,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 0 var(--sp-4) var(--sp-2);
+  padding: 0 0 var(--sp-2) var(--sp-2);
 }
 .hud-section-heading > .line { display: none; }
 
@@ -1290,12 +1309,9 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 /* Scrollbar */
-.hud-scrollbar { scrollbar-width: thin; scrollbar-color: var(--ink-mute) transparent; }
-.hud-scrollbar::-webkit-scrollbar { width: 6px; }
-.hud-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--ink-mute);
-  border-radius: 9999px;
-}
+/* No scrollbar rail on the floating panel: the rounded card stays clean. */
+.hud-scrollbar { scrollbar-width: none; }
+.hud-scrollbar::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 /* Kill the legacy scanlines class — no decorative texture in the new system */
 .hud-scanlines { background-image: none; }
@@ -1345,24 +1361,36 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 .ui-search-pill {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 10px;
   height: 46px;
   padding: 0 14px;
   border-radius: var(--r-pill);
+  background: transparent;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+/* Keep the blur on a separate layer. Safari misplaces the caret of an
+   input that lives inside a backdrop-filtered element. */
+.ui-search-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
   background: var(--glass);
   backdrop-filter: blur(18px) saturate(1.08);
-  transition:
-    background var(--dur-fast) var(--ease),
-    box-shadow var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease);
+  pointer-events: none;
 }
 .ui-search-pill:focus-within {
-  background: var(--glass-strong);
   box-shadow:
     0 0 0 3px var(--accent-soft),
     0 0 22px -6px color-mix(in srgb, var(--accent) 45%, transparent);
 }
+.ui-search-pill:focus-within::before { background: var(--glass-strong); }
 /* The pill owns the focus state; no second ring inside the field. */
 .ui-search-pill input:focus-visible {
   outline: none;
@@ -1371,11 +1399,16 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-search-pill input {
   min-width: 0;
   flex: 1;
+  align-self: stretch;
+  height: 46px;
+  padding: 12px 0;
   background: transparent;
   border: 0;
   outline: 0;
   color: var(--ink);
+  caret-color: var(--accent);
   font-size: 14px;
+  line-height: 20px;
 }
 .ui-search-pill input::placeholder { color: var(--ink-dim); }
 .ui-search-kbd {
@@ -1579,7 +1612,36 @@ input[type="range"].hud-slider::-moz-range-thumb {
   font-size: 13.5px;
   outline: 0;
 }
+.ui-input-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.ui-input-action:hover { background: var(--surf-3); color: var(--ink); }
+.ui-input-action[data-active="true"] { color: var(--accent); background: var(--accent-soft); }
+.ui-input-action:disabled { opacity: .4; cursor: not-allowed; }
+.ui-history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 28px;
+  padding: 0 var(--sp-2);
+  border-radius: 8px;
+  color: var(--ink-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ui-history-toggle:hover { background: var(--surf-2); color: var(--ink); }
+.ui-history-count { color: var(--ink-mute); font-size: 10.5px; font-weight: 500; }
 .ui-input::placeholder { color: var(--ink-mute); }
+.ui-input-date { max-width: 240px; }
 .ui-input:focus { box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent); background: var(--surf-3); }
 
 /* FAB ------------------------------------------------------------------ */
@@ -1915,8 +1977,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
   background: var(--surf-2);
 }
 
-.poi-hero--empty { height: 116px; }
-
 .poi-hero-image {
   position: absolute;
   inset: 0;
@@ -1929,23 +1989,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .poi-hero-image[data-loaded="true"] { opacity: 1; }
 
-.poi-hero-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--ink-dim);
-  background:
-    radial-gradient(120% 90% at 20% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
-    linear-gradient(145deg, var(--surf-2), var(--surf-1));
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 
 .poi-hero-shade {
   position: absolute;
@@ -1959,6 +2002,14 @@ input[type="range"].hud-slider::-moz-range-thumb {
   );
 }
 
+.poi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 32px;
+  margin-bottom: var(--sp-3);
+}
 .poi-close {
   position: absolute;
   top: 12px;
@@ -1976,6 +2027,14 @@ input[type="range"].hud-slider::-moz-range-thumb {
   cursor: pointer;
 }
 .poi-close:hover { background: rgba(20, 21, 18, 0.9); }
+.poi-close--inline {
+  position: static;
+  width: 32px;
+  height: 32px;
+  background: var(--surf-2);
+  color: var(--ink-dim);
+}
+.poi-close--inline:hover { background: var(--surf-3); color: var(--ink); }
 .poi-close:focus-visible,
 .poi-thumb:focus-visible,
 .poi-action:focus-visible,
@@ -2034,6 +2093,36 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 .poi-body { padding: 15px 16px 0; }
+
+.poi-plan-route {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.poi-plan-route:hover { filter: brightness(1.06); }
+.poi-plan-route:active { transform: scale(0.99); }
+
+/* Selected place — warm red crosshair over the map. */
+.poi-crosshair {
+  width: 38px;
+  height: 38px;
+  color: var(--danger);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.75));
+}
+.poi-crosshair svg { display: block; }
 
 .poi-title {
   margin: 2px 0 0;
@@ -2291,7 +2380,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
     height: 172px;
     border-radius: 18px 18px 0 0;
   }
-  .poi-hero--empty { height: 116px; }
   .poi-body { padding: 16px 18px 0; }
 }
 
@@ -2349,4 +2437,132 @@ select {
   touch-action: auto;
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Phone attribution is a small info button; expanded it stays narrow and
+   reserves room for the close control. Placed last so it beats MapLibre's
+   base attribution rules. */
+/* Expanded map information: a proper card, not a giant pill. */
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+  box-sizing: border-box !important;
+  width: 280px !important;
+  max-width: calc(100vw - 96px) !important;
+  max-height: 42dvh;
+  overflow-y: auto;
+  padding: 12px 40px 12px 14px !important;
+  border-radius: 16px !important;
+  background: var(--glass-strong) !important;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show::before {
+  content: "Map information";
+  display: block;
+  margin-bottom: var(--sp-2);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-inner {
+  display: block;
+  color: var(--ink-dim) !important;
+  font-size: 10.5px !important;
+  line-height: 1.5;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button {
+  top: 8px !important;
+  right: 8px !important;
+  width: 24px;
+  height: 24px;
+  transform: none !important;
+  margin: 0 !important;
+  background-image: none !important;
+  border-radius: 7px;
+  background-color: var(--surf-2) !important;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button::before {
+  content: "×";
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+}
+.maplibregl-ctrl-attrib-button:focus {
+  outline: none;
+  box-shadow: none !important;
+}
+.maplibregl-ctrl-attrib-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent) !important;
+}
+
+@media (max-width: 767px) {
+  .maplibregl-ctrl-attrib {
+    max-width: 140px !important; /* 140 content + 44 padding = 184 total */
+    padding: 4px 32px 4px 12px !important;
+  }
+  .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+    width: 26px;
+    height: 26px;
+    padding: 0 !important;
+  }
+  .maplibregl-ctrl-attrib-button {
+    right: 2px !important;
+    top: 50% !important;
+    transform: translateY(-50%);
+    margin: 0 !important;
+  }
+}
+
+
+/* Active Nature overlays — a quiet stack above the locate control. */
+.map-overlay-badges { display: none; }
+@media (max-width: 767px) {
+  .map-overlay-badges {
+    position: absolute;
+    right: 12px;
+    bottom: calc(var(--hud-peek-h) + 148px);
+    z-index: 20;
+    display: flex;
+    width: 36px;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    transition: opacity 180ms ease, bottom 180ms ease;
+  }
+  .map-overlay-badge {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--glass-strong);
+    backdrop-filter: blur(18px) saturate(1.08);
+    color: var(--accent);
+    pointer-events: auto;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .map-overlay-badge:hover { background: var(--surf-2); color: var(--ink); }
+  .map-overlay-badge:active { transform: scale(0.94); }
+  body:has(.hud-bottom-sheet[data-sheet-state="modes"]) .map-overlay-badges,
+  body:has(.hud-bottom-sheet[data-sheet-state="half"]) .map-overlay-badges,
+  body:has(.hud-bottom-sheet[data-sheet-state="full"]) .map-overlay-badges {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+
+/* Desktop: the drawer covers the map's right edge, so keep the map
+   attribution on the visible part instead of underneath the panel. */
+@media (min-width: 768px) {
+  [data-panel-open="true"] .maplibregl-ctrl-bottom-right {
+    right: calc(var(--panel-w) + 24px) !important;
+    left: auto !important;
+    align-items: flex-end;
+  }
 }
