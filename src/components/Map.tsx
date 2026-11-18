@@ -1884,54 +1884,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     [activePane, isMobile, livePos, snapTo],
   );
 
-  /** A pinned search result becomes the destination for the next mode pick. */
+  /** A search result opens its place card, with Plan Route as the action. */
   const handleSearchSelect = useCallback(
     (result: GeocodeResult) => {
       setFlyTarget(result);
-      const center = mapRef.current?.getCenter();
-      const start: RoutePoint = livePos
-        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
-        : center
-          ? { name: "Map center", lat: center.lat, lon: center.lng }
-          : {
-              name: "Map center",
-              lat: result.coordinates[1],
-              lon: result.coordinates[0],
-            };
-      setPendingPin({
-        dest: {
-          name: result.name || result.label,
-          lat: result.coordinates[1],
-          lon: result.coordinates[0],
-          city: result.city,
-          kind: "address",
-        },
-        start,
+      setPendingPin(null);
+      setPoiSelection({
+        osmType: result.osmType,
+        osmId: result.osmId,
+        lon: result.coordinates[0],
+        lat: result.coordinates[1],
+        name: result.name || result.label,
+        category: result.category,
+        city: result.city,
       });
-      // Without a live fix the map centre is only a fallback; ask for the
-      // real position so the route starts where the user is.
-      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            setPendingPin((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    start: {
-                      name: "My location",
-                      lat: pos.coords.latitude,
-                      lon: pos.coords.longitude,
-                    },
-                  }
-                : prev,
-            ),
-          () => {},
-          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
-        );
-      }
-      snapTo(isMobile ? "modes" : "half");
+      if (isMobile) snapTo("peek");
     },
-    [isMobile, livePos, snapTo],
+    [isMobile, snapTo],
   );
 
 

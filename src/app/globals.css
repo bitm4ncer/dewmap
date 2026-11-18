@@ -647,6 +647,11 @@ body {
   }
   .maplibregl-ctrl-scale { display: none !important; }
 
+  /* Safari misplaces the caret inside a blurred ancestor. The phone pill
+     keeps the tinted fill but drops the GPU blur. */
+  .ui-search-pill::before { backdrop-filter: none; background: var(--glass-strong); }
+  .ui-search-pill input { font-size: 16px; line-height: 20px; padding: 12px 0; }
+
 
   /* Keep the phone chrome minimal: advanced view controls live in the
      Map panel; only locate/zoom remain on the map. */
@@ -1351,14 +1356,14 @@ input[type="range"].hud-slider::-moz-range-thumb {
   flex: 1;
   align-self: stretch;
   height: 46px;
-  padding: 0;
+  padding: 12px 0;
   background: transparent;
   border: 0;
   outline: 0;
   color: var(--ink);
   caret-color: var(--accent);
   font-size: 14px;
-  line-height: normal;
+  line-height: 20px;
 }
 .ui-search-pill input::placeholder { color: var(--ink-dim); }
 .ui-search-kbd {

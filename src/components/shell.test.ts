@@ -26,6 +26,16 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("opens place details when a search result is selected", () => {
+    const search = map.slice(
+      map.indexOf("const handleSearchSelect"),
+      map.indexOf("const handleStartTimeline"),
+    );
+    expect(search).toContain("setPoiSelection");
+    expect(search).toContain("setPendingPin(null)");
+    expect(search).not.toContain("setPendingPin({");
+  });
+
   it("retries overlay layers once the map becomes idle", () => {
     const retries = map.match(/map\.once\("idle", apply\)/g) ?? [];
     expect(retries.length).toBeGreaterThanOrEqual(5);

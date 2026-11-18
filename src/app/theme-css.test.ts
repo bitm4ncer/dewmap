@@ -51,6 +51,7 @@ describe("flat CSS invariants", () => {
     );
     expect(input).toBeTruthy();
     expect(input?.body).toContain("align-self: stretch");
+    expect(input?.body).toContain("line-height: 20px");
   });
 
   it("keeps the search glass off the input's ancestor chain", () => {
@@ -60,6 +61,12 @@ describe("flat CSS invariants", () => {
     );
     expect(glass?.body).toContain("backdrop-filter");
     expect(block(".ui-search-pill")?.body).not.toContain("backdrop-filter");
+  });
+
+  it("drops the mobile search blur so Safari keeps the caret inside", () => {
+    expect(css).toMatch(
+      /\.ui-search-pill::before \{ backdrop-filter: none;/,
+    );
   });
 
   it("keeps search focus soft and free of an inner ring", () => {
