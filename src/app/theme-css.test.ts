@@ -51,6 +51,15 @@ describe("flat CSS invariants", () => {
     expect(input?.body).toContain("align-self: stretch");
   });
 
+  it("keeps the search glass off the input's ancestor chain", () => {
+    expect(block(".ui-search-pill")?.body).toContain("isolation: isolate");
+    const glass = blocks.find(
+      (b) => b.selector.trim().endsWith(".ui-search-pill::before"),
+    );
+    expect(glass?.body).toContain("backdrop-filter");
+    expect(block(".ui-search-pill")?.body).not.toContain("backdrop-filter");
+  });
+
   it("keeps search focus soft and free of an inner ring", () => {
     const pill = blocks.find((b) => b.selector === ".ui-search-pill:focus-within");
     expect(pill?.body).toContain("var(--accent-soft)");

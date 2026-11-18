@@ -1306,24 +1306,36 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 .ui-search-pill {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 10px;
   height: 46px;
   padding: 0 14px;
   border-radius: var(--r-pill);
+  background: transparent;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+/* Keep the blur on a separate layer. Safari misplaces the caret of an
+   input that lives inside a backdrop-filtered element. */
+.ui-search-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
   background: var(--glass);
   backdrop-filter: blur(18px) saturate(1.08);
-  transition:
-    background var(--dur-fast) var(--ease),
-    box-shadow var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease);
+  pointer-events: none;
 }
 .ui-search-pill:focus-within {
-  background: var(--glass-strong);
   box-shadow:
     0 0 0 3px var(--accent-soft),
     0 0 22px -6px color-mix(in srgb, var(--accent) 45%, transparent);
 }
+.ui-search-pill:focus-within::before { background: var(--glass-strong); }
 /* The pill owns the focus state; no second ring inside the field. */
 .ui-search-pill input:focus-visible {
   outline: none;
