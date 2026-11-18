@@ -4161,7 +4161,7 @@ function BasemapPanel({
           )}
           <span className="line" aria-hidden />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="hud-basemap-grid">
           {items.map((b) => {
             const selected = effectiveId === b.id;
             const variant = getActiveVariant(b, variants[b.id]);
@@ -4177,15 +4177,13 @@ function BasemapPanel({
                 onClick={() => onSelect(b.id)}
                 data-active={selected}
                 data-live={selected && isLive}
-                className="hud-basemap-btn flex flex-col items-stretch"
+                className="hud-basemap-btn"
                 aria-pressed={selected}
+                title={subtitle ? `${b.label} — ${subtitle}` : b.label}
               >
                 <span className="leading-tight">
                   {variant ? `${b.label} · ${variant.label}` : b.label}
                 </span>
-                {subtitle && (
-                  <span className="hud-basemap-btn-subtitle">{subtitle}</span>
-                )}
               </button>
             );
           })}

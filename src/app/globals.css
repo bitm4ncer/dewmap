@@ -610,8 +610,7 @@ body {
   .hud-bottom-sheet .ui-panel-body { padding-top: 0; }
   .hud-btn-ghost { min-width: 44px; min-height: 44px; width: auto; padding-inline: 12px; }
   .hud-btn-primary { min-height: 44px; padding: 0 20px; font-size: 13.5px; }
-  .hud-basemap-btn { padding: var(--sp-2) var(--sp-4); font-size: 13px; }
-  .hud-basemap-btn-subtitle { font-size: 11px; }
+
   .hud-variant-chip { min-height: 36px; padding: 0 var(--sp-4); font-size: 12px; }
   .hud-basemap-switch-btn { width: 44px; height: 44px; }
 
@@ -910,15 +909,21 @@ input[type="range"].hud-slider::-moz-range-thumb {
 /* ────────────────────────────────────────────────────────────────────────
    Basemap card — flat fill, no border
    ──────────────────────────────────────────────────────────────────── */
+.hud-basemap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
 .hud-basemap-btn {
   position: relative;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 52px;
-  padding: var(--sp-2) var(--sp-4);
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 64px;
+  padding: var(--sp-2);
   text-align: left;
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.3;
   background: var(--surf-2);
   color: var(--ink);
   border: 0;
@@ -1054,7 +1059,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 0 var(--sp-4) var(--sp-2);
+  padding: 0 0 var(--sp-2) var(--sp-2);
 }
 .hud-section-heading > .line { display: none; }
 

@@ -83,9 +83,10 @@ describe("flat CSS invariants", () => {
     expect(block(".ui-seg")?.body).toContain(
       "min-height: 36px",
     );
-    expect(block(".hud-basemap-btn")?.body).toContain(
-      "padding: var(--sp-2) var(--sp-4)",
+    expect(block(".hud-basemap-grid")?.body).toContain(
+      "repeat(3, minmax(0, 1fr))",
     );
+    expect(block(".hud-basemap-btn")?.body).toContain("padding: var(--sp-2)");
     expect(block(".ui-chip")?.body).toContain("min-height: 28px");
     expect(block(".ui-input-action")?.body).toContain("width: 30px");
     expect(block(".ui-history-toggle")?.body).toContain("min-height: 28px");
