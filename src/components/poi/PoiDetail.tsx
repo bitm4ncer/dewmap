@@ -110,7 +110,10 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
   const hasImage = images.length > 0 && !imageFailed;
   const current = images[Math.min(activeImage, Math.max(0, images.length - 1))];
   const imageReady = Boolean(current && loadedUrl === current.url);
-  const name = details?.name || selection.name || "Loading place…";
+  const name =
+    details?.name
+    || selection.name
+    || (error ? "Place details" : "Loading place…");
   const category = categoryLabel(details?.category || selection.category);
   const city = details?.city || selection.city;
   const label = selection.label?.trim();
@@ -124,7 +127,10 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
         return label;
       })()
     : undefined;
-  const address = details?.address || labelAddress;
+  const address =
+    details?.address
+    || labelAddress
+    || (error ? "Details unavailable" : undefined);
   const opening = details?.opening
     ? (parseOpeningHours(details.opening.raw) ?? details.opening)
     : undefined;
@@ -278,6 +284,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
               className="poi-mini-btn"
               onClick={() => setExpanded(true)}
               aria-label="Expand place details"
+              aria-expanded={false}
             >
               <ChevronUpIcon size={18} />
             </button>
@@ -335,6 +342,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
               onClick={() => setExpanded(false)}
               className="poi-close poi-collapse"
               aria-label="Minimize place details"
+              aria-expanded
             >
               <ChevronDownIcon size={19} />
             </button>
