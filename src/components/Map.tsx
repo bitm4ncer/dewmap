@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable react-hooks/purity -- map chrome renders live countdowns and clock labels */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import maplibregl, { Map as MLMap, ScaleControl, type MapMouseEvent } from "maplibre-gl";
@@ -29,13 +28,16 @@ import { PoiDetail } from "./poi/PoiDetail";
 import type { PoiSelection } from "@/lib/poi";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
-import { RAILWAY_TILE_URLS, RAILWAY_ATTRIBUTION, RAILWAY_MAX_ZOOM } from "@/lib/railway";
-import { fetchRailNetwork } from "@/lib/hiking/overpass";
 import {
-  railTileGet,
-  railTilePurgeExpired,
-  railTileSet,
-} from "@/lib/hiking/railTileStore";
+  RAILWAY_TILE_URLS,
+  RAILWAY_ATTRIBUTION,
+  RAILWAY_MAX_ZOOM,
+  RAIL_VECTOR_ATTRIBUTION,
+  RAIL_VECTOR_LINES_LAYER,
+  RAIL_VECTOR_MAX_ZOOM,
+  RAIL_VECTOR_STATIONS_LAYER,
+  RAIL_VECTOR_TILE_URL,
+} from "@/lib/railway";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
@@ -349,133 +351,138 @@ function removeRailwayLayer(map: MLMap) {
   if (map.getSource(RAILWAY_SOURCE_ID)) map.removeSource(RAILWAY_SOURCE_ID);
 }
 
-// Clean rail view — custom OSM lines fetched from Overpass, no text labels.
-const RAIL_LINES_SOURCE_ID = "rail-lines-src";
-const RAIL_LINES_CASING_LAYER_ID = "rail-lines-casing";
-const RAIL_LINES_MAIN_LAYER_ID = "rail-lines-main";
-const RAIL_LINES_MIN_ZOOM = 9;
+// ── Rail vector detail ───────────────────────────────────────────────
+// CARTO/Protomaps vector tiles contain the OSM rail network in `roads`
+// (kind=rail) and stations in `pois` (kind=station). The tiles are already
+// generalized per zoom and MapLibre only fetches the visible tiles. This
+// replaces the old viewport-sized Overpass batches (up to ~7 MB per z9 tile)
+// with normal vector-tile streaming.
+const RAIL_VECTOR_SOURCE_ID = "rail-vector-src";
+const RAIL_VECTOR_CASING_LAYER_ID = "rail-vector-casing";
+const RAIL_VECTOR_MAIN_LAYER_ID = "rail-vector-main";
+const RAIL_VECTOR_STATION_HIT_LAYER_ID = "rail-vector-station-hit";
+const RAIL_VECTOR_STATION_DOT_LAYER_ID = "rail-vector-station-dot";
+const RAIL_VECTOR_STATION_LABEL_LAYER_ID = "rail-vector-station-label";
+const RAIL_VECTOR_MIN_ZOOM = 12;
+const RAIL_VECTOR_STATION_MIN_ZOOM = 12;
+const RAIL_VECTOR_FALLBACK_SOURCE_ID = "rail-vector-fallback";
+const RAIL_VECTOR_FALLBACK_LAYER_ID = "rail-vector-fallback-layer";
 
-function ensureRailLinesLayer(map: MLMap, opacity: number) {
-  if (!map.getSource(RAIL_LINES_SOURCE_ID)) {
-    map.addSource(RAIL_LINES_SOURCE_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
+function ensureRailVectorLayers(map: MLMap, opacity: number) {
+  // Protomaps/CARTO only carries rail from z12. Below that, the ORM raster
+  // is the fast overview layer; the vector detail takes over at z12.
+  if (!map.getSource(RAIL_VECTOR_FALLBACK_SOURCE_ID)) {
+    map.addSource(RAIL_VECTOR_FALLBACK_SOURCE_ID, {
+      type: "raster",
+      tiles: RAILWAY_TILE_URLS,
+      tileSize: 256,
+      maxzoom: RAILWAY_MAX_ZOOM,
       attribution: RAILWAY_ATTRIBUTION,
     });
   }
-  if (!map.getLayer(RAIL_LINES_CASING_LAYER_ID)) {
+  if (!map.getLayer(RAIL_VECTOR_FALLBACK_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_LINES_CASING_LAYER_ID,
+      id: RAIL_VECTOR_FALLBACK_LAYER_ID,
+      type: "raster",
+      source: RAIL_VECTOR_FALLBACK_SOURCE_ID,
+      maxzoom: RAIL_VECTOR_MIN_ZOOM,
+      paint: { "raster-opacity": opacity, "raster-fade-duration": 0 },
+    });
+  }
+  if (!map.getSource(RAIL_VECTOR_SOURCE_ID)) {
+    map.addSource(RAIL_VECTOR_SOURCE_ID, {
+      type: "vector",
+      tiles: [RAIL_VECTOR_TILE_URL],
+      minzoom: RAIL_VECTOR_MIN_ZOOM,
+      maxzoom: RAIL_VECTOR_MAX_ZOOM,
+      attribution: RAIL_VECTOR_ATTRIBUTION,
+    });
+  }
+
+  if (!map.getLayer(RAIL_VECTOR_CASING_LAYER_ID)) {
+    map.addLayer({
+      id: RAIL_VECTOR_CASING_LAYER_ID,
       type: "line",
-      source: RAIL_LINES_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_LINES_LAYER,
+      minzoom: RAIL_VECTOR_MIN_ZOOM,
+      filter: ["==", ["get", "kind"], "rail"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": THEME.casing,
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
-          9, 1.8,
-          12, 2.8,
-          16, 4,
+          4, 1.3,
+          8, 2.0,
+          12, 3.2,
+          16, 4.8,
         ],
         "line-opacity": opacity,
       },
     });
   }
-  if (!map.getLayer(RAIL_LINES_MAIN_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_LINES_MAIN_LAYER_ID,
+      id: RAIL_VECTOR_MAIN_LAYER_ID,
       type: "line",
-      source: RAIL_LINES_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_LINES_LAYER,
+      minzoom: RAIL_VECTOR_MIN_ZOOM,
+      filter: ["==", ["get", "kind"], "rail"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": [
           "match",
-          ["get", "kind"],
-          "rail", THEME.accent,
+          ["get", "kind_detail"],
           "light_rail", THEME.lightRail,
           "subway", THEME.lightRail,
           "tram", THEME.tram,
           "narrow_gauge", THEME.narrowGauge,
-          THEME.accent,
+          "monorail", THEME.narrowGauge,
+          THEME.info,
         ],
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
-          9, 0.6,
-          12, 1.2,
-          16, 2,
+          4, 0.55,
+          8, 0.95,
+          12, 1.65,
+          16, 2.8,
         ],
         "line-opacity": opacity,
         "line-dasharray": [
           "case",
-          ["==", ["get", "tunnel"], true], ["literal", [2, 2]],
+          ["==", ["get", "is_tunnel"], true], ["literal", [2, 2]],
           ["literal", [1, 0]],
         ],
       },
     });
   }
-}
 
-function updateRailLinesOpacity(map: MLMap, opacity: number) {
-  if (map.getLayer(RAIL_LINES_MAIN_LAYER_ID)) {
-    map.setPaintProperty(RAIL_LINES_MAIN_LAYER_ID, "line-opacity", opacity);
-  }
-  if (map.getLayer(RAIL_LINES_CASING_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_LINES_CASING_LAYER_ID,
-      "line-opacity",
-      opacity,
-    );
-  }
-}
-
-function setRailLinesData(map: MLMap, data: GeoJSON.FeatureCollection) {
-  const src = map.getSource(RAIL_LINES_SOURCE_ID) as unknown as
-    | { setData?: (d: GeoJSON.FeatureCollection) => void }
-    | undefined;
-  if (src?.setData) src.setData(data);
-}
-
-function removeRailLinesLayer(map: MLMap) {
-  if (map.getLayer(RAIL_LINES_MAIN_LAYER_ID))
-    map.removeLayer(RAIL_LINES_MAIN_LAYER_ID);
-  if (map.getLayer(RAIL_LINES_CASING_LAYER_ID))
-    map.removeLayer(RAIL_LINES_CASING_LAYER_ID);
-  if (map.getSource(RAIL_LINES_SOURCE_ID))
-    map.removeSource(RAIL_LINES_SOURCE_ID);
-}
-
-// Stations rendered alongside the rail-lines overlay. Tap = add as waypoint.
-const RAIL_STATIONS_SOURCE_ID = "rail-stations-src";
-const RAIL_STATIONS_DOT_LAYER_ID = "rail-stations-dot";
-const RAIL_STATIONS_HIT_LAYER_ID = "rail-stations-hit";
-const RAIL_STATIONS_LABEL_LAYER_ID = "rail-stations-label";
-const RAIL_STATIONS_MIN_ZOOM = 10;
-
-function ensureRailStationsLayer(map: MLMap) {
-  if (!map.getSource(RAIL_STATIONS_SOURCE_ID)) {
-    map.addSource(RAIL_STATIONS_SOURCE_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-    });
-  }
-  if (!map.getLayer(RAIL_STATIONS_HIT_LAYER_ID)) {
-    // Invisible larger circle to make tap targets thumb-friendly on mobile
+  if (!map.getLayer(RAIL_VECTOR_STATION_HIT_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_STATIONS_HIT_LAYER_ID,
+      id: RAIL_VECTOR_STATION_HIT_LAYER_ID,
       type: "circle",
-      source: RAIL_STATIONS_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_STATIONS_LAYER,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      filter: ["==", ["get", "kind"], "station"],
       paint: {
-        "circle-radius": 16,
+        "circle-radius": 18,
         "circle-color": "transparent",
         "circle-stroke-width": 0,
       },
     });
   }
-  if (!map.getLayer(RAIL_STATIONS_DOT_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_STATION_DOT_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_STATIONS_DOT_LAYER_ID,
+      id: RAIL_VECTOR_STATION_DOT_LAYER_ID,
       type: "circle",
-      source: RAIL_STATIONS_SOURCE_ID,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_STATIONS_LAYER,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      filter: ["==", ["get", "kind"], "station"],
       paint: {
         "circle-radius": [
           "interpolate", ["linear"], ["zoom"],
@@ -486,22 +493,25 @@ function ensureRailStationsLayer(map: MLMap) {
         "circle-color": THEME.accent,
         "circle-stroke-color": THEME.casing,
         "circle-stroke-width": 1.5,
-        "circle-opacity": 0.95,
+        "circle-opacity": opacity,
       },
     });
   }
-  if (!map.getLayer(RAIL_STATIONS_LABEL_LAYER_ID)) {
+
+  if (!map.getLayer(RAIL_VECTOR_STATION_LABEL_LAYER_ID)) {
     map.addLayer({
-      id: RAIL_STATIONS_LABEL_LAYER_ID,
+      id: RAIL_VECTOR_STATION_LABEL_LAYER_ID,
       type: "symbol",
-      source: RAIL_STATIONS_SOURCE_ID,
-      minzoom: 10,
+      source: RAIL_VECTOR_SOURCE_ID,
+      "source-layer": RAIL_VECTOR_STATIONS_LAYER,
+      minzoom: 11,
+      filter: ["==", ["get", "kind"], "station"],
       layout: {
-        "text-field": ["get", "name"],
+        "text-field": ["coalesce", ["get", "name"], ""],
         "text-font": ["Noto Sans Regular"],
         "text-size": [
           "interpolate", ["linear"], ["zoom"],
-          10, 9,
+          11, 9,
           14, 11,
           17, 13,
         ],
@@ -510,162 +520,65 @@ function ensureRailStationsLayer(map: MLMap) {
         "text-optional": true,
         "text-allow-overlap": false,
         "text-padding": 4,
+        "symbol-sort-key": ["coalesce", ["get", "sort_rank"], 0],
       },
       paint: {
         "text-color": THEME.ink,
         "text-halo-color": THEME.casing,
         "text-halo-width": 1.4,
+        "text-opacity": opacity,
       },
     });
   }
 }
 
-function setRailStationsData(map: MLMap, data: GeoJSON.FeatureCollection) {
-  const src = map.getSource(RAIL_STATIONS_SOURCE_ID) as unknown as
-    | { setData?: (d: GeoJSON.FeatureCollection) => void }
-    | undefined;
-  if (src?.setData) src.setData(data);
-}
-
-// ── Tile-based rail cache ───────────────────────────────────────────────
-// Keyed by slippy-map tile coords at a fixed zoom. Each cached tile is a
-// ~80 km × 50 km Overpass response, so any later pan within an
-// already-loaded tile renders instantly from cache. Tile zoom 9 keeps
-// the total request count low (most viewports = 1 tile) at the cost of
-// a bigger response per request, which Overpass handles fine.
-const RAIL_TILE_ZOOM = 9;
-const RAIL_MAX_PARALLEL = 2;
-const RAIL_RATE_LIMIT_BACKOFF_MS = 15_000;
-type RailTileData = {
-  lines: GeoJSON.Feature<GeoJSON.LineString>[];
-  stations: { id: string; name: string; lat: number; lon: number }[];
-};
-const railTileCache = new Map<string, RailTileData>();
-const railTileInFlight = new Set<string>();
-/**
- * Timestamp until which we suspend new Overpass queries because a
- * recent request was rate-limited (429) or had its TCP connection
- * closed mid-flight (ERR_CONNECTION_CLOSED). Without this guard the
- * map would re-issue the failing fetch on every moveend, hammering
- * Overpass and producing the 2-minute "loading" spirals the user saw.
- */
-let railRateLimitedUntil = 0;
-function isRateLimitError(err: unknown): boolean {
-  const msg = (err as Error)?.message ?? "";
-  return (
-    msg.includes("429") ||
-    msg.includes("CONNECTION_CLOSED") ||
-    msg.includes("Failed to fetch") ||
-    msg.includes("NetworkError")
-  );
-}
-
-/**
- * Lightweight pub/sub so React can render a loading badge without
- * polling. Fires whenever a tile fetch starts/finishes or the cooldown
- * flips on/off.
- */
-const railNetworkSubscribers = new Set<() => void>();
-function notifyRailNetworkStatus() {
-  railNetworkSubscribers.forEach((cb) => cb());
-}
-export interface RailNetworkStatus {
-  inFlight: number;
-  cooldownUntil: number;
-}
-function getRailNetworkStatus(): RailNetworkStatus {
-  return {
-    inFlight: railTileInFlight.size,
-    cooldownUntil: railRateLimitedUntil,
-  };
-}
-function subscribeRailNetwork(cb: () => void): () => void {
-  railNetworkSubscribers.add(cb);
-  return () => {
-    railNetworkSubscribers.delete(cb);
-  };
-}
-
-function useRailNetworkStatus(): RailNetworkStatus {
-  const [status, setStatus] = useState<RailNetworkStatus>(() =>
-    getRailNetworkStatus(),
-  );
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      setStatus(getRailNetworkStatus());
-      // While we're in a cooldown window, repaint roughly every second so
-      // the countdown text in the panel ticks down.
-      if (railRateLimitedUntil > Date.now()) {
-        raf = window.setTimeout(update, 500) as unknown as number;
-      }
-    };
-    const unsub = subscribeRailNetwork(update);
-    update();
-    return () => {
-      unsub();
-      if (raf) clearTimeout(raf);
-    };
-  }, []);
-  return status;
-}
-
-function lon2tileX(lon: number, z: number): number {
-  return Math.floor(((lon + 180) / 360) * (1 << z));
-}
-function lat2tileY(lat: number, z: number): number {
-  const rad = (lat * Math.PI) / 180;
-  return Math.floor(
-    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) *
-      (1 << z),
-  );
-}
-function tileX2lon(x: number, z: number): number {
-  return (x / (1 << z)) * 360 - 180;
-}
-function tileY2lat(y: number, z: number): number {
-  const n = Math.PI - (2 * Math.PI * y) / (1 << z);
-  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-}
-function railTileBbox(
-  z: number,
-  x: number,
-  y: number,
-): [number, number, number, number] {
-  // Overpass order: [south, west, north, east]
-  return [
-    tileY2lat(y + 1, z),
-    tileX2lon(x, z),
-    tileY2lat(y, z),
-    tileX2lon(x + 1, z),
-  ];
-}
-function tilesForBounds(
-  bounds: maplibregl.LngLatBounds,
-  z: number,
-): { x: number; y: number }[] {
-  const xMin = lon2tileX(bounds.getWest(), z);
-  const xMax = lon2tileX(bounds.getEast(), z);
-  const yMin = lat2tileY(bounds.getNorth(), z);
-  const yMax = lat2tileY(bounds.getSouth(), z);
-  const out: { x: number; y: number }[] = [];
-  for (let x = xMin; x <= xMax; x += 1) {
-    for (let y = yMin; y <= yMax; y += 1) {
-      out.push({ x, y });
-    }
+function updateRailVectorOpacity(map: MLMap, opacity: number) {
+  if (map.getLayer(RAIL_VECTOR_FALLBACK_LAYER_ID)) {
+    map.setPaintProperty(
+      RAIL_VECTOR_FALLBACK_LAYER_ID,
+      "raster-opacity",
+      opacity,
+    );
   }
-  return out;
+  if (map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
+    map.setPaintProperty(RAIL_VECTOR_MAIN_LAYER_ID, "line-opacity", opacity);
+  }
+  if (map.getLayer(RAIL_VECTOR_CASING_LAYER_ID)) {
+    map.setPaintProperty(RAIL_VECTOR_CASING_LAYER_ID, "line-opacity", opacity);
+  }
+  if (map.getLayer(RAIL_VECTOR_STATION_DOT_LAYER_ID)) {
+    map.setPaintProperty(
+      RAIL_VECTOR_STATION_DOT_LAYER_ID,
+      "circle-opacity",
+      opacity,
+    );
+  }
+  if (map.getLayer(RAIL_VECTOR_STATION_LABEL_LAYER_ID)) {
+    map.setPaintProperty(
+      RAIL_VECTOR_STATION_LABEL_LAYER_ID,
+      "text-opacity",
+      opacity,
+    );
+  }
 }
 
-function removeRailStationsLayer(map: MLMap) {
-  if (map.getLayer(RAIL_STATIONS_LABEL_LAYER_ID))
-    map.removeLayer(RAIL_STATIONS_LABEL_LAYER_ID);
-  if (map.getLayer(RAIL_STATIONS_DOT_LAYER_ID))
-    map.removeLayer(RAIL_STATIONS_DOT_LAYER_ID);
-  if (map.getLayer(RAIL_STATIONS_HIT_LAYER_ID))
-    map.removeLayer(RAIL_STATIONS_HIT_LAYER_ID);
-  if (map.getSource(RAIL_STATIONS_SOURCE_ID))
-    map.removeSource(RAIL_STATIONS_SOURCE_ID);
+function removeRailVectorLayers(map: MLMap) {
+  for (const id of [
+    RAIL_VECTOR_FALLBACK_LAYER_ID,
+    RAIL_VECTOR_STATION_LABEL_LAYER_ID,
+    RAIL_VECTOR_STATION_DOT_LAYER_ID,
+    RAIL_VECTOR_STATION_HIT_LAYER_ID,
+    RAIL_VECTOR_MAIN_LAYER_ID,
+    RAIL_VECTOR_CASING_LAYER_ID,
+  ]) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(RAIL_VECTOR_SOURCE_ID)) {
+    map.removeSource(RAIL_VECTOR_SOURCE_ID);
+  }
+  if (map.getSource(RAIL_VECTOR_FALLBACK_SOURCE_ID)) {
+    map.removeSource(RAIL_VECTOR_FALLBACK_SOURCE_ID);
+  }
 }
 
 // ── History · OpenHistoricalMap basemap swap ──────────────────────────
@@ -1883,15 +1796,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     routesMode === "car" ? "car" : routesMode === "transit" ? "transit" : null,
   );
   useLiveVehiclesLayer(mapInstance);
-  const railNetworkStatus = useRailNetworkStatus();
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
-
-  // One-shot purge of expired rail tiles on mount. Best-effort, no
-  // blocking on the result.
-  useEffect(() => {
-    railTilePurgeExpired().catch(() => {});
-  }, []);
 
   // Long-press anywhere on the map → drop a waypoint at that location.
   useLongPress(mapInstance, true, useCallback((lng: number, lat: number) => {
@@ -2645,165 +2551,31 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     updateRailwayOpacity(map, railwayOpacity);
   }, [railwayOn, railStyle, railwayOpacity]);
 
-  // Combined Overpass effect: fetches rail lines + stations in ONE query and
-  // updates both layers. Halves the request rate and avoids the previous
-  // race where two parallel fetches both hit Overpass and tripped 429s.
+  // Vector rail detail. CARTO/Protomaps tiles stream only the visible,
+  // zoom-generalized features. There is no Overpass request, no multi-MB
+  // z9 batch and no rate-limit cooldown.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const linesActive = railwayOn && railStyle === "lines";
     if (!linesActive) {
-      removeRailLinesLayer(map);
-      removeRailStationsLayer(map);
+      removeRailVectorLayers(map);
       return;
     }
 
-    let cancelled = false;
-    let renderRaf = 0;
-    const inflightControllers = new Set<AbortController>();
-
-    const renderFromCache = () => {
-      if (cancelled) return;
-      if (renderRaf) cancelAnimationFrame(renderRaf);
-      renderRaf = requestAnimationFrame(() => {
-        if (cancelled) return;
-        const z = map.getZoom();
-        if (z < RAIL_LINES_MIN_ZOOM) {
-          setRailLinesData(map, { type: "FeatureCollection", features: [] });
-          setRailStationsData(map, { type: "FeatureCollection", features: [] });
-          return;
-        }
-        const tiles = tilesForBounds(map.getBounds(), RAIL_TILE_ZOOM);
-        const lineFeatures: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-        const lineSeen = new Set<string | number>();
-        const stationFeatures: GeoJSON.Feature[] = [];
-        const stationSeen = new Set<string>();
-        for (const t of tiles) {
-          const data = railTileCache.get(`${t.x}/${t.y}`);
-          if (!data) continue;
-          for (const f of data.lines) {
-            const id = f.properties?.id as string | number | undefined;
-            if (id != null) {
-              if (lineSeen.has(id)) continue;
-              lineSeen.add(id);
-            }
-            lineFeatures.push(f);
-          }
-          for (const s of data.stations) {
-            if (stationSeen.has(s.id)) continue;
-            stationSeen.add(s.id);
-            stationFeatures.push({
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [s.lon, s.lat] },
-              properties: { id: s.id, name: s.name },
-            });
-          }
-        }
-        setRailLinesData(map, {
-          type: "FeatureCollection",
-          features: lineFeatures,
-        });
-        setRailStationsData(map, {
-          type: "FeatureCollection",
-          features: z >= RAIL_STATIONS_MIN_ZOOM ? stationFeatures : [],
-        });
-      });
-    };
-
-    const fetchMissingTiles = () => {
-      if (cancelled) return;
-      if (map.getZoom() < RAIL_LINES_MIN_ZOOM) return;
-      // Honour the rate-limit cooldown — Overpass needs breathing room
-      // after a 429 or a closed connection.
-      const now = Date.now();
-      if (now < railRateLimitedUntil) {
-        const wait = railRateLimitedUntil - now + 50;
-        window.setTimeout(() => {
-          if (!cancelled) fetchMissingTiles();
-        }, wait);
-        return;
-      }
-      const tiles = tilesForBounds(map.getBounds(), RAIL_TILE_ZOOM);
-      const toFetch = tiles.filter((t) => {
-        const key = `${RAIL_TILE_ZOOM}/${t.x}/${t.y}`;
-        return !railTileCache.has(key) && !railTileInFlight.has(key);
-      });
-      const slots = Math.max(0, RAIL_MAX_PARALLEL - railTileInFlight.size);
-      for (const t of toFetch.slice(0, slots)) {
-        const key = `${RAIL_TILE_ZOOM}/${t.x}/${t.y}`;
-        railTileInFlight.add(key);
-        notifyRailNetworkStatus();
-        const ctrl = new AbortController();
-        inflightControllers.add(ctrl);
-        const bbox = railTileBbox(RAIL_TILE_ZOOM, t.x, t.y);
-
-        // Two-tier cache: try IndexedDB first (instant after the user has
-        // visited an area before, even across page reloads). On miss,
-        // fall through to Overpass and persist the result for next time.
-        const handleTile = async () => {
-          let success = false;
-          try {
-            const stored = await railTileGet(key);
-            if (cancelled || ctrl.signal.aborted) return;
-            if (stored) {
-              railTileCache.set(key, {
-                lines: stored.lines,
-                stations: stored.stations,
-              });
-              success = true;
-            } else {
-              const { lines, stations } = await fetchRailNetwork(
-                bbox,
-                ctrl.signal,
-              );
-              if (cancelled || ctrl.signal.aborted) return;
-              railTileCache.set(key, { lines: lines.features, stations });
-              success = true;
-              // Fire-and-forget IDB write; never blocks rendering.
-              railTileSet(key, { lines: lines.features, stations }).catch(
-                () => {},
-              );
-            }
-          } catch (err) {
-            if ((err as Error).name === "AbortError") {
-              // silent
-            } else if (isRateLimitError(err)) {
-              railRateLimitedUntil =
-                Date.now() + RAIL_RATE_LIMIT_BACKOFF_MS;
-            } else {
-              console.warn("[rail-network]", err);
-            }
-          } finally {
-            inflightControllers.delete(ctrl);
-            railTileInFlight.delete(key);
-            notifyRailNetworkStatus();
-            if (success) {
-              renderFromCache();
-              fetchMissingTiles();
-            }
-          }
-        };
-        handleTile();
-      }
-    };
-
-    const onMoveEnd = () => {
-      // Render immediately from whatever's cached; missing tiles fetch
-      // asynchronously in the background and re-render on completion.
-      renderFromCache();
-      fetchMissingTiles();
-    };
-
-    const apply = () => {
-      ensureRailLinesLayer(map, railwayOpacity);
-      ensureRailStationsLayer(map);
-      renderFromCache();
-      fetchMissingTiles();
-    };
+    const apply = () => ensureRailVectorLayers(map, railwayOpacity);
+    if (map.isStyleLoaded()) apply();
+    map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const feats = map.queryRenderedFeatures(e.point, {
-        layers: [RAIL_STATIONS_HIT_LAYER_ID, RAIL_STATIONS_DOT_LAYER_ID],
+        layers: [
+          RAIL_VECTOR_STATION_HIT_LAYER_ID,
+          RAIL_VECTOR_STATION_DOT_LAYER_ID,
+        ],
       });
       if (feats.length === 0) return;
       const f = feats[0];
@@ -2825,34 +2597,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.getCanvas().style.cursor = "";
     };
 
-    if (map.isStyleLoaded()) apply();
-    map.on("style.load", apply);
-    // The initial `style.load` can fire before this effect registers;
-    // `idle` guarantees one more attempt once the map is usable.
-    map.once("idle", apply);
-    map.on("moveend", onMoveEnd);
-    map.on("click", RAIL_STATIONS_HIT_LAYER_ID, onClick);
-    map.on("mouseenter", RAIL_STATIONS_HIT_LAYER_ID, onEnter);
-    map.on("mouseleave", RAIL_STATIONS_HIT_LAYER_ID, onLeave);
+    map.on("click", RAIL_VECTOR_STATION_HIT_LAYER_ID, onClick);
+    map.on("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
+    map.on("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
 
     return () => {
-      cancelled = true;
-      inflightControllers.forEach((c) => c.abort());
-      inflightControllers.clear();
-      if (renderRaf) cancelAnimationFrame(renderRaf);
       map.off("style.load", apply);
-      map.off("moveend", onMoveEnd);
-      map.off("click", RAIL_STATIONS_HIT_LAYER_ID, onClick);
-      map.off("mouseenter", RAIL_STATIONS_HIT_LAYER_ID, onEnter);
-      map.off("mouseleave", RAIL_STATIONS_HIT_LAYER_ID, onLeave);
+      map.off("idle", apply);
+      map.off("click", RAIL_VECTOR_STATION_HIT_LAYER_ID, onClick);
+      map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
+      map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [railwayOn, railStyle, active]);
+  }, [railwayOn, railStyle, active, railwayOpacity]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !railwayOn || railStyle !== "lines") return;
-    updateRailLinesOpacity(map, railwayOpacity);
+    updateRailVectorOpacity(map, railwayOpacity);
   }, [railwayOn, railStyle, railwayOpacity]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────
@@ -3580,7 +3341,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         .queryRenderedFeatures(event.point)
         .some(
           (feature) =>
-            feature.layer?.id === RAIL_STATIONS_HIT_LAYER_ID
+            feature.layer?.id === RAIL_VECTOR_STATION_HIT_LAYER_ID
             || feature.layer?.id === HISTORY_LANDMARKS_HIT_LAYER_ID,
         );
       if (hit) return;
@@ -3724,38 +3485,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           <BasemapSwitch mode={basemapMode} onModeChange={setBasemapMode} />
         </div>
       </div>
-
-      {/* Rail-network loading pill — sits below the floating top bar. */}
-      {railwayOn
-        && railStyle === "lines"
-        && (railNetworkStatus.inFlight > 0
-          || railNetworkStatus.cooldownUntil > Date.now()) && (
-        <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div className="hud-panel hud-mono flex items-center gap-2 px-4 py-2 text-[11.5px] text-[color:var(--ink)]">
-            <span
-              aria-hidden
-              className="hud-loading-dot"
-              data-state={
-                railNetworkStatus.cooldownUntil > Date.now()
-                  ? "throttled"
-                  : "loading"
-              }
-            />
-            <span>
-              {railNetworkStatus.cooldownUntil > Date.now()
-                ? `Overpass throttled · ${Math.max(
-                    0,
-                    Math.ceil(
-                      (railNetworkStatus.cooldownUntil - Date.now()) / 1000,
-                    ),
-                  )}s`
-                : `Loading rails · ${railNetworkStatus.inFlight} tile${
-                    railNetworkStatus.inFlight === 1 ? "" : "s"
-                  }`}
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Desktop: one calm reopen affordance when the panel is closed. */}
       {!sidebarOpen && (
@@ -4047,7 +3776,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onOpacityChange={setRailwayOpacity}
                   railStyle={railStyle}
                   onRailStyleChange={setRailStyle}
-                  railNetworkStatus={railNetworkStatus}
                 />
 
 
@@ -4501,7 +4229,6 @@ interface RailsPanelProps {
   onOpacityChange: (o: number) => void;
   railStyle: "tiles" | "lines";
   onRailStyleChange: (s: "tiles" | "lines") => void;
-  railNetworkStatus: RailNetworkStatus;
 }
 
 function RailsPanel({
@@ -4511,21 +4238,11 @@ function RailsPanel({
   onOpacityChange,
   railStyle,
   onRailStyleChange,
-  railNetworkStatus,
 }: RailsPanelProps) {
-  const cooldownLeft = Math.max(
-    0,
-    Math.ceil((railNetworkStatus.cooldownUntil - Date.now()) / 1000),
-  );
-  const railLineCaption =
-    cooldownLeft > 0
-      ? `Overpass throttled · retrying in ${cooldownLeft}s`
-      : railNetworkStatus.inFlight > 0
-        ? `Loading rails… (${railNetworkStatus.inFlight} tile${railNetworkStatus.inFlight === 1 ? "" : "s"})`
-        : "OSM rail lines · Overpass · cached per tile";
-
   const caption =
-    railStyle === "lines" ? railLineCaption : "OpenRailwayMap raster · OSM";
+    railStyle === "lines"
+      ? "Vector z12+ · ORM raster below · OSM"
+      : "OpenRailwayMap raster · OSM";
 
   return (
     <HudPanel>
@@ -4560,7 +4277,7 @@ function RailsPanel({
                 data-active={railStyle === "lines"}
                 onClick={() => onRailStyleChange("lines")}
               >
-                Lines
+                Vector
               </button>
               <button
                 type="button"
@@ -4594,19 +4311,6 @@ function RailsPanel({
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
-              {railStyle === "lines"
-                        && (railNetworkStatus.inFlight > 0
-                  || railNetworkStatus.cooldownUntil > Date.now()) && (
-                  <span
-                    aria-hidden
-                    className="hud-loading-dot"
-                    data-state={
-                      railNetworkStatus.cooldownUntil > Date.now()
-                        ? "throttled"
-                        : "loading"
-                    }
-                  />
-                )}
               <span>{caption}</span>
             </div>
           </>
