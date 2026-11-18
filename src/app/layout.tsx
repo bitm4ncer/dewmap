@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0e0f0c",
+  themeColor: "#121619",
   width: "device-width",
   initialScale: 1,
   // Keep page zoom available (WCAG 1.4.4); MapLibre owns gestures on the
