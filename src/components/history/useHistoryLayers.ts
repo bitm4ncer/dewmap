@@ -2,7 +2,10 @@
 /* eslint-disable react-hooks/set-state-in-effect -- manifest status is external async state */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import maplibregl, { type Map as MLMap } from "maplibre-gl";
+import maplibregl, {
+  type Map as MLMap,
+  type MapSourceDataEvent,
+} from "maplibre-gl";
 import {
   createHistoryProtocol,
   historyFileUrl,
@@ -206,7 +209,14 @@ export function useHistoryLayers(
     };
 
     const hoverLayers = [...globalLayerIds().clusterDots, globalLayerIds().siteLayer];
+    const siteSource = globalLayerIds().siteSource;
+    const onSourceData = (event: MapSourceDataEvent) => {
+      // `idle` can fire before the vector site source has finished loading,
+      // leaving the panel stuck at 0. Update as soon as that source settles.
+      if (event.sourceId === siteSource && event.isSourceLoaded) updateCount();
+    };
     map.on("idle", updateCount);
+    map.on("sourcedata", onSourceData);
     map.on("click", onClick);
     map.on("mouseenter", hoverLayers, onEnter);
     map.on("mouseleave", hoverLayers, onLeave);
@@ -315,6 +325,7 @@ export function useHistoryLayers(
       window.clearTimeout(timeout);
       controller.abort();
       map.off("idle", updateCount);
+      map.off("sourcedata", onSourceData);
       map.off("click", onClick);
       map.off("mouseenter", hoverLayers, onEnter);
       map.off("mouseleave", hoverLayers, onLeave);
