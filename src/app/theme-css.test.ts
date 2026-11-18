@@ -36,9 +36,11 @@ describe("flat CSS invariants", () => {
     expect(bad).toEqual([]);
   });
 
-  it("keeps geolocate icons dark on the accent fill", () => {
+  it("keeps the active geolocate icon light on its soft accent fill", () => {
+    const button = blocks.find((b) => b.selector.includes("geolocate-active,"));
     const rule = blocks.find((b) => b.selector.includes("geolocate-active .maplibregl-ctrl-icon"));
-    expect(rule?.body).toContain("brightness(0)");
+    expect(button?.body).toContain("var(--accent-soft)");
+    expect(rule?.body).toContain("invert(1)");
   });
 
   it("gives the search field the full pill height", () => {

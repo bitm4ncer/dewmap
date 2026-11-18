@@ -393,7 +393,7 @@ export function PlacePicker({
             disabled={locating}
             aria-label="Use my location"
             title="Use my location"
-            className="ui-input-action"
+            className="ui-input-action text-[color:var(--ink)]"
           >
             {locating ? "…" : <RecenterIcon size={15} />}
           </button>

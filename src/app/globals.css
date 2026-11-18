@@ -752,13 +752,13 @@ input[type="range"].hud-slider::-moz-range-thumb {
   filter: invert(1) brightness(0.92);
 }
 
-.maplibregl-ctrl-geolocate-active,
-.maplibregl-ctrl-geolocate-background {
-  background: var(--accent) !important;
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active,
+.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-background {
+  background: var(--accent-soft) !important;
 }
 .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
 .maplibregl-ctrl-geolocate-background .maplibregl-ctrl-icon {
-  filter: brightness(0) !important;
+  filter: brightness(0) invert(1) !important;
 }
 
 .maplibregl-ctrl-projection {
