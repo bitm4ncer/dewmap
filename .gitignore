@@ -45,3 +45,7 @@ next-env.d.ts
 
 # Local git worktrees
 .worktrees/
+
+# Generated history data (built by the data workflow, not committed)
+public/data/history/
+tmp/history/
