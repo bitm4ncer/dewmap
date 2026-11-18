@@ -38,6 +38,13 @@ describe("flat CSS invariants", () => {
     expect(rule?.body).toContain("brightness(0)");
   });
 
+  it("keeps search focus soft and free of an inner ring", () => {
+    const pill = blocks.find((b) => b.selector === ".ui-search-pill:focus-within");
+    expect(pill?.body).toContain("var(--accent-soft)");
+    expect(pill?.body).not.toContain("0 0 0 2px var(--surf-0)");
+    expect(css).toContain(".ui-search-pill input:focus-visible");
+  });
+
   it("keeps the focus ring visible inside clipped containers", () => {
     for (const sel of [".hud-tab-row:focus-within", ".hud-basemap-switch:focus-within", ".ui-search-dropdown:focus-within"]) {
       expect(css).toContain(sel);

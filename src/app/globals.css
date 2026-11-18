@@ -1298,10 +1298,20 @@ input[type="range"].hud-slider::-moz-range-thumb {
   border-radius: var(--r-pill);
   background: var(--glass);
   backdrop-filter: blur(18px) saturate(1.08);
-  transition: box-shadow var(--dur-fast) var(--ease);
+  transition:
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
 .ui-search-pill:focus-within {
-  box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent);
+  background: var(--glass-strong);
+  box-shadow:
+    0 0 0 3px var(--accent-soft),
+    0 0 22px -6px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+/* The pill owns the focus state; no second ring inside the field. */
+.ui-search-pill input:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 .ui-search-pill input {
   min-width: 0;
