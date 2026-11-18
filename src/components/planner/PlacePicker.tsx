@@ -288,6 +288,7 @@ export function PlacePicker({
 
   return (
     <div ref={boxRef} className="relative min-w-0 flex-1">
+      <div className="relative">
       <input
         ref={inputRef}
         type="text"
@@ -336,9 +337,9 @@ export function PlacePicker({
         autoComplete="off"
         spellCheck={false}
         enterKeyHint="search"
-        className="ui-input pr-10"
+        className="ui-input pr-11"
       />
-      <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center">
+      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center">
         {busy || locating ? (
           <span className="px-1 text-[11px] text-[color:var(--ink-mute)]" aria-hidden>
             …
@@ -348,11 +349,12 @@ export function PlacePicker({
             type="button"
             onClick={clear}
             aria-label="Clear place"
-            className="grid h-8 w-8 place-items-center rounded-full text-[color:var(--ink-mute)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
+            className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
           >
-            <CloseIcon size={14} />
+            <CloseIcon size={16} />
           </button>
         ) : null}
+      </div>
       </div>
 
       <div className="mt-1 flex flex-wrap items-center gap-1">

@@ -38,6 +38,8 @@ import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
+import { edgeIndicator } from "@/lib/map/edgeIndicator";
+import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
@@ -1572,6 +1574,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // effect so it doesn't fight finger-driven panning.
   const interactingRef = useRef(false);
   const [livePos, setLivePos] = useState<[number, number] | null>(null);
+  const edgeRef = useRef<HTMLButtonElement | null>(null);
+  const fromMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const toMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const transitFrom = useTransit((s) => s.from);
+  const transitTo = useTransit((s) => s.to);
   const [liveHeadingDeg, setLiveHeadingDeg] = useState<number | null>(null);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(0);
   const [historyEarliestYear, setHistoryEarliestYear] = useState<number | null>(
@@ -1753,8 +1760,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setSheetState("half");
   }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
-  const [geoStatus, setGeoStatus] = useState<string | null>(null);
-  const [geoHeading, setGeoHeading] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
   const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
@@ -1762,6 +1767,92 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     onChange: setSheetState,
     enabled: isMobile,
   });
+
+  // A/B markers for points chosen with the "Map" button.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    const sync = (
+      place: typeof transitFrom,
+      label: string,
+      ref: React.MutableRefObject<maplibregl.Marker | null>,
+    ) => {
+      if (!place || place.name !== "Map point") {
+        ref.current?.remove();
+        ref.current = null;
+        return;
+      }
+      if (!ref.current) {
+        const el = document.createElement("div");
+        el.className = "transit-endpoint-marker";
+        el.textContent = label;
+        ref.current = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat([place.lon, place.lat])
+          .addTo(map);
+      } else {
+        ref.current.setLngLat([place.lon, place.lat]);
+      }
+    };
+    sync(transitFrom, "A", fromMarkerRef);
+    sync(transitTo, "B", toMarkerRef);
+  }, [mapInstance, transitFrom, transitTo]);
+
+  useEffect(
+    () => () => {
+      fromMarkerRef.current?.remove();
+      toMarkerRef.current?.remove();
+    },
+    [],
+  );
+
+  // Edge arrow pointing at the live position while it is off the map area.
+  useEffect(() => {
+    const map = mapInstance;
+    const el = edgeRef.current;
+    if (!map || !el) return;
+    const update = () => {
+      if (!livePos || (isMobile && sheetState === "full")) {
+        el.dataset.visible = "false";
+        return;
+      }
+      const rect = map.getContainer().getBoundingClientRect();
+      const sheet = isMobile
+        ? document.querySelector<HTMLElement>(".hud-bottom-sheet")
+        : null;
+      const sheetTop = sheet
+        ? sheet.getBoundingClientRect().top
+        : rect.bottom;
+      const insets = {
+        top: 72,
+        right: isMobile ? 14 : sidebarOpen ? 392 : 14,
+        bottom: Math.max(14, rect.bottom - sheetTop + 10),
+        left: 14,
+      };
+      const projected = map.project(livePos);
+      const hint = edgeIndicator(
+        projected,
+        { width: rect.width, height: rect.height },
+        insets,
+      );
+      if (!hint) {
+        el.dataset.visible = "false";
+        return;
+      }
+      el.dataset.visible = "true";
+      el.style.left = `${hint.x}px`;
+      el.style.top = `${hint.y}px`;
+      el.style.transform = `translate(-50%, -50%) rotate(${hint.angle}deg)`;
+    };
+    update();
+    for (const event of ["move", "zoom", "rotate", "pitch", "resize"]) {
+      map.on(event as "move", update);
+    }
+    return () => {
+      for (const event of ["move", "zoom", "rotate", "pitch", "resize"]) {
+        map.off(event as "move", update);
+      }
+    };
+  }, [mapInstance, livePos, isMobile, sidebarOpen, sheetState]);
 
   useHikingLayers(mapInstance, routesMode === "walk" || routesMode === "bike");
   usePlannerLayers(
@@ -1961,7 +2052,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
 
     if (process.env.NODE_ENV !== "production") {
-      (window as unknown as { __map: MLMap }).__map = map;
     }
 
     // MapLibre sometimes leaves stale tile-load promises behind after a
@@ -2158,7 +2248,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       // the marker rotation perceptibly smooth (DOM rotation is
       // applied on every tick, only state updates throttle).
       let lastRoundedState = -999;
-      const unsub = subscribeCompass((heading, accuracy) => {
+      const unsub = subscribeCompass((heading) => {
         const m = liveMarkerRef.current;
         const c = coneRef.current;
         if (!m || !c) return;
@@ -2170,13 +2260,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         if (Math.abs(rounded - lastRoundedState) < 2) return;
         lastRoundedState = rounded;
         setLiveHeadingDeg(rounded);
-        const accStr =
-          accuracy === -1
-            ? " (uncal)"
-            : typeof accuracy === "number" && accuracy >= 0
-              ? ` ±${Math.round(accuracy)}°`
-              : "";
-        setGeoHeading(`${rounded}°${accStr}`);
       });
       compassUnsubRef.current = unsub;
     };
@@ -2189,7 +2272,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const onGeolocate = (e: { coords: GeolocationCoordinates }) => {
       showMarkerAt(e.coords.longitude, e.coords.latitude);
       setLivePos([e.coords.longitude, e.coords.latitude]);
-      setGeoStatus(`Located · ±${Math.round(e.coords.accuracy)}m`);
       // Kick off compass on the FIRST position lock even if the user
       // didn't click the geolocate button (auto-trigger on app launch).
       // On iOS the permission request will silently fail outside of a
@@ -2205,56 +2287,25 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
     };
 
-    const onTrackStart = () => {
-      setGeoStatus("Requesting location…");
-    };
-
-    const onGeoError = (e: {
-      error?: { message?: string; code?: number };
-      message?: string;
-    }) => {
-      const code = e.error?.code;
-      if (code === 1) {
-        setGeoStatus(
-          "Location denied. Allow in browser/iOS settings, then reload.",
-        );
-      } else if (code === 2) {
-        setGeoStatus("Location unavailable. Check signal or try again.");
-      } else if (code === 3) {
-        setGeoStatus("Location timed out. Tap the button again.");
-      } else {
-        const msg = e.error?.message ?? e.message ?? "unknown";
-        setGeoStatus(`Location error: ${msg}`);
-      }
-    };
-
     const onTrackEnd = () => {
-      // Hide the marker but keep the DOM around so re-tracking is
-      // instant — the marker just reappears at the next geolocate
-      // event without a fresh create/attach cycle.
-      root.style.visibility = "hidden";
-      if (cone) cone.hidden = true;
+      // The camera moved while tracking: MapLibre switches to background
+      // mode. The dot and livePos keep updating; only compass following
+      // ends. Clearing livePos here would hide the edge arrow exactly
+      // when the user pans away from their position.
       if (compassUnsubRef.current) {
         compassUnsubRef.current();
         compassUnsubRef.current = null;
       }
       compassStarted = false;
-      setGeoStatus(null);
-      setGeoHeading(null);
-      setLivePos(null);
-      setLiveHeadingDeg(null);
     };
 
     geo.on("geolocate", onGeolocate);
-    geo.on("trackuserlocationstart", onTrackStart);
     geo.on("trackuserlocationend", onTrackEnd);
-    geo.on("error", onGeoError);
 
     const btn = document.querySelector<HTMLButtonElement>(
       ".maplibregl-ctrl-geolocate",
     );
     const onBtnClick = () => {
-      setGeoStatus("Requesting location…");
       void startCompassSubscription();
       panToNextFix = true;
     };
@@ -2262,9 +2313,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     return () => {
       geo.off("geolocate", onGeolocate);
-      geo.off("trackuserlocationstart", onTrackStart);
       geo.off("trackuserlocationend", onTrackEnd);
-      geo.off("error", onGeoError);
       map.off("zoom", applyScale);
       btn?.removeEventListener("click", onBtnClick);
       if (compassUnsubRef.current) {
@@ -2280,8 +2329,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       scalerRef.current = null;
       setLivePos(null);
       setLiveHeadingDeg(null);
-      setGeoStatus(null);
-      setGeoHeading(null);
     };
   }, []);
 
@@ -3328,6 +3375,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       data-navigating={navActive}
     >
       <div ref={containerRef} className="h-full w-full" />
+      <button
+        ref={edgeRef}
+        type="button"
+        className="map-edge-hint"
+        aria-label="Show my location"
+        onClick={() => {
+          if (!mapInstance || !livePos) return;
+          mapInstance.flyTo({
+            center: livePos,
+            zoom: Math.max(mapInstance.getZoom(), 14),
+            duration: 700,
+          });
+        }}
+      >
+        <ChevronRightIcon size={18} />
+      </button>
 
       {/* Floating top bar — search, and (desktop only) the basemap-mode
           switch. On phones the Map tab owns basemap chrome, so the search
@@ -3371,36 +3434,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     railNetworkStatus.inFlight === 1 ? "" : "s"
                   }`}
             </span>
-          </div>
-        </div>
-      )}
-
-      {/* geolocate status banner — top-centre on mobile (clear of the
-          attribution / scale / zoom controls at the bottom), bottom-
-          centre on desktop where the side-drawer leaves the bottom
-          edge free. */}
-      {(geoStatus || geoHeading) && (
-        <div className="pointer-events-auto absolute left-1/2 z-20 -translate-x-1/2 top-[calc(env(safe-area-inset-top,0px)+62px)] md:top-auto md:bottom-3">
-          <div className="hud-panel flex max-w-[calc(100vw-1.5rem)] items-center gap-2 px-3 py-2 text-[12px] text-[color:var(--ink)]">
-            {geoStatus && <span className="hud-mono min-w-0 break-words">{geoStatus}</span>}
-            {geoHeading && (
-              <span className="hud-mono shrink-0 text-[color:var(--accent)]">
-                · {geoHeading}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setGeoStatus(null);
-                setGeoHeading(null);
-              }}
-              aria-label="Dismiss location status"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--accent)]"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
           </div>
         </div>
       )}

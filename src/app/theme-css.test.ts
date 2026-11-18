@@ -83,7 +83,7 @@ describe("flat CSS invariants", () => {
   it("uses the warm locator only for own position", () => {
     const users = blocks.filter((b) => b.body.includes("var(--locator)"));
     expect(users.length).toBeGreaterThan(0);
-    expect(users.every((b) => /live-location|user-location-accuracy/.test(b.selector))).toBe(true);
+    expect(users.every((b) => /live-location|user-location-accuracy|map-edge-hint/.test(b.selector))).toBe(true);
   });
 
   it("pulses the locator slowly to 1.5", () => {

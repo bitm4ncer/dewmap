@@ -231,6 +231,35 @@ body {
 }
 .live-location-arrow[hidden] { display: none; }
 
+.map-edge-hint {
+  display: none;
+  position: absolute;
+  z-index: 16;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--glass-strong);
+  backdrop-filter: blur(18px) saturate(1.08);
+  color: var(--locator);
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+.map-edge-hint[data-visible="true"] { display: grid; }
+.transit-endpoint-marker {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 0 0 2.5px #ffffff;
+}
+
 
 .maplibregl-user-location-dot,
 .maplibregl-user-location-dot::after,
