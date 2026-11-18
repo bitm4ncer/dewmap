@@ -188,10 +188,11 @@ export function useHistoryLayers(
       window.setTimeout(updateCount, 0);
     };
 
+    const hoverLayers = [...globalLayerIds().clusterDots, globalLayerIds().siteLayer];
     map.on("idle", updateCount);
     map.on("click", onClick);
-    map.on("mouseenter", globalLayerIds().siteLayer, onEnter);
-    map.on("mouseleave", globalLayerIds().siteLayer, onLeave);
+    map.on("mouseenter", hoverLayers, onEnter);
+    map.on("mouseleave", hoverLayers, onLeave);
     map.on("style.load", onStyleLoad);
 
     (async () => {
@@ -259,8 +260,8 @@ export function useHistoryLayers(
       cancelled = true;
       map.off("idle", updateCount);
       map.off("click", onClick);
-      map.off("mouseenter", globalLayerIds().siteLayer, onEnter);
-      map.off("mouseleave", globalLayerIds().siteLayer, onLeave);
+      map.off("mouseenter", hoverLayers, onEnter);
+      map.off("mouseleave", hoverLayers, onLeave);
       map.off("style.load", onStyleLoad);
       try {
         removeGlobalLayers(map);
