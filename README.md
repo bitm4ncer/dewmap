@@ -41,7 +41,7 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 |---|---|
 | **Search** | Places, streets and stations via Photon, with detail cards for OSM places: photos, opening hours, contact, website and Wikipedia/Wikidata. |
 | **Basemaps** | Three picker categories: true **Vector** styles (CARTO, OpenFreeMap, VersaTiles), **Drawn** raster cartography (basemap.de, basemap.at, swisstopo, IGN, PDOK, historical scans such as Siegfried, Dufour and État-Major) and **Image** layers (Esri, Sentinel-2, NASA GIBS, orthophotos, Vienna aerial series). Group filters and year variants keep the collection navigable; regional layers only appear while the map centre is inside their coverage. The Graphite-tinted CARTO dark style is the default. |
-| **Places** | Shops, restaurants, museums, sport venues and open spaces appear as small category icons from zoom 15, Google-Maps style. Switch them off under **View → Places**. Place cards open street-level imagery and 360° panoramas from Panoramax when available. **View → Street View coverage** shows Panoramax picture coverage for the current viewport at city zoom; tap a green point or cluster to open it. |
+| **Places** | Shops, restaurants, museums, sport venues and open spaces appear as small category icons from zoom 15, Google-Maps style. Switch them off under **View → Places**. |
 | **Modes** | Image, Hybrid (satellite plus transport) and Vector. |
 | **Projection** | Flat Mercator or a 3D globe. |
 | **Orientation** | North-up, route-up or compass heading. |
@@ -109,7 +109,6 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 | [Nominatim](https://nominatim.org/) | Place details, opening hours, contact tags and addresses |
 | [Wikipedia · Wikidata](https://www.wikidata.org/) | Descriptions, dates, websites and social profiles |
 | [Wikimedia Commons](https://commons.wikimedia.org/) | Place photos with licence links |
-| [Panoramax](https://panoramax.fr/) | Open street-level imagery and 360° panoramas for Street View |
 | [OpenHistoricalMap](https://www.openhistoricalmap.org/) | Historical basemap and time-filtered map data |
 | [GBIF](https://www.gbif.org/) | Species occurrences |
 | [Global Forest Watch](https://www.globalforestwatch.org/) | Forest loss |

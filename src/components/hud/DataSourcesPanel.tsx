@@ -77,12 +77,6 @@ const SOURCES: Source[] = [
     href: "https://commons.wikimedia.org/",
   },
   {
-    name: "Panoramax",
-    detail:
-      "Open street-level imagery and 360° panoramas for Street View in place cards and the optional coverage layer. Imagery is CC BY-SA 4.0 or Licence Ouverte.",
-    href: "https://panoramax.fr/",
-  },
-  {
     name: "PMTiles · Tippecanoe",
     detail:
       "Static tile archive format and the build tool that packages the worldwide heritage layer.",

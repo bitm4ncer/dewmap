@@ -20,7 +20,6 @@ export type {
   PoiSelection,
   PoiSocial,
 } from "./types";
-export type { PanoramaxStreetView } from "./panoramax";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 const STORAGE_PREFIX = "kugelmaps.poi.v2.";

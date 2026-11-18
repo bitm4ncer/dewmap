@@ -1,11 +1,9 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- remote OSM/Wikimedia photos with unknown dimensions */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchPoiDetails } from "@/lib/poi";
-import type { PanoramaxStreetView, PoiDetails, PoiSelection } from "@/lib/poi";
-import { findPanoramaxStreetView } from "@/lib/poi/panoramax";
-import { PanoramaViewer } from "./PanoramaViewer";
+import type { PoiDetails, PoiSelection } from "@/lib/poi";
 import { parseOpeningHours } from "@/lib/poi/openingHours";
 import {
   createSpring,
@@ -59,24 +57,6 @@ function categoryLabel(value: string | undefined): string {
   return raw.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function StreetViewIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="4.2" r="2.2" fill="currentColor" />
-      <path
-        d="M8.2 9.2c0-1.2 1-2.2 2.2-2.2h3.2c1.2 0 2.2 1 2.2 2.2v2.8c0 .8-.6 1.4-1.4 1.4h-.3v5.5c0 .8-.6 1.4-1.4 1.4s-1.4-.6-1.4-1.4v-3.3h-.6v3.3c0 .8-.6 1.4-1.4 1.4s-1.4-.6-1.4-1.4v-5.5h-.3c-.8 0-1.4-.6-1.4-1.4V9.2Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 function safeInsetBottom(): number {
   if (typeof document === "undefined") return 0;
   const probe = document.createElement("div");
@@ -104,8 +84,6 @@ function PoiDetailContent({
   const [expanded, setExpanded] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [streetView, setStreetView] = useState<PanoramaxStreetView | null>(null);
-  const [streetViewOpen, setStreetViewOpen] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{
     mode: "compact" | "expanded";
@@ -141,18 +119,6 @@ function PoiDetailContent({
       });
     return () => ctrl.abort();
   }, [selection, reload]);
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    findPanoramaxStreetView(selection.lon, selection.lat, ctrl.signal)
-      .then((value) => {
-        if (!ctrl.signal.aborted) setStreetView(value);
-      })
-      .catch(() => {
-        // A missing Street View must never block the place card.
-      });
-    return () => ctrl.abort();
-  }, [selection.lon, selection.lat]);
 
   useEffect(() => {
     cardRef.current?.focus({ preventScroll: true });
@@ -442,16 +408,6 @@ function PoiDetailContent({
     closeCard();
   };
 
-  const closeStreetView = useCallback(() => {
-    setStreetViewOpen(false);
-  }, []);
-
-  const openStreetView = useCallback(() => {
-    if (!streetView) return;
-    haptic("tap");
-    setStreetViewOpen(true);
-  }, [streetView]);
-
   const planRoute = () => {
     haptic("tap");
     onPlanRoute?.(routeSelection);
@@ -547,30 +503,17 @@ function PoiDetailContent({
                 )}
               </span>
             </button>
-            {(onPlanRoute || streetView) && (
+            {onPlanRoute && (
               <div className="poi-mini-secondary">
-                {onPlanRoute && (
-                  <button
-                    type="button"
-                    className="poi-mini-subbtn"
-                    onClick={planRoute}
-                    aria-label="Plan route"
-                    title="Plan route"
-                  >
-                    <RouteIcon size={15} />
-                  </button>
-                )}
-                {streetView && (
-                  <button
-                    type="button"
-                    className="poi-mini-subbtn"
-                    onClick={openStreetView}
-                    aria-label="Open Street View"
-                    title="Open Panoramax Street View"
-                  >
-                    <StreetViewIcon size={15} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="poi-mini-subbtn"
+                  onClick={planRoute}
+                  aria-label="Plan route"
+                  title="Plan route"
+                >
+                  <RouteIcon size={15} />
+                </button>
               </div>
             )}
           </div>
@@ -776,17 +719,6 @@ function PoiDetailContent({
                     >
                       <RouteIcon size={16} />
                       Plan Route
-                    </button>
-                  )}
-                  {streetView && (
-                    <button
-                      type="button"
-                      className="poi-action"
-                      onClick={openStreetView}
-                      title="Open Panoramax Street View"
-                    >
-                      <StreetViewIcon />
-                      Street View
                     </button>
                   )}
                   {details.website && (
@@ -997,13 +929,6 @@ function PoiDetailContent({
         </div>
       )}
       </section>
-      {streetViewOpen && streetView && (
-        <PanoramaViewer
-          streetView={streetView}
-          title={details?.name ?? name}
-          onClose={closeStreetView}
-        />
-      )}
     </>
   );
 }
