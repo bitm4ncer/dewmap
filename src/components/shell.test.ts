@@ -26,6 +26,12 @@ describe("shell", () => {
     expect(retries.length).toBeGreaterThanOrEqual(5);
   });
 
+  it("puts the desktop header above the pane tabs", () => {
+    expect(map.indexOf('className="ui-panel-header hidden md:flex"')).toBeLessThan(
+      map.indexOf('className="hud-panel-tabs"'),
+    );
+  });
+
   it("uses live-capable overlay endpoints", () => {
     expect(map).not.toContain("__map");
     expect(map).toContain("mapproxy.terrascope.be");

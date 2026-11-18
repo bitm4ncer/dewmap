@@ -99,7 +99,7 @@ body {
   --topbar-h:     calc(56px + var(--safe-top));
   --hud-topbar-h: var(--topbar-h);
   --hud-nav-h:    calc(56px + var(--safe-bottom));
-  --hud-peek-h:   calc(76px + var(--safe-bottom));
+  --hud-peek-h:   calc(88px + var(--safe-bottom));
   --panel-w:      380px;
 
   /* Z scale */
@@ -398,7 +398,7 @@ body {
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     contain: layout paint;
     transition: height var(--dur-slow) var(--ease);
-    --hud-peek-h: calc(76px + var(--safe-bottom));
+    --hud-peek-h: calc(88px + var(--safe-bottom));
   }
 
   .hud-bottom-sheet[data-dragging="true"] {
@@ -428,7 +428,9 @@ body {
 .hud-sheet-tabs {
   display: none;
   gap: var(--sp-1);
-  padding: 0 var(--sp-2);
+  /* The bottom pad is outside the scroll container, so content cannot
+     slide up into the gap while the panel is scrolled. */
+  padding: 0 var(--sp-2) var(--sp-3);
   flex-shrink: 0;
 }
 
@@ -605,6 +607,7 @@ body {
      The active tab already names the pane. */
   .hud-bottom-sheet .pane-tape { display: none; }
   .hud-bottom-sheet .ui-panel-header { display: none; }
+  .hud-bottom-sheet .ui-panel-body { padding-top: 0; }
   .hud-btn-ghost { min-width: 44px; min-height: 44px; width: auto; padding-inline: 12px; }
   .hud-btn-primary { min-height: 44px; padding: 0 20px; font-size: 13.5px; }
   .hud-basemap-btn { padding: var(--sp-2) var(--sp-4); font-size: 13px; }
@@ -1254,12 +1257,9 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 /* Scrollbar */
-.hud-scrollbar { scrollbar-width: thin; scrollbar-color: var(--ink-mute) transparent; }
-.hud-scrollbar::-webkit-scrollbar { width: 6px; }
-.hud-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--ink-mute);
-  border-radius: 9999px;
-}
+/* No scrollbar rail on the floating panel: the rounded card stays clean. */
+.hud-scrollbar { scrollbar-width: none; }
+.hud-scrollbar::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
 /* Kill the legacy scanlines class — no decorative texture in the new system */
 .hud-scanlines { background-image: none; }
@@ -2153,5 +2153,16 @@ input[type="range"].hud-slider::-moz-range-thumb {
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .map-overlay-badges {
     opacity: 0;
     pointer-events: none;
+  }
+}
+
+
+/* Desktop: the drawer covers the map's right edge, so keep the map
+   attribution on the visible part instead of underneath the panel. */
+@media (min-width: 768px) {
+  [data-panel-open="true"] .maplibregl-ctrl-bottom-right {
+    right: calc(var(--panel-w) + 24px) !important;
+    left: auto !important;
+    align-items: flex-end;
   }
 }

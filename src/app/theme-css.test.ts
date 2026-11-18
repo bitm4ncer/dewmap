@@ -186,6 +186,14 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
   });
 
+  it("keeps a fixed gap under the mobile sheet tabs", () => {
+    const tabs = blocks.find(
+      (b) => b.selector.trim().endsWith(".hud-sheet-tabs"),
+    );
+    expect(tabs?.body).toContain("padding: 0 var(--sp-2) var(--sp-3)");
+    expect(css).toContain(".hud-bottom-sheet .ui-panel-body { padding-top: 0; }");
+  });
+
   it("stacks active overlay badges above the locate control", () => {
     expect(block(".map-overlay-badges")?.body).toContain("display: none");
     expect(
@@ -210,6 +218,11 @@ describe("sheet chrome and compact date field", () => {
     expect(
       blocks.some((b) => b.body.includes("translateY(-50%)")),
     ).toBe(true);
+  });
+
+  it("keeps desktop attribution left of the open drawer", () => {
+    expect(css).toContain('[data-panel-open="true"] .maplibregl-ctrl-bottom-right');
+    expect(css).toContain("right: calc(var(--panel-w) + 24px)");
   });
 
   it("keeps map attribution clear of the right-side map controls", () => {

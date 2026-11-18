@@ -3559,6 +3559,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     <div
       className="relative h-full w-full"
       data-navigating={navActive}
+      data-panel-open={sidebarOpen ? "true" : undefined}
     >
       <div ref={containerRef} className="h-full w-full" />
       <button
@@ -3735,29 +3736,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           inert={!sidebarOpen}
           aria-hidden={!sidebarOpen}
         >
-          {/* Desktop pane switcher lives inside the panel. */}
-          <div className="hidden px-4 md:block">
-            <nav className="hud-panel-tabs" aria-label="Panel switcher">
-              {SIDEBAR_PANES.map((p) => (
-                <PaneToggle
-                  key={p.key}
-                  active={activePane === p.key && sidebarOpen}
-                  label={p.label}
-                  onToggle={() => selectPane(p.key)}
-                  variant="panel"
-                    >
-                  {p.icon}
-                </PaneToggle>
-              ))}
-            </nav>
-          </div>
-
           <div className="ui-panel-header hidden md:flex">
             <h2 className="ui-panel-title">
               {activePane === "hiking"
                 ? "Routes"
                 : activePane === "biosphere"
-                  ? "Biosphere"
+                  ? "Nature"
                   : activePane === "history"
                     ? "History"
                     : "Map"}
@@ -3788,6 +3772,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 </svg>
               </button>
             </div>
+          </div>
+
+          {/* Desktop pane switcher lives inside the panel. */}
+          <div className="hidden px-4 md:block">
+            <nav className="hud-panel-tabs" aria-label="Panel switcher">
+              {SIDEBAR_PANES.map((p) => (
+                <PaneToggle
+                  key={p.key}
+                  active={activePane === p.key && sidebarOpen}
+                  label={p.label}
+                  onToggle={() => selectPane(p.key)}
+                  variant="panel"
+                    >
+                  {p.icon}
+                </PaneToggle>
+              ))}
+            </nav>
           </div>
 
           <div className="hud-scrollbar ui-panel-body">
