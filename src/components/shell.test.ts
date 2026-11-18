@@ -21,6 +21,11 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("retries overlay layers once the map becomes idle", () => {
+    const retries = map.match(/map\.once\("idle", apply\)/g) ?? [];
+    expect(retries.length).toBeGreaterThanOrEqual(5);
+  });
+
   it("uses live-capable overlay endpoints", () => {
     expect(map).not.toContain("__map");
     expect(map).toContain("mapproxy.terrascope.be");

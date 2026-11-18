@@ -156,6 +156,17 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     visibleJourneys.find((j) => j.id === selectedId)
     ?? visibleJourneys[0]
     ?? null;
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!journey?.id) return;
+    const el = detailRef.current;
+    if (!el) return;
+    const frame = requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [journey?.id]);
   const selectedVia = useMemo(
     () => via.filter((place): place is TransitPlace => place !== null),
     [via],
@@ -613,6 +624,22 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         </div>
       </HudPanel>
 
+      {journey && (
+        <div ref={detailRef} className="scroll-mt-3">
+          <HudPanel>
+            <JourneyDetail
+              journey={journey}
+              onStart={() => startNavigation(journey)}
+              onPreview={() => startNavigation(journey, { simulate: true })}
+              onShare={share}
+              onCalendar={calendar}
+              startDisabled={startDisabled}
+              startHint={startHint}
+            />
+          </HudPanel>
+        </div>
+      )}
+
       <HudPanel>
         <div className="ui-section">
           <span className="ui-kicker">When</span>
@@ -640,7 +667,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
             type="datetime-local"
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            className="ui-input"
+            className="ui-input ui-input-date"
             aria-label="Travel date and time"
           />
           <div className="flex flex-wrap gap-1">
@@ -1015,20 +1042,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
               ))
             )}
           </div>
-        </HudPanel>
-      )}
-
-      {journey && (
-        <HudPanel>
-          <JourneyDetail
-            journey={journey}
-            onStart={() => startNavigation(journey)}
-            onPreview={() => startNavigation(journey, { simulate: true })}
-            onShare={share}
-            onCalendar={calendar}
-            startDisabled={startDisabled}
-            startHint={startHint}
-          />
         </HudPanel>
       )}
 

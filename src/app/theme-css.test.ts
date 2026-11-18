@@ -153,3 +153,16 @@ describe("flat CSS invariants", () => {
     expect(css).not.toContain(".ui-divider");
   });
 });
+
+describe("sheet chrome and compact date field", () => {
+  it("removes the handle and moves the sheet actions left", () => {
+    expect(block(".hud-bottom-sheet-grabber::before")?.body).toContain(
+      "display: none",
+    );
+    expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
+  });
+
+  it("caps the When date field width", () => {
+    expect(block(".ui-input-date")?.body).toContain("max-width: 240px");
+  });
+});

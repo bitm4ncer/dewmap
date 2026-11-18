@@ -540,7 +540,7 @@ body {
 .hud-sheet-actions {
   position: absolute;
   top: 2px;
-  right: 6px;
+  left: var(--sp-2);
   display: flex;
   gap: 2px;
 }
@@ -562,6 +562,7 @@ body {
 .hud-bottom-sheet-grabber:active { cursor: grabbing; }
 .hud-bottom-sheet-grabber::before {
   content: "";
+  display: none;
   width: 34px;
   height: 3px;
   border-radius: 999px;
@@ -1536,6 +1537,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   outline: 0;
 }
 .ui-input::placeholder { color: var(--ink-mute); }
+.ui-input-date { max-width: 240px; }
 .ui-input:focus { box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent); background: var(--surf-3); }
 
 /* FAB ------------------------------------------------------------------ */

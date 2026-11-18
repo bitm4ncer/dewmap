@@ -2281,6 +2281,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     else map.once("style.load", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
   }, [active, mapInstance]);
 
@@ -2441,6 +2442,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
   }, [projection]);
 
@@ -2557,8 +2559,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const apply = () => ensureRailwayLayer(map, railwayOpacity);
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [railwayOn, railStyle, active]);
@@ -2751,6 +2757,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     map.on("moveend", onMoveEnd);
     map.on("click", RAIL_STATIONS_HIT_LAYER_ID, onClick);
     map.on("mouseenter", RAIL_STATIONS_HIT_LAYER_ID, onEnter);
@@ -2803,11 +2812,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speciesOn, active, speciesTaxonKey]);
+  }, [speciesOn, active, speciesTaxonKey, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2852,11 +2865,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forestLossOn, active, forestLossResolved]);
+  }, [forestLossOn, active, forestLossResolved, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3043,6 +3060,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     map.on("moveend", onMoveEnd);
     map.on("click", HISTORY_LANDMARKS_HIT_LAYER_ID, onClick);
     map.on("mouseenter", HISTORY_LANDMARKS_HIT_LAYER_ID, onEnter);
@@ -3131,11 +3151,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [no2On, active, no2Resolved]);
+  }, [no2On, active, no2Resolved, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3182,11 +3206,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [naturaSitesOn, active, naturaResolved]);
+  }, [naturaSitesOn, active, naturaResolved, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3219,11 +3247,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landCoverOn, active]);
+  }, [landCoverOn, active, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -3250,11 +3282,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       ensureGibsOverlay(map, NDVI_SOURCE_ID, NDVI_LAYER_ID, url, ndviOpacity, NDVI_ATTRIBUTION);
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
+    // The initial `style.load` can fire before this effect registers;
+    // `idle` guarantees one more attempt once the map is usable.
+    map.once("idle", apply);
     return () => {
       map.off("style.load", apply);
+      map.off("idle", apply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ndviOn, active]);
+  }, [ndviOn, active, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
