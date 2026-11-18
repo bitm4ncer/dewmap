@@ -6,6 +6,7 @@ import maplibregl from "maplibre-gl";
 import { useHiking } from "@/lib/hiking/store";
 import { THEME, VIA_PALETTE } from "@/lib/theme";
 import type { RouteCandidate, Waypoint } from "@/lib/hiking/types";
+import { formatRouteLabel } from "@/lib/routing";
 
 const WAYPOINT_SOURCE = "hiking-waypoints";
 const WAYPOINT_HALO_LAYER = "hiking-waypoints-halo";
@@ -16,6 +17,8 @@ const ROUTE_LAYER_PRIMARY = "hiking-routes-primary";
 const ROUTE_LAYER_CASING = "hiking-routes-casing";
 const ROUTE_LAYER_ALT = "hiking-routes-alt";
 const ROUTE_LAYER_ALT_CASING = "hiking-routes-alt-casing";
+const ROUTE_LAYER_LABELS = "hiking-routes-labels";
+const ROUTE_LABEL_SOURCE = "hiking-route-labels";
 
 export const COLOR_START = THEME.accent;
 export const COLOR_END = THEME.warn;
@@ -34,6 +37,7 @@ const HIKING_Z_ORDER: string[] = [
   ROUTE_LAYER_ALT,
   ROUTE_LAYER_CASING,
   ROUTE_LAYER_PRIMARY,
+  ROUTE_LAYER_LABELS,
   WAYPOINT_HALO_LAYER,
   WAYPOINT_DOT_LAYER,
   WAYPOINT_LABEL_LAYER,
@@ -127,6 +131,32 @@ function routeFeatures(
           id: c.id,
           selected: c.id === selectedId,
           color: colorForCandidate(Math.max(0, fullIndex)),
+          label: formatRouteLabel(c.distanceKm, c.durationMin),
+        },
+      };
+    }),
+  };
+}
+
+function routeLabelFeatures(
+  candidates: RouteCandidate[],
+  selectedId: string | null,
+  finalized: boolean,
+): GeoJSON.FeatureCollection {
+  const visible = finalized
+    ? candidates.filter((c) => c.id === selectedId)
+    : candidates;
+  return {
+    type: "FeatureCollection",
+    features: visible.map((c) => {
+      const point = c.coordinates[Math.floor(c.coordinates.length / 2)] ?? c.coordinates[0];
+      return {
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [point[0], point[1]] },
+        properties: {
+          id: c.id,
+          selected: c.id === selectedId,
+          label: formatRouteLabel(c.distanceKm, c.durationMin),
         },
       };
     }),
@@ -259,6 +289,8 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
     if (!map) return;
     const apply = () => {
       if (!enabled || candidates.length === 0) {
+        removeLayerIfExists(map, ROUTE_LAYER_LABELS);
+        removeSourceIfExists(map, ROUTE_LABEL_SOURCE);
         removeLayerIfExists(map, ROUTE_LAYER_ALT);
         removeLayerIfExists(map, ROUTE_LAYER_ALT_CASING);
         removeLayerIfExists(map, ROUTE_LAYER_PRIMARY);
@@ -270,6 +302,11 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
         map,
         ROUTE_SOURCE,
         routeFeatures(candidates, selectedCandidateId, finalized),
+      );
+      ensureSource(
+        map,
+        ROUTE_LABEL_SOURCE,
+        routeLabelFeatures(candidates, selectedCandidateId, finalized),
       );
       if (!map.getLayer(ROUTE_LAYER_ALT_CASING)) {
         map.addLayer({
@@ -293,9 +330,9 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           filter: ["!", ["get", "selected"]],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": ["get", "color"],
+            "line-color": THEME.accent,
             "line-width": 2.5,
-            "line-opacity": 0.55,
+            "line-opacity": 0.65,
             "line-dasharray": [2, 1.5],
           },
         });
@@ -322,9 +359,28 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           filter: ["==", ["get", "selected"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": ["get", "color"],
+            "line-color": THEME.danger,
             "line-width": 4,
             "line-opacity": 0.95,
+          },
+        });
+      }
+      if (!map.getLayer(ROUTE_LAYER_LABELS)) {
+        map.addLayer({
+          id: ROUTE_LAYER_LABELS,
+          type: "symbol",
+          source: ROUTE_LABEL_SOURCE,
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 10.5,
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+            "text-padding": 2,
+          },
+          paint: {
+            "text-color": ["case", ["get", "selected"], THEME.ink, THEME.accent],
+            "text-halo-color": THEME.casing,
+            "text-halo-width": 2.5,
           },
         });
       }
