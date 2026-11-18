@@ -1508,8 +1508,8 @@ input[type="range"].hud-slider::-moz-range-thumb {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  min-height: 32px;
-  padding: 0 var(--sp-3);
+  min-height: 28px;
+  padding: 0 var(--sp-2);
   border-radius: 10px;
   background: var(--surf-2);
   color: var(--ink-dim);
@@ -1521,7 +1521,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-chip:hover { background: var(--surf-3); color: var(--ink); }
 .ui-chip:disabled { opacity: .4; cursor: not-allowed; }
 @media (max-width: 767px) {
-  .ui-chip { min-height: 40px; padding: 0 var(--sp-4); font-size: 12px; }
+  .ui-chip { min-height: 32px; padding: 0 var(--sp-3); font-size: 12px; }
 }
 
 /* Inputs --------------------------------------------------------------- */

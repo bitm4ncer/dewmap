@@ -65,7 +65,7 @@ describe("flat CSS invariants", () => {
     expect(block(".hud-basemap-btn")?.body).toContain(
       "padding: var(--sp-2) var(--sp-4)",
     );
-    expect(block(".ui-chip")?.body).toContain("min-height: 32px");
+    expect(block(".ui-chip")?.body).toContain("min-height: 28px");
     expect(block(".ui-btn")?.body).toContain("min-height: 44px");
     expect(block(".hud-btn-primary:disabled")?.body).toContain("opacity: 1");
     expect(

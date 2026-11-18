@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { visibleQuickPlaces } from "@/lib/places/quickPlaces";
 import { geocode, prettyCategory } from "@/lib/geocode";
 import { geocodeStops, type MotisStop } from "@/lib/routing";
 import { CloseIcon, MapPinIcon, RecenterIcon, StarIcon } from "@/components/ui/icons";
@@ -357,14 +358,14 @@ export function PlacePicker({
       </div>
       </div>
 
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        {quickPlaces.slice(0, 4).map((place) => (
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        {visibleQuickPlaces(quickPlaces).map((place) => (
           <button
             key={`${place.id ?? place.name}-${place.lat}-${place.lon}`}
             type="button"
             onClick={() => choose(place)}
             title={`${place.name}${place.city ? `, ${place.city}` : ""}`}
-            className="ui-badge max-w-[150px] truncate hover:bg-[color:var(--surf-3)]"
+            className="ui-chip max-w-[150px] truncate"
           >
             {place.name}
           </button>
