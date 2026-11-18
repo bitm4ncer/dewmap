@@ -1482,6 +1482,10 @@ function buildLiveLocationEl(): {
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
   const [poiSelection, setPoiSelection] = useState<PoiSelection | null>(null);
+  const [crosshair, setCrosshair] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
   const sheetBeforePoiRef = useRef<SheetState | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
@@ -1492,7 +1496,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const liveMarkerRef = useRef<maplibregl.Marker | null>(null);
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const poiMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const crosshairMarkerRef = useRef<maplibregl.Marker | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
   const coneRef = useRef<HTMLDivElement | null>(null);
   const arrowRef = useRef<HTMLDivElement | null>(null);
@@ -1908,8 +1912,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
 
-  // Long-press anywhere on the map → drop a waypoint at that location.
+  // Long-press anywhere on the map → drop a waypoint and place the
+  // deliberate inspection crosshair. A normal tap never sets it.
   useLongPress(mapInstance, true, useCallback((lng: number, lat: number) => {
+    setCrosshair({ lon: lng, lat });
     useHiking.getState().addWaypoint({
       lat,
       lon: lng,
@@ -1937,6 +1943,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
    *  the previous sheet size when the card is closed. */
   const openPoi = useCallback(
     (selection: PoiSelection) => {
+      setCrosshair(null);
       if (
         isMobile
         && sheetBeforePoiRef.current == null
@@ -2021,6 +2028,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     (result: GeocodeResult) => {
       setFlyTarget(result);
       setPendingPin(null);
+      setCrosshair(null);
       setPoiSelection({
         osmType: result.osmType,
         osmId: result.osmId,
@@ -3606,8 +3614,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [flyTarget]);
 
-  // Tapping empty map opens place details. Clicks that hit an interactive
-  // rail-station or history-landmark layer are left to their own popups.
+  // Tapping the map opens place details. The crosshair is deliberately
+  // not part of this path; it is only set by a long/deep press.
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
@@ -3638,12 +3646,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [mapInstance, openPoi]);
 
-  // Mark the selected place with a warm red crosshair until the card closes.
+  // The crosshair is an explicit long-press inspection marker. It is not
+  // tied to the place card, so tapping a shop never leaves a stray target.
   useEffect(() => {
     const map = mapInstance;
-    poiMarkerRef.current?.remove();
-    poiMarkerRef.current = null;
-    if (!map || !poiSelection) return;
+    crosshairMarkerRef.current?.remove();
+    crosshairMarkerRef.current = null;
+    if (!map || !crosshair) return;
     const el = document.createElement("div");
     el.className = "poi-crosshair";
     el.setAttribute("aria-hidden", "true");
@@ -3655,14 +3664,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       </svg>
     `;
     const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-      .setLngLat([poiSelection.lon, poiSelection.lat])
+      .setLngLat([crosshair.lon, crosshair.lat])
       .addTo(map);
-    poiMarkerRef.current = marker;
+    crosshairMarkerRef.current = marker;
     return () => {
       marker.remove();
-      if (poiMarkerRef.current === marker) poiMarkerRef.current = null;
+      if (crosshairMarkerRef.current === marker) {
+        crosshairMarkerRef.current = null;
+      }
     };
-  }, [mapInstance, poiSelection]);
+  }, [mapInstance, crosshair]);
 
   const activeOverlays: {
     key: string;
