@@ -3618,14 +3618,54 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [mapInstance, poiSelection]);
 
-  const activeOverlays: { key: string; label: string; icon: ReactNode }[] = [
-    landCoverOn && { key: "land-cover", label: "Land Cover", icon: <LandCoverIcon size={16} /> },
-    ndviOn && { key: "ndvi", label: "NDVI", icon: <NdviIcon size={16} /> },
-    speciesOn && { key: "species", label: "Species", icon: <SpeciesIcon size={16} /> },
-    forestLossOn && { key: "forest-loss", label: "Forest Loss", icon: <ForestLossIcon size={16} /> },
-    no2On && { key: "air-quality", label: "Air Quality", icon: <AirQualityIcon size={16} /> },
-    naturaSitesOn && { key: "protected-areas", label: "Protected Areas", icon: <NaturaIcon size={16} /> },
-  ].filter(Boolean) as { key: string; label: string; icon: ReactNode }[];
+  const activeOverlays: {
+    key: string;
+    label: string;
+    icon: ReactNode;
+    onDismiss: () => void;
+  }[] = [
+    landCoverOn && {
+      key: "land-cover",
+      label: "Land Cover",
+      icon: <LandCoverIcon size={16} />,
+      onDismiss: () => setLandCoverOn(false),
+    },
+    ndviOn && {
+      key: "ndvi",
+      label: "NDVI",
+      icon: <NdviIcon size={16} />,
+      onDismiss: () => setNdviOn(false),
+    },
+    speciesOn && {
+      key: "species",
+      label: "Species",
+      icon: <SpeciesIcon size={16} />,
+      onDismiss: () => setSpeciesOn(false),
+    },
+    forestLossOn && {
+      key: "forest-loss",
+      label: "Forest Loss",
+      icon: <ForestLossIcon size={16} />,
+      onDismiss: () => setForestLossOn(false),
+    },
+    no2On && {
+      key: "air-quality",
+      label: "Air Quality",
+      icon: <AirQualityIcon size={16} />,
+      onDismiss: () => setNo2On(false),
+    },
+    naturaSitesOn && {
+      key: "protected-areas",
+      label: "Protected Areas",
+      icon: <NaturaIcon size={16} />,
+      onDismiss: () => setNaturaSitesOn(false),
+    },
+  ].filter(Boolean) as {
+    key: string;
+    label: string;
+    icon: ReactNode;
+    onDismiss: () => void;
+  }[];
 
   return (
     <div
@@ -3654,15 +3694,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       {activeOverlays.length > 0 && (
         <div className="map-overlay-badges" role="group" aria-label="Active map overlays">
           {activeOverlays.map((overlay) => (
-            <span
+            <button
               key={overlay.key}
+              type="button"
               className="map-overlay-badge"
-              role="img"
-              aria-label={overlay.label}
-              title={overlay.label}
+              onClick={overlay.onDismiss}
+              aria-label={`Turn off ${overlay.label}`}
+              title={`Turn off ${overlay.label}`}
             >
               {overlay.icon}
-            </span>
+            </button>
           ))}
         </div>
       )}

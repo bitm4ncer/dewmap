@@ -2162,7 +2162,9 @@ input[type="range"].hud-slider::-moz-range-thumb {
     bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 148px);
     z-index: 20;
     display: flex;
+    width: 36px;
     flex-direction: column;
+    align-items: center;
     gap: 6px;
     pointer-events: none;
     transition: opacity 180ms ease, bottom 180ms ease;
@@ -2176,7 +2178,12 @@ input[type="range"].hud-slider::-moz-range-thumb {
     background: var(--glass-strong);
     backdrop-filter: blur(18px) saturate(1.08);
     color: var(--accent);
+    pointer-events: auto;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
   }
+  .map-overlay-badge:hover { background: var(--surf-2); color: var(--ink); }
+  .map-overlay-badge:active { transform: scale(0.94); }
   body:has(.hud-bottom-sheet[data-sheet-state="modes"]) .map-overlay-badges,
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .map-overlay-badges,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .map-overlay-badges {

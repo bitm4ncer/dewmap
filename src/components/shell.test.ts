@@ -31,6 +31,12 @@ describe("shell", () => {
     expect(retries.length).toBeGreaterThanOrEqual(5);
   });
 
+  it("lets active overlay badges be dismissed from the map", () => {
+    expect(map).toContain("onDismiss: () => setLandCoverOn(false)");
+    expect(map).toContain("onClick={overlay.onDismiss}");
+    expect(map).toContain("Turn off ${overlay.label}");
+  });
+
   it("marks a selected place and offers route planning from its card", () => {
     expect(map).toContain("poi-crosshair");
     expect(map).toContain("planPoiRoute");

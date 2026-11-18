@@ -204,7 +204,9 @@ describe("sheet chrome and compact date field", () => {
       blocks.some(
         (b) =>
           b.selector.trim().endsWith(".map-overlay-badges") &&
-          b.body.includes("bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 148px)"),
+          b.body.includes("bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 148px)") &&
+          b.body.includes("width: 36px") &&
+          b.body.includes("align-items: center"),
       ),
     ).toBe(true);
     expect(block(".map-overlay-badge")?.body).toContain("width: 28px");
