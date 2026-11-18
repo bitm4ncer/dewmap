@@ -322,7 +322,11 @@ export function useHistoryLayers(
       if (cancelled) return;
       applyLayers();
       setStatus("ready");
+      // Give MapLibre a few chances to paint the first site tiles; the
+      // render/sourcedata listeners handle later frames.
       window.setTimeout(updateCount, 0);
+      window.setTimeout(updateCount, 500);
+      window.setTimeout(updateCount, 1500);
     })()
       .catch((error) => {
         if (cancelled) return;
