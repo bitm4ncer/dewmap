@@ -16,6 +16,15 @@
   working when the dataset is missing or a range host is broken.
 - Robust PMTiles probe: a 206 with `Content-Encoding: gzip` (Firefox on
   GitHub Pages) is rejected and the archive is loaded once as a file.
+- Full integrity and resilience: PMTiles magic/version checks, manifest
+  byte/SHA verification, 90 s abort timeout, saveData gate with an
+  explicit load action, and protocol reuse for full downloads.
+- Honest counts: filtered rendered-site counts at z8+, zero shown as zero,
+  and category chips disabled below city zoom.
+- Scope and pipeline hardening: direct-`P31` exclusion (castles, museums,
+  industrial sites and monuments survive), per-category cap quotas,
+  resumable exports, QLever timeout with WDQS fallback, deploy triggered
+  by the data workflow, and artifact hash/tile/category validation.
 
 ### Changed
 

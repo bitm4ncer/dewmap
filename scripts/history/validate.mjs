@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const CATEGORIES = new Set([
@@ -44,6 +46,40 @@ export function validateSites(sites) {
   return { ok: errors.length === 0, errors };
 }
 
+export function categoryCoverage(sites) {
+  const counts = new Map();
+  for (const site of sites) {
+    counts.set(site.category, (counts.get(site.category) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function validateCategoryCoverage(
+  sites,
+  {
+    minTotal = 100_000,
+    required = [
+      "castle",
+      "religious",
+      "archaeological",
+      "memorial",
+      "industrial",
+      "museum",
+    ],
+  } = {},
+) {
+  if (sites.length < minTotal) return { ok: true, errors: [] };
+  const counts = categoryCoverage(sites);
+  const errors = required
+    .filter((category) => (counts.get(category) ?? 0) === 0)
+    .map((category) => `category ${category} is empty in a ${sites.length}-site build`);
+  return { ok: errors.length === 0, errors };
+}
+
+async function fileSha256(path) {
+  return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
 export function validateManifest(manifest, { maxBytes, allowEmpty = false }) {
   const errors = [];
   if (manifest?.schema !== 1) errors.push("schema must be 1");
@@ -69,6 +105,9 @@ export function validateManifest(manifest, { maxBytes, allowEmpty = false }) {
       errors.push(`missing files.clusters[${index}].path`);
       continue;
     }
+    if (typeof manifest.buildId === "string" && !file.path.startsWith(`${manifest.buildId}/`)) {
+      errors.push(`files.clusters[${index}].path is outside ${manifest.buildId}/`);
+    }
     if (!Number.isFinite(file.bytes) || (!allowEmpty && file.bytes <= 0)) {
       errors.push(`invalid files.clusters[${index}].bytes`);
     }
@@ -84,6 +123,9 @@ export function validateManifest(manifest, { maxBytes, allowEmpty = false }) {
   if (!siteFile || typeof siteFile.path !== "string" || !siteFile.path) {
     errors.push("missing files.sites.path");
   } else {
+    if (typeof manifest.buildId === "string" && !siteFile.path.startsWith(`${manifest.buildId}/`)) {
+      errors.push(`files.sites.path is outside ${manifest.buildId}/`);
+    }
     if (
       !Number.isFinite(siteFile.bytes) ||
       (!allowEmpty && siteFile.bytes <= 0)
@@ -171,11 +213,11 @@ export function validateArchive({
     const west = tileFor(-179.9, 0, 2);
     const eastLayers = decode(2, east.x, east.y);
     const westLayers = decode(2, west.x, west.y);
-    if (
-      (!eastLayers || Object.keys(eastLayers).length === 0) &&
-      (!westLayers || Object.keys(westLayers).length === 0)
-    ) {
-      errors.push("no clusters at the antimeridian");
+    const hasLayer = (layers) =>
+      Array.isArray(layers?.[expectedLayer]) &&
+      layers[expectedLayer].length > 0;
+    if (!hasLayer(eastLayers) && !hasLayer(westLayers)) {
+      errors.push(`no ${expectedLayer} features at the antimeridian`);
     }
   }
 
@@ -203,7 +245,7 @@ export function makeDecoder(archive, bin = process.env.TIPPECANOE_DECODE ?? "tip
   };
 }
 
-export function validateBuiltArchives({
+export async function validateBuiltArchives({
   manifest,
   outDir,
   bin,
@@ -217,6 +259,26 @@ export function validateBuiltArchives({
   errors.push(...manifestResult.errors);
   if (errors.length > 0) return { ok: false, errors };
 
+  const allFiles = [
+    ...(Array.isArray(manifest.files.clusters) ? manifest.files.clusters : []),
+    manifest.files.sites,
+  ];
+  for (const file of allFiles) {
+    const archivePath = resolve(outDir, file.path);
+    try {
+      const info = await stat(archivePath);
+      if (info.size !== file.bytes) {
+        errors.push(`${file.path}: manifest says ${file.bytes} bytes, file is ${info.size}`);
+      }
+      const hash = await fileSha256(archivePath);
+      if (hash.toLowerCase() !== file.sha256.toLowerCase()) {
+        errors.push(`${file.path}: sha256 does not match the manifest`);
+      }
+    } catch (error) {
+      errors.push(`${file.path}: cannot read archive (${error.message})`);
+    }
+  }
+
   const clusterFiles = Array.isArray(manifest.files.clusters)
     ? manifest.files.clusters
     : [];
@@ -224,11 +286,21 @@ export function validateBuiltArchives({
     const archivePath = resolve(outDir, file.path);
     const decode = makeDecoder(archivePath, bin);
     const zoom = Number.isFinite(file.minzoom) ? file.minzoom : 2;
+    const tiles =
+      zoom <= 2
+        ? undefined
+        : (() => {
+            const point = sampleSite
+              ? tileFor(sampleSite.lon, sampleSite.lat, zoom)
+              : { x: 0, y: 0 };
+            return [[zoom, point.x, point.y]];
+          })();
     const result = validateArchive({
       expectedLayer: "history_clusters",
       siteCount: zoom === 2 ? manifest.counts.sites : undefined,
       decode,
       zoom,
+      tiles,
       checkAntimeridian: checkAntimeridian && zoom === 2,
     });
     errors.push(...result.errors);
@@ -239,8 +311,11 @@ export function validateBuiltArchives({
   if (sampleSite) {
     const sampleTile = tileFor(sampleSite.lon, sampleSite.lat, 8);
     const siteLayers = siteDecode(8, sampleTile.x, sampleTile.y);
-    if (!siteLayers || !Array.isArray(siteLayers.history_sites)) {
+    const features = siteLayers?.history_sites;
+    if (!Array.isArray(features)) {
       errors.push("missing layer history_sites at the z8 sample tile");
+    } else if (!features.some((feature) => feature.properties?.id === sampleSite.id)) {
+      errors.push(`sample site ${sampleSite.id} is missing from the z8 tile`);
     }
   }
   return { ok: errors.length === 0, errors };

@@ -29,7 +29,7 @@ describe("siteDetailHeader", () => {
   it("renders name, category and dates", () => {
     const html = siteDetailHeader(SITE);
     expect(html).toContain("Test &lt;Castle&gt;");
-    expect(html).toContain("Burg");
+    expect(html).toContain("Castle");
     expect(html).toContain("1200");
   });
 
@@ -55,6 +55,9 @@ describe("siteDetailLinks", () => {
 
   it("omits the Wikidata link without a QID", () => {
     expect(siteDetailLinks({ ...SITE, qid: "" })).not.toContain("wikidata.org");
+    expect(siteDetailLinks(SITE, [9.19, 45.86])).toContain(
+      "query=45.86%2C9.19",
+    );
   });
 });
 

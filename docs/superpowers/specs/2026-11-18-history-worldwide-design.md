@@ -177,7 +177,9 @@ supports large CSV exports), with WDQS as a fallback. The reviewed
    - z0–1: res 1; z2–3: res 2; z4–5: res 3; z6–7: res 4.
    - cluster fields: `count`, `heritageCount`, `unescoCount`; nested
      `tippecanoe: { minzoom, maxzoom }` with non-overlapping bands.
-   - cap each band at 5,000 features by merging to a coarser resolution.
+   - bound density with tippecanoe's per-tile feature limit and
+     `--drop-densest-as-needed`; the z2 cluster sum is still validated
+     exactly because that band is sparse.
 5. Tippecanoe:
    - `history-clusters-<min>-<max>.pmtiles` (one per band: 0–1, 2–3,
      4–5, 6–7), layer `history_clusters`.
@@ -207,9 +209,10 @@ supports large CSV exports), with WDQS as a fallback. The reviewed
    ```
 
 **Size budget:** target **25 MB**, hard **40 MB**. The hard limit fails
-the data build, not the app deploy. A 25–40 MB archive emits a warning and
-a reduced variant (lower site cap or maxzoom 8). Versioned filenames plus
-the SHA-256 prevent mixed old-directory/new-data responses through CDNs.
+the data workflow, not the app deploy: a failed data run leaves the last
+good release in place and the app keeps serving it. A 25–40 MB archive
+emits a warning. Versioned filenames plus the SHA-256 prevent mixed
+old-directory/new-data responses through CDNs.
 
 **Update cadence:** monthly GitHub Actions data workflow (separate from
 the app deploy), publishing a GitHub Release asset and a workflow
@@ -228,7 +231,9 @@ matching `content-range`, returns exactly 8 bytes, and starts with the
 (reusing a 200 body when the server ignores Range); the blob is cached
 and the archive is opened via `FileSource` keyed as `history.pmtiles`.
 Gate the full download on `navigator.connection?.saveData` and show an
-explicit “load global dataset” action on metered connections.
+explicit “load global dataset” action on metered connections. Full-mode
+archives are reused from the protocol cache instead of being downloaded
+again when the panel is toggled.
 
 ### 7.3 Runtime: global layer (v1)
 

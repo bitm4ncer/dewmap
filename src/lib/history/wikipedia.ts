@@ -152,3 +152,60 @@ export async function fetchWikipediaSummaryFromQid(
   qidLookupCache.set(qid, null);
   return null;
 }
+
+interface WbGetClaimsResponse {
+  claims?: {
+    P18?: Array<{
+      mainsnak?: { datavalue?: { value?: unknown } };
+    }>;
+  };
+}
+
+const qidImageCache = new Map<string, string | null>();
+
+/**
+ * Resolve the representative image (Wikidata `P18`) for a QID. Kept
+ * out of the bbox SPARQL query on purpose: `OPTIONAL { P18 }` multiplies
+ * rows and the 400-row cap would then return fewer distinct sites.
+ * `wbgetclaims` is a tiny request and only runs when a marker is tapped.
+ */
+export async function fetchWikidataImage(
+  qid: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (!qid) return null;
+  if (qidImageCache.has(qid)) return qidImageCache.get(qid) ?? null;
+
+  const url =
+    `https://www.wikidata.org/w/api.php` +
+    `?action=wbgetclaims&format=json&origin=*` +
+    `&entity=${encodeURIComponent(qid)}&property=P18`;
+
+  let data: WbGetClaimsResponse;
+  try {
+    const res = await fetch(url, {
+      signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      qidImageCache.set(qid, null);
+      return null;
+    }
+    data = (await res.json()) as WbGetClaimsResponse;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw err;
+    qidImageCache.set(qid, null);
+    return null;
+  }
+
+  const raw = data.claims?.P18?.[0]?.mainsnak?.datavalue?.value;
+  if (typeof raw !== "string" || !raw.trim()) {
+    qidImageCache.set(qid, null);
+    return null;
+  }
+  const imageUrl =
+    `https://commons.wikimedia.org/wiki/Special:FilePath/` +
+    `${encodeURIComponent(raw.trim())}?width=320`;
+  qidImageCache.set(qid, imageUrl);
+  return imageUrl;
+}

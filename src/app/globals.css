@@ -1014,6 +1014,14 @@ input[type="range"].hud-slider::-moz-range-thumb {
   color: var(--accent);
   background: var(--accent-soft);
 }
+.hud-variant-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.hud-variant-chip:disabled:hover {
+  color: var(--ink-dim);
+  background: var(--surf-2);
+}
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }

@@ -34,6 +34,8 @@ const WIKIDATA_EXCLUDE_QIDS = [
   "Q702492", // urban municipality
 ];
 
+export const HISTORY_UNDATED_VISIBLE_FROM = 2000;
+
 export interface LandmarkProperties {
   id: string;
   name: string;
@@ -61,6 +63,15 @@ export type LandmarkCollection = GeoJSON.FeatureCollection<
   GeoJSON.Point,
   LandmarkProperties
 >;
+
+export function isLandmarkVisibleAtYear(
+  props: LandmarkProperties,
+  year: number,
+): boolean {
+  if (props.inception === undefined) return year >= HISTORY_UNDATED_VISIBLE_FROM;
+  if (props.inception > year) return false;
+  return props.dissolved === undefined || props.dissolved >= year;
+}
 
 // ─── Overpass ─────────────────────────────────────────────────────────
 

@@ -72,4 +72,51 @@ describe("exportPages", () => {
     assert.equal(cursor.cursor, "Q3");
     assert.match(calls[1], /Q2/);
   });
+
+  it("falls back to WDQS when QLever keeps failing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "history-export-"));
+    cleanups.push(dir);
+    const targets = [];
+    const fetchImpl = async (url) => {
+      targets.push(url);
+      if (String(url).includes("qlever")) {
+        return new Response("down", { status: 503 });
+      }
+      return new Response(
+        "item,name,coord,inception,dissolved,types,heritage,unesco\nhttp://www.wikidata.org/entity/Q9,Nine,POINT(1 2),,,Q23413,true,false\n",
+        { status: 200 },
+      );
+    };
+    const result = await exportPages({
+      outDir: dir,
+      pageSize: 2,
+      limit: 1,
+      queryTemplate: "SELECT * WHERE { %%CURSOR_FILTER%% } LIMIT %%LIMIT%%",
+      fetchImpl,
+      sleepImpl: async () => {},
+    });
+    assert.equal(result.rows, 1);
+    assert.ok(targets.some((url) => String(url).includes("wikidata.org")));
+  });
+
+  it("honours a page offset for resumed exports", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "history-export-"));
+    cleanups.push(dir);
+    const fetchImpl = async () =>
+      new Response(
+        "item,name,coord,inception,dissolved,types,heritage,unesco\nhttp://www.wikidata.org/entity/Q9,Nine,POINT(1 2),,,Q23413,true,false\n",
+        { status: 200 },
+      );
+    const result = await exportPages({
+      outDir: dir,
+      pageSize: 2,
+      limit: 2,
+      pageStart: 3,
+      queryTemplate: "SELECT * WHERE { %%CURSOR_FILTER%% } LIMIT %%LIMIT%%",
+      fetchImpl,
+      sleepImpl: async () => {},
+    });
+    assert.equal(result.pages, 1);
+    assert.match(await readFile(join(dir, "page-0003.csv"), "utf8"), /Q9/);
+  });
 });

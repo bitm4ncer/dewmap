@@ -68,7 +68,7 @@ describe("globalLayerIds", () => {
 describe("countGlobalSites", () => {
   it("dedupes repeated features by id", () => {
     const map = {
-      querySourceFeatures: () => [
+      queryRenderedFeatures: () => [
         { properties: { id: "wd/Q1" } },
         { properties: { id: "wd/Q1" } },
         { properties: { id: "wd/Q2" } },

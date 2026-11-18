@@ -8,6 +8,7 @@ describe("panelSummary", () => {
         status: "loading",
         count: 0,
         total: 0,
+        siteZoom: false,
         filters: { heritageOnly: false, unescoOnly: false, categories: [] },
       }),
     ).toBe("loading…");
@@ -16,6 +17,7 @@ describe("panelSummary", () => {
         status: "error",
         count: 0,
         total: 0,
+        siteZoom: false,
         filters: { heritageOnly: false, unescoOnly: false, categories: [] },
       }),
     ).toBe("global dataset unavailable");
@@ -25,10 +27,12 @@ describe("panelSummary", () => {
     const base = {
       status: "ready" as const,
       total: 199,
+      siteZoom: true,
       filters: { heritageOnly: false, unescoOnly: false, categories: [] },
     };
     expect(panelSummary({ ...base, count: 12 })).toBe("12 sites");
-    expect(panelSummary({ ...base, count: 0 })).toBe("199 sites");
+    expect(panelSummary({ ...base, count: 0 })).toBe("0 sites");
+    expect(panelSummary({ ...base, count: 0, siteZoom: false })).toBe("199 sites");
   });
 
   it("mentions active filters", () => {
@@ -37,6 +41,7 @@ describe("panelSummary", () => {
         status: "ready",
         count: 3,
         total: 199,
+        siteZoom: true,
         filters: { heritageOnly: true, unescoOnly: true, categories: ["castle"] },
       }),
     ).toBe("3 sites · heritage · UNESCO · 1 category");

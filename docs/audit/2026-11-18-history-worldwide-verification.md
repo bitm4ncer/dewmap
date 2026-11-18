@@ -28,9 +28,9 @@ fallback**, not the 206 path.
   unique site; rendered dot present.
 - At z3 over Germany: 17 cluster features, one rendered cluster.
 - Cluster click: zoom **3 → 5**, centered on the cluster.
-- Category filter: one site visible → click “Burg” → **0** → click
-  “Religiös” → **1**.
-- Site click: popup header `Eremo delle Carceri · Religiös · date unknown`
+- Category filter: one site visible → click “Castle” → **0** → click
+  “Religious” → **1**.
+- Site click: popup header `Eremo delle Carceri · Religious · date unknown`
   with the Heritage badge; summary loading is best-effort and depends on
   Wikipedia/Wikidata reachability.
 - Missing dataset (directory renamed): panel shows **offline** and
@@ -52,6 +52,35 @@ fallback**, not the 206 path.
   plus tippecanoe); the 5k sample and linear projection are the evidence.
 - Screenshot capture needs a visible desktop window; verification used the
   map instance query API and DOM state instead.
+
+## Post-review fixes (2026-11-18)
+
+The whole-branch review found a critical scope bug and several runtime
+honesty issues. Fixed and re-verified:
+
+- **Scope:** exclusion now applies only to direct `P31` classes, so
+  castles, museums, industrial sites, fortresses, city gates and
+  monuments survive. QLever counts: castle 30,484; museum 50,856;
+  industrial 277; fortress 2,152; city gate 2,803; monument 368,669.
+- **Honest counts:** `queryRenderedFeatures` on the filtered site layer,
+  `siteZoom` at z8+, zero counts are shown as zero, and category chips are
+  disabled below z8.
+- **Integrity:** manifest `no-store`, 200-body PMTiles magic check,
+  content-range/byte check, and SHA-256 verification for full downloads.
+- **Resilience:** 90 s abort timeout, saveData gate with an explicit
+  “Load global dataset” action, protocol reuse for full archives, and
+  layer persistence when the sheet collapses.
+- **Pipeline:** export page offsets, fresh export directory, no
+  short-page truncation, QLever timeout + WDQS fallback, deploy triggered
+  by the data workflow, stat/hash/sample-ID/category/antimeridian
+  validation, second-precision build IDs, category quotas in the cap.
+- **UI:** English category labels, muted undated dots, Commons link,
+  coordinate-based OSM link, PMTiles/Tippecanoe attribution.
+
+Gate after these fixes: **282 Vitest tests**, **33 `node:test` script
+tests**, `tsc`, `eslint` (history files), `check:no-emoji`, and
+`next build` pass. Browser check at z12 shows **0 sites** with the
+category chips enabled; the old 199-total substitution is gone.
 
 ## Final gate
 

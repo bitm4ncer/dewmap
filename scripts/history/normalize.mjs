@@ -38,7 +38,7 @@ export function parseWktPoint(value) {
 
 export function parseYear(value) {
   if (typeof value !== "string" || value.trim() === "") return undefined;
-  const match = value.match(/^([+-]?\d{4,})-\d{2}-\d{2}/);
+  const match = value.match(/^([+-]?\d+)-\d{2}-\d{2}/);
   if (!match) return undefined;
   const year = Number(match[1]);
   return Number.isFinite(year) ? year : undefined;

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { exportPages } from "./export-wikidata.mjs";
@@ -33,6 +33,7 @@ async function main() {
   const pageSize = args["page-size"] ? Number(args["page-size"]) : 10_000;
 
   const queryTemplate = await readFile(SCOPE_QUERY, "utf8");
+  await rm(exportDir, { recursive: true, force: true });
   const exported = await exportPages({
     outDir: exportDir,
     queryTemplate,
