@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { visibleQuickPlaces } from "@/lib/places/quickPlaces";
-import { geocode, prettyCategory } from "@/lib/geocode";
+import { geocode, prettyCategory, reverseGeocode } from "@/lib/geocode";
 import { geocodeStops, type MotisStop } from "@/lib/routing";
 import {
   ChevronDownIcon,
@@ -273,14 +273,40 @@ export function PlacePicker({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         if (!mountedRef.current) return;
-        setLocating(false);
-        choose({
-          name: "My location",
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          kind: "address",
-          sub: "GPS",
-        });
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const ctrl = new AbortController();
+        const timer = window.setTimeout(() => ctrl.abort(), 6000);
+        void (async () => {
+          let place: PickedPlace = {
+            name: "My location",
+            lat,
+            lon,
+            kind: "address",
+            sub: "GPS",
+          };
+          try {
+            const resolved = await reverseGeocode(lon, lat, {
+              signal: ctrl.signal,
+            });
+            if (resolved) {
+              place = {
+                name: resolved.name,
+                lat,
+                lon,
+                city: resolved.city,
+                id: resolved.id,
+                kind: "address",
+                sub: "GPS",
+              };
+            }
+          } finally {
+            window.clearTimeout(timer);
+          }
+          if (!mountedRef.current) return;
+          setLocating(false);
+          choose(place);
+        })();
       },
       (err) => {
         if (!mountedRef.current) return;
@@ -295,6 +321,10 @@ export function PlacePicker({
     open && (results.length > 0 || Boolean(error) || (q.trim().length >= 2 && !busy));
   const activeOption = results[highlight];
   const recents = visibleQuickPlaces(quickPlaces);
+  const actionCount =
+    (!selectedPlace ? 1 : 0) +
+    (!selectedPlace && onPickOnMap ? 1 : 0) +
+    (q ? 1 : 0);
 
   return (
     <div ref={boxRef} className="relative min-w-0 flex-1">
@@ -347,7 +377,8 @@ export function PlacePicker({
         autoComplete="off"
         spellCheck={false}
         enterKeyHint="search"
-        className="ui-input ui-input--actions"
+        className="ui-input"
+        style={{ paddingRight: `${actionCount * 34 + 6}px` }}
       />
       <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
         {busy && (
@@ -355,30 +386,19 @@ export function PlacePicker({
             …
           </span>
         )}
-        {selectedPlace && onToggleFavorite && (
+        {!selectedPlace && (
           <button
             type="button"
-            onClick={onToggleFavorite}
-            aria-pressed={favorite}
-            aria-label={favorite ? "Remove saved place" : "Save place"}
-            title={favorite ? "Remove saved place" : "Save place"}
+            onClick={locate}
+            disabled={locating}
+            aria-label="Use my location"
+            title="Use my location"
             className="ui-input-action"
-            data-active={favorite}
           >
-            <StarIcon size={15} filled={favorite} />
+            {locating ? "…" : <RecenterIcon size={15} />}
           </button>
         )}
-        <button
-          type="button"
-          onClick={locate}
-          disabled={locating}
-          aria-label="Use my location"
-          title="Use my location"
-          className="ui-input-action"
-        >
-          {locating ? "…" : <RecenterIcon size={15} />}
-        </button>
-        {onPickOnMap && (
+        {!selectedPlace && onPickOnMap && (
           <button
             type="button"
             onClick={onPickOnMap}
@@ -403,22 +423,41 @@ export function PlacePicker({
       </div>
       </div>
 
-      {recents.length > 0 && (
+      {(recents.length > 0 || (selectedPlace && onToggleFavorite)) && (
         <div className="mt-1">
-          <button
-            type="button"
-            onClick={() => setHistoryOpen((open) => !open)}
-            aria-expanded={historyOpen}
-            className="ui-history-toggle"
-          >
-            <ClockIcon size={13} />
-            <span>History</span>
-            <span className="ui-history-count">{recents.length}</span>
-            <ChevronDownIcon
-              size={13}
-              className={historyOpen ? "rotate-180 transition-transform" : "transition-transform"}
-            />
-          </button>
+          <div className="flex items-center justify-between gap-2">
+            {recents.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((open) => !open)}
+                aria-expanded={historyOpen}
+                className="ui-history-toggle"
+              >
+                <ClockIcon size={13} />
+                <span>History</span>
+                <span className="ui-history-count">{recents.length}</span>
+                <ChevronDownIcon
+                  size={13}
+                  className={historyOpen ? "rotate-180 transition-transform" : "transition-transform"}
+                />
+              </button>
+            ) : (
+              <span />
+            )}
+            {selectedPlace && onToggleFavorite && (
+              <button
+                type="button"
+                onClick={onToggleFavorite}
+                aria-pressed={favorite}
+                aria-label={favorite ? "Remove saved place" : "Save place"}
+                title={favorite ? "Remove saved place" : "Save place"}
+                className="ui-input-action"
+                data-active={favorite}
+              >
+                <StarIcon size={15} filled={favorite} />
+              </button>
+            )}
+          </div>
           {historyOpen && (
             <div className="mt-2 flex flex-wrap gap-2">
               {recents.map((place) => (

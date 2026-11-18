@@ -86,9 +86,6 @@ describe("flat CSS invariants", () => {
     );
     expect(block(".ui-chip")?.body).toContain("min-height: 28px");
     expect(block(".ui-input-action")?.body).toContain("width: 30px");
-    expect(block(".ui-input--actions")?.body).toContain(
-      "padding-right: 8.5rem",
-    );
     expect(block(".ui-history-toggle")?.body).toContain("min-height: 28px");
     expect(block(".ui-btn")?.body).toContain("min-height: 44px");
     expect(block(".hud-btn-primary:disabled")?.body).toContain("opacity: 1");

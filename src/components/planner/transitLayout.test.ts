@@ -27,9 +27,13 @@ const picker = readFileSync(
 
 describe("station input form", () => {
   it("keeps location and map actions inside the input", () => {
-    expect(picker).toContain("ui-input--actions");
+    expect(picker).toContain("actionCount");
     expect(picker).toContain('aria-label="Use my location"');
     expect(picker).toContain('aria-label="Pick on map"');
+  });
+
+  it("resolves My location to a street address in the field", () => {
+    expect(picker).toContain("reverseGeocode");
   });
 
   it("puts history behind a collapsed toggle", () => {

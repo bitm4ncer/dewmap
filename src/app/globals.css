@@ -1557,7 +1557,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
   font-size: 13.5px;
   outline: 0;
 }
-.ui-input--actions { padding-right: 8.5rem; }
 .ui-input-action {
   display: inline-flex;
   align-items: center;
