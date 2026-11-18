@@ -655,10 +655,6 @@ body {
   }
   .maplibregl-ctrl-scale { display: none !important; }
 
-  /* Safari misplaces the caret inside a blurred/composited pill. On
-     phones use a plain translucent fill with no pseudo layer. */
-  .ui-search-pill { background: var(--glass-strong); isolation: auto; }
-  .ui-search-pill::before { display: none; }
   .ui-search-pill input { font-size: 16px; line-height: 20px; padding: 12px 0; }
 
 
@@ -2594,4 +2590,12 @@ select {
     left: auto !important;
     align-items: flex-end;
   }
+}
+
+
+/* Phone search: plain translucent fill, no pseudo layer. Kept last so it
+   wins over the desktop glass rules above. */
+@media (max-width: 767px) {
+  .ui-search-pill { background: var(--glass-strong); isolation: auto; }
+  .ui-search-pill::before { display: none; }
 }
