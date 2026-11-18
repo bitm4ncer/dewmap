@@ -808,6 +808,20 @@ input[type="range"].hud-slider::-moz-range-thumb {
   max-width: calc(100vw - 88px) !important;
 }
 
+/* Desktop: centre the attribution so it cannot collide with the floating
+   bottom-right controls. Mobile keeps the compact info button in place. */
+@media (min-width: 768px) {
+  .maplibregl-ctrl-attrib {
+    position: fixed !important;
+    right: auto !important;
+    bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    left: 50% !important;
+    z-index: 15;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+  }
+}
+
 .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show)
   .maplibregl-ctrl-attrib-inner { display: none !important; }
 .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
