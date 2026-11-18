@@ -177,6 +177,20 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
   });
 
+  it("starts map attribution collapsed and narrow on phones", () => {
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.trim().endsWith(".maplibregl-ctrl-attrib") &&
+          b.body.includes("max-width: 140px") &&
+          b.body.includes("padding: 4px 32px 4px 12px"),
+      ),
+    ).toBe(true);
+    expect(
+      blocks.some((b) => b.body.includes("translateY(-50%)")),
+    ).toBe(true);
+  });
+
   it("keeps map attribution clear of the right-side map controls", () => {
     expect(
       blocks.some(

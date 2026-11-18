@@ -2042,6 +2042,19 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.addControl(geolocate, "bottom-left");
     geolocateRef.current = geolocate;
 
+    // MapLibre opens the compact attribution on first paint. Keep the
+    // phone map clean: start collapsed, and let the info button expand it.
+    const collapseAttribution = () => {
+      if (typeof window === "undefined") return;
+      if (!window.matchMedia("(max-width: 767px)").matches) return;
+      map
+        .getContainer()
+        .querySelector(".maplibregl-ctrl-attrib")
+        ?.classList.remove("maplibregl-compact-show");
+    };
+    collapseAttribution();
+    map.once("load", collapseAttribution);
+
     // iOS DeviceOrientationEvent.requestPermission() must be invoked while
     // transient user-activation is still fresh. MapLibre's GeolocateControl
     // attaches a bubble-phase click listener on its button that calls

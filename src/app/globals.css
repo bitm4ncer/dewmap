@@ -645,6 +645,7 @@ body {
   }
   .maplibregl-ctrl-scale { display: none !important; }
 
+
   /* Keep the phone chrome minimal: advanced view controls live in the
      Map panel; only locate/zoom remain on the map. */
   .maplibregl-ctrl-fullscreen,
@@ -2085,5 +2086,27 @@ input[type="range"].hud-slider::-moz-range-thumb {
   select,
   textarea {
     font-size: 16px !important;
+  }
+}
+
+
+/* Phone attribution is a small info button; expanded it stays narrow and
+   reserves room for the close control. Placed last so it beats MapLibre's
+   base attribution rules. */
+@media (max-width: 767px) {
+  .maplibregl-ctrl-attrib {
+    max-width: 140px !important; /* 140 content + 44 padding = 184 total */
+    padding: 4px 32px 4px 12px !important;
+  }
+  .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+    width: 26px;
+    height: 26px;
+    padding: 0 !important;
+  }
+  .maplibregl-ctrl-attrib-button {
+    right: 2px !important;
+    top: 50% !important;
+    transform: translateY(-50%);
+    margin: 0 !important;
   }
 }
