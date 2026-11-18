@@ -11,6 +11,12 @@ describe("shell", () => {
     expect(css).not.toContain(".ui-logo");
   });
 
+  it("starts on the dark vector map with a collapsed panel", () => {
+    const settings = readFileSync(new URL("../lib/settings.ts", import.meta.url), "utf8");
+    expect(settings).toContain('basemapMode: "vector"');
+    expect(map).toMatch(/useState<SheetState>\(\(\) => \{[\s\S]*?return "peek"/);
+  });
+
   it("opens on the Routes pane", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });

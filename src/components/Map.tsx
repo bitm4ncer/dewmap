@@ -39,6 +39,7 @@ import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
+import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
 import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
@@ -1725,8 +1726,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [routesMode]);
   const [sheetState, setSheetState] = useState<SheetState>(() => {
-    if (typeof window === "undefined") return "half";
-    return "half";
+    if (typeof window === "undefined") return "peek";
+    return "peek";
   });
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -2188,6 +2189,24 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
   }, [basemapMode]);
+
+  // Re-tint the CARTO Dark Matter vector style after every style load.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || active !== "streets-dark") return;
+    const apply = () => {
+      try {
+        applyDarkMatterTint(map);
+      } catch (err) {
+        console.warn("[dark-matter] tint failed", err);
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("style.load", apply);
+    return () => {
+      map.off("style.load", apply);
+    };
+  }, [active, mapInstance]);
 
   useEffect(() => {
     const map = mapRef.current;
