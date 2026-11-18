@@ -1,0 +1,55 @@
+PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+PREFIX wd: <http://www.wikidata.org/entity/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?item ?name ?coord
+       (MIN(?inceptionValue) AS ?inception)
+       (MAX(?dissolvedValue) AS ?dissolved)
+       (GROUP_CONCAT(DISTINCT STRAFTER(STR(?root), "entity/"); separator="|") AS ?types)
+       (SAMPLE(?heritageFlag) AS ?heritage)
+       (SAMPLE(?unescoFlag) AS ?unesco)
+WHERE {
+  ?item wdt:P625 ?coord .
+  ?item rdfs:label ?name .
+  FILTER(lang(?name) = "en")
+
+  {
+    ?item wdt:P31/wdt:P279* ?root .
+    VALUES ?root {
+      wd:Q210272 wd:Q358 wd:Q1081138 wd:Q2319498
+      wd:Q23413 wd:Q839954 wd:Q109607 wd:Q4895508
+      wd:Q44613 wd:Q57831 wd:Q751876 wd:Q12518
+      wd:Q82117 wd:Q1569871 wd:Q33506 wd:Q15661340
+    }
+  }
+  UNION
+  {
+    ?item wdt:P1435 ?designation .
+    ?item wdt:P31/wdt:P279* ?root .
+    VALUES ?root {
+      wd:Q210272 wd:Q358 wd:Q1081138 wd:Q2319498
+      wd:Q23413 wd:Q839954 wd:Q109607 wd:Q4895508
+      wd:Q44613 wd:Q57831 wd:Q751876 wd:Q12518
+      wd:Q82117 wd:Q1569871 wd:Q33506 wd:Q15661340
+      wd:Q4989906 wd:Q16970
+    }
+  }
+
+  FILTER NOT EXISTS {
+    ?item wdt:P31/wdt:P279* ?excluded .
+    VALUES ?excluded {
+      wd:Q5 wd:Q1656682 wd:Q43229 wd:Q56061 wd:Q515
+      wd:Q486972 wd:Q838948 wd:Q732577 wd:Q4167410
+      wd:Q13406463 wd:Q14897293 wd:Q79007 wd:Q179049
+    }
+  }
+
+  OPTIONAL { ?item wdt:P571 ?inceptionValue }
+  OPTIONAL { ?item wdt:P576 ?dissolvedValue }
+  BIND(EXISTS { ?item wdt:P1435 ?heritageStatement } AS ?heritageFlag)
+  BIND(EXISTS { ?item wdt:P1435 wd:Q9259 } AS ?unescoFlag)
+  %%CURSOR_FILTER%%
+}
+GROUP BY ?item ?name ?coord
+ORDER BY ?item
+LIMIT %%LIMIT%%
