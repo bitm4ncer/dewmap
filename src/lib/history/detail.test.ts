@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   escapeHistoryHtml,
+  externalLinkIcon,
   fetchSiteDetail,
   siteDetailHeader,
   siteDetailLinks,
+  stripHistoryEmoji,
 } from "./detail";
 import type { HistoricSiteTile } from "./types";
 
@@ -25,12 +27,32 @@ describe("escapeHistoryHtml", () => {
   });
 });
 
+describe("stripHistoryEmoji", () => {
+  it("removes platform emoji from data-driven text", () => {
+    expect(stripHistoryEmoji("Castle \u{1F3F0}  ·  Tower \u{1F5FC}")).toBe("Castle · Tower");
+  });
+});
+
+describe("externalLinkIcon", () => {
+  it("uses an inline SVG instead of a Unicode arrow", () => {
+    const icon = externalLinkIcon();
+    expect(icon).toContain("<svg");
+    expect(icon).not.toContain("\u2197");
+  });
+});
+
 describe("siteDetailHeader", () => {
   it("renders name, category and dates", () => {
     const html = siteDetailHeader(SITE);
     expect(html).toContain("Test &lt;Castle&gt;");
     expect(html).toContain("Castle");
     expect(html).toContain("1200");
+  });
+
+  it("strips emoji from names", () => {
+    const html = siteDetailHeader({ ...SITE, name: "Castle \u{1F3F0}" });
+    expect(html).not.toContain("\u{1F3F0}");
+    expect(html).toContain("Castle");
   });
 
   it("marks undated sites", () => {
@@ -51,6 +73,8 @@ describe("siteDetailLinks", () => {
     const html = siteDetailLinks(SITE);
     expect(html).toContain("https://www.wikidata.org/wiki/Q1");
     expect(html).toContain("https://www.openstreetmap.org/");
+    expect(html).toContain("<svg");
+    expect(html).not.toContain("\u2197");
   });
 
   it("omits the Wikidata link without a QID", () => {

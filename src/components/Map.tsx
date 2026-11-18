@@ -97,9 +97,11 @@ import { useHistoryLayers } from "./history/useHistoryLayers";
 import { globalLayerIds } from "@/lib/history/global-layers";
 import {
   escapeHistoryHtml,
+  externalLinkIcon,
   fetchSiteDetail,
   siteDetailHeader,
   siteDetailLinks,
+  stripHistoryEmoji,
 } from "@/lib/history/detail";
 import type {
   HistoricCategory,
@@ -837,7 +839,7 @@ function summaryToHtml(
     commonsUrl && !summary?.thumbnail?.source
       ? `<a class="hud-popup-link" href="${escapeHtml(
           commonsUrl,
-        )}" target="_blank" rel="noopener noreferrer">Commons ↗</a>`
+        )}" target="_blank" rel="noopener noreferrer">Commons ${externalLinkIcon()}</a>`
       : "";
   if (!summary) {
     return `<div class="hud-popup-body">${thumb}No Wikipedia article available for "${escapeHtml(
@@ -847,10 +849,10 @@ function summaryToHtml(
   return `
     <div class="hud-popup-body">
       ${thumb}
-      <p>${escapeHtml(summary.extract)}</p>
+      <p>${escapeHtml(stripHistoryEmoji(summary.extract))}</p>
       <a class="hud-popup-link" href="${escapeHtml(
         summary.url,
-      )}" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a>
+      )}" target="_blank" rel="noopener noreferrer">Wikipedia ${externalLinkIcon()}</a>
       ${commonsLink}
     </div>
   `;
@@ -1826,7 +1828,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 detail.summary.extract,
               )}</p><a class="hud-popup-link" href="${escapeHistoryHtml(
                 detail.summary.url,
-              )}" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a></div>`
+              )}" target="_blank" rel="noopener noreferrer">Wikipedia ${externalLinkIcon()}</a></div>`
             : '<div class="hud-popup-body">No Wikipedia article linked.</div>';
           const image = detail.image
             ? `<img class="hud-popup-thumb" src="${escapeHistoryHtml(
@@ -1836,7 +1838,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           const commons = detail.image
             ? `<a class="hud-popup-link" href="${escapeHistoryHtml(
                 detail.image,
-              )}" target="_blank" rel="noopener noreferrer">Commons ↗</a>`
+              )}" target="_blank" rel="noopener noreferrer">Commons ${externalLinkIcon()}</a>`
             : "";
           popup.setHTML(
             `${siteDetailHeader(site)}${summary}${image}${commons}${siteDetailLinks(
@@ -3129,8 +3131,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         : "date unknown";
       const headerHtml = `
         <div class="hud-popup-header">
-          <span class="hud-popup-title">${escapeHtml(props.name)}</span>
-          <span class="hud-popup-meta">${escapeHtml(props.kind)} · ${datePart}</span>
+          <span class="hud-popup-title">${escapeHtml(
+            stripHistoryEmoji(props.name),
+          )}</span>
+          <span class="hud-popup-meta">${escapeHtml(
+            stripHistoryEmoji(props.kind),
+          )} · ${datePart}</span>
         </div>
       `;
       const loadingHtml =
@@ -3138,7 +3144,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const wikidataLink = props.wikidataId
         ? `<a class="hud-popup-link" href="https://www.wikidata.org/wiki/${escapeHtml(
             props.wikidataId,
-          )}" target="_blank" rel="noopener noreferrer">Wikidata ↗</a>`
+          )}" target="_blank" rel="noopener noreferrer">Wikidata ${externalLinkIcon()}</a>`
         : "";
       historyPopupRef.current?.remove();
       const popup = new maplibregl.Popup({
@@ -3199,7 +3205,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         const commonsLink = image
           ? `<br/><a class="hud-popup-link" href="${escapeHtml(
               image,
-            )}" target="_blank" rel="noopener noreferrer">Commons ↗</a>`
+            )}" target="_blank" rel="noopener noreferrer">Commons ${externalLinkIcon()}</a>`
           : "";
         return `<div class="hud-popup-body">${thumb}No Wikipedia article linked.${
           wikidataLink ? "<br/>" + wikidataLink : ""
@@ -3687,6 +3693,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       POI_ICON_LAYER_ID,
       POI_LABEL_LAYER_ID,
       historyLayers.siteLayer,
+      historyLayers.siteHit,
       ...historyLayers.clusterDots,
     ]);
     const onClick = (event: MapMouseEvent) => {
