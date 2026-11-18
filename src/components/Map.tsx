@@ -8,9 +8,13 @@ import {
   BASEMAPS,
   BASEMAP_GROUP_LABELS,
   BASEMAP_GROUP_ORDER,
+  DEFAULT_IMAGE_BASEMAP_ID,
   DEFAULT_VECTOR_BASEMAP_ID,
+  availableBasemapsInGroup,
+  basemapAvailableAt,
   basemapsInGroup,
   getActiveVariant,
+  getBasemap,
   basemapUsesTimeline,
   resolveBasemapSubtitle,
   resolveBasemapUrl,
@@ -1728,6 +1732,38 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
+
+  // Regional basemaps are tied to their coverage. If the user pans out of
+  // it, fall back to the global default instead of leaving blank tiles.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || historyMapOn) return;
+    const check = () => {
+      const basemap = getBasemap(baseActive);
+      if (!basemap?.bounds) return;
+      const c = map.getCenter();
+      if (basemapAvailableAt(basemap, [c.lng, c.lat])) return;
+      if (basemapMode === "vector") {
+        setVectorBasemapId(DEFAULT_VECTOR_BASEMAP_ID);
+      } else {
+        setImageBasemapId(DEFAULT_IMAGE_BASEMAP_ID);
+      }
+    };
+    check();
+    map.on("moveend", check);
+    map.on("zoomend", check);
+    return () => {
+      map.off("moveend", check);
+      map.off("zoomend", check);
+    };
+  }, [
+    mapInstance,
+    baseActive,
+    basemapMode,
+    historyMapOn,
+    setImageBasemapId,
+    setVectorBasemapId,
+  ]);
   const [historyCategories, setHistoryCategories] = useState<HistoricCategory[]>([]);
   const historyGlobalActive = activePane === "history";
   const historyGlobal = useHistoryLayers(mapInstance, {
@@ -4166,19 +4202,11 @@ function BasemapPanel({
     };
   }, [map]);
 
-  const outsideCoverage = (basemap: Basemap) => {
-    if (!basemap.bounds || !center) return false;
-    const [west, south, east, north] = basemap.bounds;
-    return (
-      center[0] < west ||
-      center[0] > east ||
-      center[1] < south ||
-      center[1] > north
-    );
-  };
   const filtered = basemapsInGroup(group);
-  const imageMaps = filtered.filter((b) => b.category === "photo");
-  const vectorMaps = filtered.filter((b) => b.category === "vector");
+  const available = availableBasemapsInGroup(group, center);
+  const hiddenCount = filtered.length - available.length;
+  const imageMaps = available.filter((b) => b.category === "photo");
+  const vectorMaps = available.filter((b) => b.category === "vector");
 
   const renderGroup = (
     label: string,
@@ -4260,11 +4288,6 @@ function BasemapPanel({
                 .join(" · ")}
             </span>
           )}
-        {selectedBasemap && outsideCoverage(selectedBasemap) && (
-          <span className="px-1 text-[10.5px] text-[color:var(--warn)]">
-            Outside coverage ({selectedBasemap.coverage})
-          </span>
-        )}
       </div>
     );
   };
@@ -4294,6 +4317,13 @@ function BasemapPanel({
             </button>
           ))}
         </div>
+        {hiddenCount > 0 && (
+          <p className="text-[10.5px] leading-relaxed text-[color:var(--ink-mute)]">
+            {hiddenCount === 1
+              ? "1 regional map is hidden outside its coverage."
+              : `${hiddenCount} regional maps are hidden outside their coverage.`}
+          </p>
+        )}
         {renderGroup(
           "Vector Maps",
           vectorMaps,

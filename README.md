@@ -40,7 +40,7 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 | Feature | What it does |
 |---|---|
 | **Search** | Places, streets and stations via Photon, with detail cards for OSM places: photos, opening hours, contact, website and Wikipedia/Wikidata. |
-| **Basemaps** | Global imagery (Esri, Sentinel-2, NASA GIBS) and keyless vector styles (CARTO, OpenFreeMap, VersaTiles); official DACH maps (basemap.de, basemap.at, swisstopo, Bayern); European national maps (IGN, PDOK, Kartverket, ČÚZK, GUGiK, IGN España); and historical layers (Siegfried, Dufour, Zeitreihen, IGN État-Major/Scan50/Cassini, Vienna 1938–1992, Zurich ~1850, NLS, Kartverket). Group filters and year variants keep the collection navigable. The Graphite-tinted CARTO dark style is the default. |
+| **Basemaps** | Global imagery (Esri, Sentinel-2, NASA GIBS) and keyless vector styles (CARTO, OpenFreeMap, VersaTiles); official DACH maps (basemap.de, basemap.at, swisstopo, Bayern); European national maps (IGN, PDOK, Kartverket, ČÚZK, GUGiK, IGN España); and historical layers (Siegfried, Dufour, Zeitreihen, IGN État-Major/Scan50/Cassini, Vienna 1938–1992, Zurich ~1850, NLS, Kartverket). Group filters and year variants keep the collection navigable; regional layers only appear while the map centre is inside their coverage. The Graphite-tinted CARTO dark style is the default. |
 | **Modes** | Image, Hybrid (satellite plus transport) and Vector. |
 | **Projection** | Flat Mercator or a 3D globe. |
 | **Orientation** | North-up, route-up or compass heading. |

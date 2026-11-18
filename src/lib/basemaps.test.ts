@@ -5,6 +5,8 @@ import {
   DEFAULT_IMAGE_BASEMAP_ID,
   DEFAULT_VECTOR_BASEMAP_ID,
   GIBS_TODAY_DATE_PLACEHOLDER,
+  availableBasemapsInGroup,
+  basemapAvailableAt,
   basemapGroup,
   basemapsInGroup,
   getActiveVariant,
@@ -49,9 +51,26 @@ describe("basemap collection", () => {
       expect(south, basemap.id).toBeLessThan(north);
       expect(basemap.coverage, basemap.id).not.toBe("Welt");
     }
+    const countryCoverage = new Set([
+      "DE",
+      "BY",
+      "AT",
+      "CH",
+      "FR",
+      "NL",
+      "NO",
+      "CZ",
+      "PL",
+      "ES",
+      "UK",
+      "JP",
+    ]);
     for (const basemap of BASEMAPS) {
       if (basemap.coverage === "Welt" || basemap.coverage === "Weltmeere") continue;
       expect(basemap.bounds, basemap.id).toBeDefined();
+      if (basemap.coverage && countryCoverage.has(basemap.coverage)) {
+        expect(basemap.region, basemap.id).toBeDefined();
+      }
     }
   });
 
@@ -118,6 +137,36 @@ describe("basemap collection", () => {
     for (const basemap of basemapsInGroup("dach")) {
       expect(basemapGroup(basemap)).toBe("dach");
     }
+  });
+
+  it("offers regional layers only inside their country outline", () => {
+    const vienna: [number, number] = [16.373, 48.208];
+    const berlin: [number, number] = [13.405, 52.52];
+    const zurich: [number, number] = [8.54, 47.37];
+    const paris: [number, number] = [2.352, 48.857];
+
+    const at = getBasemap("at-geoland");
+    const de = getBasemap("de-basemap-col");
+    const ch = getBasemap("ch-pixelkarte");
+    const global = getBasemap("esri-imagery");
+    expect(at && basemapAvailableAt(at, vienna)).toBe(true);
+    expect(at && basemapAvailableAt(at, berlin)).toBe(false);
+    expect(de && basemapAvailableAt(de, berlin)).toBe(true);
+    expect(de && basemapAvailableAt(de, zurich)).toBe(false);
+    expect(ch && basemapAvailableAt(ch, zurich)).toBe(true);
+    expect(de && basemapAvailableAt(de, paris)).toBe(false);
+    expect(global && basemapAvailableAt(global, paris)).toBe(true);
+    expect(at && basemapAvailableAt(at, null)).toBe(true);
+
+    const dachAtVienna = availableBasemapsInGroup("dach", vienna);
+    const dachAtZurich = availableBasemapsInGroup("dach", zurich);
+    const dachAtParis = availableBasemapsInGroup("dach", paris);
+    expect(dachAtVienna.some((b) => b.id === "at-geoland")).toBe(true);
+    expect(dachAtVienna.some((b) => b.id === "de-basemap-col")).toBe(false);
+    expect(dachAtZurich.some((b) => b.id === "ch-pixelkarte")).toBe(true);
+    expect(dachAtZurich.some((b) => b.id === "de-basemap-col")).toBe(false);
+    expect(dachAtParis.some((b) => b.id === "at-geoland")).toBe(false);
+    expect(dachAtParis).toHaveLength(0);
   });
 
   it("requires every variant default to exist", () => {

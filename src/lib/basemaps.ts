@@ -1,4 +1,5 @@
 import { gibsDateNDaysAgo } from "./gibs";
+import { pointInRegion, type BasemapRegion } from "./basemap-regions";
 
 export type BasemapCategory = "photo" | "vector";
 
@@ -64,6 +65,8 @@ export interface Basemap {
   license?: string;
   /** Coverage hint, e.g. "DE", "CH", "Welt". */
   coverage?: string;
+  /** Country/region outline for availability; falls back to `bounds`. */
+  region?: BasemapRegion;
   /** Optional WGS84 bounds [west, south, east, north] for regional layers. */
   bounds?: [number, number, number, number];
   url: string;
@@ -612,6 +615,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "BKG / basemap.de",
     license: "DL-DE-BY 2.0",
     coverage: "DE",
+    region: "de",
     bounds: BOUNDS.de,
     url: "https://sgx.geodatenzentrum.de/wmts_basemapde/tile/1.0.0/de_basemapde_web_raster_farbe/default/GLOBAL_WEBMERCATOR/{z}/{y}/{x}.png",
     maxzoom: 19,
@@ -627,6 +631,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "BKG / basemap.de",
     license: "DL-DE-BY 2.0",
     coverage: "DE",
+    region: "de",
     bounds: BOUNDS.de,
     url: "https://sgx.geodatenzentrum.de/wmts_basemapde/tile/1.0.0/de_basemapde_web_raster_grau/default/GLOBAL_WEBMERCATOR/{z}/{y}/{x}.png",
     maxzoom: 19,
@@ -642,6 +647,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "BKG",
     license: "dl-de/by-2-0",
     coverage: "DE",
+    region: "de",
     bounds: BOUNDS.de,
     url: "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png",
     maxzoom: 17,
@@ -658,6 +664,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Bayerische Vermessungsverwaltung",
     license: "CC BY 4.0",
     coverage: "BY",
+    region: "by",
     bounds: BOUNDS.by,
     url: "https://wmtsod1.bayernwolke.de/wmts/by_webkarte/smerc/{z}/{x}/{y}",
     maxzoom: 19,
@@ -673,6 +680,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Bayerische Vermessungsverwaltung",
     license: "CC BY 4.0",
     coverage: "BY",
+    region: "by",
     bounds: BOUNDS.by,
     url: "https://wmtsod1.bayernwolke.de/wmts/by_amtl_karte/smerc/{z}/{x}/{y}",
     maxzoom: 19,
@@ -688,6 +696,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "basemap.at",
     license: "CC BY 4.0",
     coverage: "AT",
+    region: "at",
     bounds: BOUNDS.at,
     url: "https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png",
     maxzoom: 18,
@@ -703,6 +712,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "basemap.at",
     license: "CC BY 4.0",
     coverage: "AT",
+    region: "at",
     bounds: BOUNDS.at,
     url: "https://mapsneu.wien.gv.at/basemap/bmapgrau/normal/google3857/{z}/{y}/{x}.png",
     maxzoom: 18,
@@ -718,6 +728,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "basemap.at",
     license: "CC BY 4.0",
     coverage: "AT",
+    region: "at",
     bounds: BOUNDS.at,
     url: "https://mapsneu.wien.gv.at/basemap/bmaporthofoto30cm/normal/google3857/{z}/{y}/{x}.jpeg",
     maxzoom: 18,
@@ -733,6 +744,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg",
     maxzoom: 19,
@@ -748,6 +760,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg",
     maxzoom: 19,
@@ -763,6 +776,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.landeskarte-farbe-10/default/current/3857/{z}/{x}/{y}.png",
     maxzoom: 19,
@@ -780,6 +794,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Kadaster / PDOK",
     license: "CC BY 4.0",
     coverage: "NL",
+    region: "nl",
     bounds: BOUNDS.nl,
     url: "https://service.pdok.nl/kadaster/brt-achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png",
     maxzoom: 19,
@@ -795,6 +810,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Kadaster / PDOK",
     license: "CC BY 4.0",
     coverage: "NL",
+    region: "nl",
     bounds: BOUNDS.nl,
     url: "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/${year}_orthoHR/EPSG:3857/{z}/{x}/{y}.jpeg",
     maxzoom: 19,
@@ -819,6 +835,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN",
     license: "Licence Ouverte 2.0",
     coverage: "FR",
+    region: "fr",
     bounds: BOUNDS.fr,
     url: ignLayer("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png"),
     maxzoom: 18,
@@ -834,6 +851,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN",
     license: "Licence Ouverte 2.0",
     coverage: "FR",
+    region: "fr",
     bounds: BOUNDS.fr,
     url: ignLayer("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"),
     maxzoom: 19,
@@ -849,6 +867,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Kartverket",
     license: "CC BY 4.0",
     coverage: "NO",
+    region: "no",
     bounds: BOUNDS.no,
     url: "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png",
     maxzoom: 18,
@@ -864,6 +883,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Kartverket",
     license: "CC BY 4.0",
     coverage: "NO",
+    region: "no",
     bounds: BOUNDS.no,
     url: "https://cache.kartverket.no/v1/wmts/1.0.0/sjokartraster/default/webmercator/{z}/{y}/{x}.png",
     maxzoom: 18,
@@ -879,6 +899,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "ČÚZK",
     license: "Open data · attribution",
     coverage: "CZ",
+    region: "cz",
     bounds: BOUNDS.cz,
     url: "https://ags.cuzk.gov.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/{z}/{y}/{x}",
     maxzoom: 20,
@@ -894,6 +915,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "ČÚZK",
     license: "Open data · attribution",
     coverage: "CZ",
+    region: "cz",
     bounds: BOUNDS.cz,
     url: "https://ags.cuzk.gov.cz/arcgis1/rest/services/ZTM_WM/MapServer/tile/{z}/{y}/{x}",
     maxzoom: 20,
@@ -909,6 +931,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "GUGiK",
     license: "Open data · attribution",
     coverage: "PL",
+    region: "pl",
     bounds: BOUNDS.pl,
     url: "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMTS/StandardResolution?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTOFOTOMAPA&STYLE=default&TILEMATRIXSET=EPSG:3857&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg",
     maxzoom: 18,
@@ -924,6 +947,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN España",
     license: "CC BY 4.0",
     coverage: "ES",
+    region: "es",
     bounds: BOUNDS.es,
     url: "https://www.ign.es/wmts/ign-base?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=IGNBaseTodo&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg",
     maxzoom: 18,
@@ -939,6 +963,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN España",
     license: "CC BY 4.0",
     coverage: "ES",
+    region: "es",
     bounds: BOUNDS.es,
     url: "https://www.ign.es/wmts/pnoa-ma?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=OI.OrthoimageCoverage&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg",
     maxzoom: 18,
@@ -956,6 +981,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hiks-siegfried/default/${year}/3857/{z}/{x}/{y}.png",
     maxzoom: 17,
@@ -976,6 +1002,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hiks-dufour/default/current/3857/{z}/{x}/{y}.png",
     maxzoom: 15,
@@ -991,6 +1018,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.zeitreihen/default/${year}1231/3857/{z}/{x}/{y}.png",
     maxzoom: 17,
@@ -1011,6 +1039,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "swisstopo",
     license: "OGD · attribution",
     coverage: "CH",
+    region: "ch",
     bounds: BOUNDS.ch,
     url: "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage-product_1946/default/1946/3857/{z}/{x}/{y}.jpeg",
     maxzoom: 17,
@@ -1026,6 +1055,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN",
     license: "Licence Ouverte 2.0",
     coverage: "FR",
+    region: "fr",
     bounds: BOUNDS.fr,
     url: ignLayer("GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40", "image/jpeg"),
     maxzoom: 15,
@@ -1041,6 +1071,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN",
     license: "Licence Ouverte 2.0",
     coverage: "FR",
+    region: "fr",
     bounds: BOUNDS.fr,
     url: ignLayer("GEOGRAPHICALGRIDSYSTEMS.MAPS.SCAN50.1950", "image/jpeg"),
     maxzoom: 15,
@@ -1056,6 +1087,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN",
     license: "Licence Ouverte 2.0",
     coverage: "FR",
+    region: "fr",
     bounds: BOUNDS.fr,
     url: ignLayer("ORTHOIMAGERY.ORTHOPHOTOS.${year}", "image/png"),
     maxzoom: 18,
@@ -1080,6 +1112,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "IGN / BnF",
     license: "Licence Ouverte 2.0",
     coverage: "FR",
+    region: "fr",
     bounds: BOUNDS.fr,
     url: ignLayer("BNF-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI", "image/png"),
     maxzoom: 14,
@@ -1134,6 +1167,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "National Library of Scotland",
     license: "CC BY-NC 4.0",
     coverage: "UK",
+    region: "uk",
     bounds: BOUNDS.uk,
     url: "https://mapseries-tilesets.s3.amazonaws.com/os/${year}/{z}/{x}/{y}.png",
     maxzoom: 17,
@@ -1157,6 +1191,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "Kartverket",
     license: "CC BY 4.0",
     coverage: "NO",
+    region: "no",
     bounds: BOUNDS.no,
     url: "https://wms.geonorge.no/skwms1/wms.historiskekart?service=WMS&version=1.3.0&request=GetMap&layers=historiskekart&crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png&transparent=true",
     maxzoom: 16,
@@ -1172,6 +1207,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "GSI Japan",
     license: "Open data · attribution",
     coverage: "JP",
+    region: "jp",
     bounds: BOUNDS.jp,
     url: "https://cyberjapandata.gsi.go.jp/xyz/gazo1/{z}/{x}/{y}.jpg",
     maxzoom: 17,
@@ -1189,6 +1225,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "GSI Japan",
     license: "Open data · attribution",
     coverage: "JP",
+    region: "jp",
     bounds: BOUNDS.jp,
     url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg",
     maxzoom: 18,
@@ -1204,6 +1241,7 @@ export const BASEMAPS: Basemap[] = [
     provider: "GSI Japan",
     license: "Open data · attribution",
     coverage: "JP",
+    region: "jp",
     bounds: BOUNDS.jp,
     url: "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",
     maxzoom: 18,
@@ -1238,6 +1276,35 @@ export function basemapsInGroup(
 ): Basemap[] {
   if (group === "all") return BASEMAPS;
   return BASEMAPS.filter((b) => b.group === group);
+}
+
+/**
+ * Regional layers (those with `bounds`) are only offered while the map
+ * centre is inside their coverage. Global layers are always available.
+ * A null centre means "not known yet" and keeps the full list visible.
+ */
+export function basemapAvailableAt(
+  basemap: Basemap,
+  center: [number, number] | null,
+): boolean {
+  if (!center) return true;
+  if (basemap.region) {
+    return pointInRegion(basemap.region, center[0], center[1]);
+  }
+  if (!basemap.bounds) return true;
+  const [west, south, east, north] = basemap.bounds;
+  const [lon, lat] = center;
+  return lon >= west && lon <= east && lat >= south && lat <= north;
+}
+
+/** Basemaps in a group that can be selected at the given map centre. */
+export function availableBasemapsInGroup(
+  group: BasemapGroup | "all",
+  center: [number, number] | null,
+): Basemap[] {
+  return basemapsInGroup(group).filter((b) =>
+    basemapAvailableAt(b, center),
+  );
 }
 
 export function getActiveVariant(
