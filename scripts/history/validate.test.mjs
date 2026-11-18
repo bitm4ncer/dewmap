@@ -104,7 +104,7 @@ describe("tileFor", () => {
 });
 
 describe("validateArchive", () => {
-  const decode = (_z, _x, _y) => ({
+  const decode = () => ({
     history_clusters: [{ properties: { count: 3 } }, { properties: { count: 2 } }],
     history_sites: [{ properties: { id: "wd/Q1" } }],
   });

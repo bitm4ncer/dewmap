@@ -1866,7 +1866,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   });
 
   const liveHistoryLandmarksOn =
-    historyLandmarksOn && historyGlobal.status !== "ready";
+    historyLandmarksOn && historyGlobalActive && historyGlobal.status === "error";
 
   const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
     state: sheetState,
