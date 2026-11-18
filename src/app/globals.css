@@ -637,6 +637,9 @@ body {
     transition: opacity 180ms ease, margin-bottom 180ms ease;
   }
   .maplibregl-ctrl-bottom-right {
+    left: 12px !important;
+    right: auto !important;
+    align-items: flex-start;
     margin-bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 12px) !important;
     transition: opacity 180ms ease, margin-bottom 180ms ease;
   }

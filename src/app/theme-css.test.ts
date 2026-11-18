@@ -167,6 +167,17 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
   });
 
+  it("keeps map attribution clear of the right-side map controls", () => {
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.includes(".maplibregl-ctrl-bottom-right") &&
+          b.body.includes("left: 12px !important") &&
+          b.body.includes("right: auto !important"),
+      ),
+    ).toBe(true);
+  });
+
   it("caps the When date field width", () => {
     expect(block(".ui-input-date")?.body).toContain("max-width: 240px");
   });
