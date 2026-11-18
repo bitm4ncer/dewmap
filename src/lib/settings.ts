@@ -68,6 +68,8 @@ export interface Settings {
    * up to today are shown. */
   historyLandmarksOn: boolean;
   historyLandmarksOpacity: number;
+  /** Global heritage layer visibility. */
+  historyGlobalOn: boolean;
   /** Global heritage layer — heritage-only and UNESCO-only filters. */
   historyHeritageOnly: boolean;
   historyUnescoOnly: boolean;
@@ -98,6 +100,7 @@ export interface Settings {
   setLandCoverOpacity: (o: number) => void;
   setHistoryLandmarksOn: (on: boolean) => void;
   setHistoryLandmarksOpacity: (o: number) => void;
+  setHistoryGlobalOn: (on: boolean) => void;
   setHistoryHeritageOnly: (on: boolean) => void;
   setHistoryUnescoOnly: (on: boolean) => void;
   setHistoryMapOn: (on: boolean) => void;
@@ -139,6 +142,7 @@ export const useSettings = create<Settings>()(
       historyMapOn: false,
       historyLandmarksOn: false,
       historyLandmarksOpacity: 0.9,
+      historyGlobalOn: true,
       historyHeritageOnly: false,
       historyUnescoOnly: false,
       historyYear: HISTORY_YEAR_MAX,
@@ -176,6 +180,7 @@ export const useSettings = create<Settings>()(
       setHistoryLandmarksOn: (on) => set({ historyLandmarksOn: on }),
       setHistoryLandmarksOpacity: (o) =>
         set({ historyLandmarksOpacity: clamp01(o) }),
+      setHistoryGlobalOn: (on: boolean) => set({ historyGlobalOn: on }),
       setHistoryHeritageOnly: (on: boolean) =>
         set({ historyHeritageOnly: on }),
       setHistoryUnescoOnly: (on: boolean) => set({ historyUnescoOnly: on }),
@@ -221,6 +226,7 @@ export const useSettings = create<Settings>()(
         historyMapOn: state.historyMapOn,
         historyLandmarksOn: state.historyLandmarksOn,
         historyLandmarksOpacity: state.historyLandmarksOpacity,
+        historyGlobalOn: state.historyGlobalOn,
         historyHeritageOnly: state.historyHeritageOnly,
         historyUnescoOnly: state.historyUnescoOnly,
         historyYear: state.historyYear,

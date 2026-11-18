@@ -1575,6 +1575,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     landCoverOpacity,
     historyLandmarksOn,
     historyLandmarksOpacity,
+    historyGlobalOn,
     historyHeritageOnly,
     historyUnescoOnly,
     historyMapOn,
@@ -1604,6 +1605,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setLandCoverOpacity,
     setHistoryLandmarksOn,
     setHistoryLandmarksOpacity,
+    setHistoryGlobalOn,
     setHistoryHeritageOnly,
     setHistoryUnescoOnly,
     setHistoryMapOn,
@@ -1766,7 +1768,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setVectorBasemapId,
   ]);
   const [historyCategories, setHistoryCategories] = useState<HistoricCategory[]>([]);
-  const historyGlobalActive = activePane === "history";
+  const historyGlobalActive = activePane === "history" && historyGlobalOn;
   const historyGlobal = useHistoryLayers(mapInstance, {
     enabled: historyGlobalActive,
     year: historyYear,
@@ -3900,6 +3902,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 onLoadFull={historyGlobal.retryFullDownload}
                 categories={historyCategories}
                 onCategoriesChange={setHistoryCategories}
+                globalOn={historyGlobalOn}
+                onGlobalOnChange={setHistoryGlobalOn}
                 heritageOnly={historyHeritageOnly}
                 onHeritageOnlyChange={setHistoryHeritageOnly}
                 unescoOnly={historyUnescoOnly}
