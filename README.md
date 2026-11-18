@@ -40,7 +40,7 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 | Feature | What it does |
 |---|---|
 | **Search** | Places, streets and stations via Photon, with detail cards for OSM places: photos, opening hours, contact, website and Wikipedia/Wikidata. |
-| **Basemaps** | Esri satellite, Sentinel-2 cloudless (2024/2023), NASA Black Marble night lights, EOX Terrain and CARTO Streets dark/light. |
+| **Basemaps** | Esri satellite, Sentinel-2 cloudless (2024/2023), NASA Black Marble night lights, EOX Terrain and CARTO Streets dark/light. The dark vector style is re-tinted to the Graphite palette and is the default. |
 | **Modes** | Image, Hybrid (satellite plus transport) and Vector. |
 | **Projection** | Flat Mercator or a 3D globe. |
 | **Orientation** | North-up, route-up or compass heading. |
@@ -166,11 +166,9 @@ No backend, no analytics. Settings, planner state and credentials live in `local
 
 ## Status
 
-The train planner is the focus. KugelMaps is not yet a drop-in replacement for DB Navigator, the VRR app or Google Maps — coverage and live data depend on the upstream APIs. Next up:
+The train planner is the focus. KugelMaps is not yet a drop-in replacement for DB Navigator, the VRR app or Google Maps — coverage and live data depend on the upstream APIs. The dark vector basemap with the Graphite tint is the default; satellite imagery is one tap away.
 
-- a graphite re-tint for the dark vector basemap;
-- broader live-transit coverage;
-- making the dark vector basemap the default for new users.
+Next up: broader live-transit coverage and more real-time feeds.
 
 ## License
 
