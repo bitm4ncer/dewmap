@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import maplibregl, { Map as MLMap, ScaleControl, type MapMouseEvent } from "maplibre-gl";
 import { THEME } from "@/lib/theme";
 import "maplibre-gl/dist/maplibre-gl.css";
+import type { ExpressionSpecification } from "@maplibre/maplibre-gl-style-spec";
 import {
   BASEMAPS,
   BASEMAP_GROUP_LABELS,
@@ -366,6 +367,42 @@ const RAIL_VECTOR_STATION_LABEL_LAYER_ID = "rail-vector-station-label";
 const RAIL_VECTOR_MIN_ZOOM = 4;
 const RAIL_VECTOR_STATION_MIN_ZOOM = 10;
 
+/** Fade in over the three zoom levels above each layer's minzoom. */
+const RAIL_LINE_FADE: readonly [number, number][] = [
+  [4, 0],
+  [5, 0.35],
+  [6, 0.7],
+  [7, 1],
+];
+const RAIL_STATION_FADE: readonly [number, number][] = [
+  [10, 0],
+  [11, 0.35],
+  [12, 0.8],
+  [13, 1],
+];
+const RAIL_STATION_LABEL_FADE: readonly [number, number][] = [
+  [11, 0],
+  [12, 0.5],
+  [13, 1],
+];
+
+/**
+ * Zoom functions must be the top-level expression; nesting `zoom` inside
+ * `*` is rejected by MapLibre. Multiply the output stops by the user's
+ * opacity instead.
+ */
+function railFade(
+  opacity: number,
+  stops: readonly [number, number][],
+): ExpressionSpecification {
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    ...stops.flatMap(([zoom, factor]) => [zoom, factor * opacity]),
+  ] as ExpressionSpecification;
+}
+
 function ensureRailVectorLayers(map: MLMap, opacity: number) {
   if (!map.getSource(RAIL_VECTOR_SOURCE_ID)) {
     map.addSource(RAIL_VECTOR_SOURCE_ID, {
@@ -394,7 +431,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
           12, 3.2,
           16, 4.8,
         ],
-        "line-opacity": opacity,
+        "line-opacity": railFade(opacity, RAIL_LINE_FADE),
       },
     });
   }
@@ -430,7 +467,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
           12, 1.65,
           16, 2.8,
         ],
-        "line-opacity": opacity,
+        "line-opacity": railFade(opacity, RAIL_LINE_FADE),
         "line-dasharray": [
           "case",
           ["==", ["get", "brunnel"], "tunnel"], ["literal", [2, 2]],
@@ -453,8 +490,12 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
         ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
       ],
       paint: {
+        // Large invisible tap target. `transparent` is not reliable across
+        // MapLibre/style-spec versions and can fall back to a visible fill,
+        // which hides the rail lines behind big station circles.
         "circle-radius": 18,
-        "circle-color": "transparent",
+        "circle-color": THEME.casing,
+        "circle-opacity": 0,
         "circle-stroke-width": 0,
       },
     });
@@ -475,14 +516,14 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       paint: {
         "circle-radius": [
           "interpolate", ["linear"], ["zoom"],
-          10, 3,
-          14, 4.5,
-          17, 6,
+          10, 2.2,
+          14, 3.2,
+          17, 4.5,
         ],
         "circle-color": THEME.accent,
         "circle-stroke-color": THEME.casing,
-        "circle-stroke-width": 1.5,
-        "circle-opacity": opacity,
+        "circle-stroke-width": 1.2,
+        "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
       },
     });
   }
@@ -519,7 +560,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
         "text-color": THEME.ink,
         "text-halo-color": THEME.casing,
         "text-halo-width": 1.4,
-        "text-opacity": opacity,
+        "text-opacity": railFade(opacity, RAIL_STATION_LABEL_FADE),
       },
     });
   }
@@ -527,23 +568,31 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
 
 function updateRailVectorOpacity(map: MLMap, opacity: number) {
   if (map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
-    map.setPaintProperty(RAIL_VECTOR_MAIN_LAYER_ID, "line-opacity", opacity);
+    map.setPaintProperty(
+      RAIL_VECTOR_MAIN_LAYER_ID,
+      "line-opacity",
+      railFade(opacity, RAIL_LINE_FADE),
+    );
   }
   if (map.getLayer(RAIL_VECTOR_CASING_LAYER_ID)) {
-    map.setPaintProperty(RAIL_VECTOR_CASING_LAYER_ID, "line-opacity", opacity);
+    map.setPaintProperty(
+      RAIL_VECTOR_CASING_LAYER_ID,
+      "line-opacity",
+      railFade(opacity, RAIL_LINE_FADE),
+    );
   }
   if (map.getLayer(RAIL_VECTOR_STATION_DOT_LAYER_ID)) {
     map.setPaintProperty(
       RAIL_VECTOR_STATION_DOT_LAYER_ID,
       "circle-opacity",
-      opacity,
+      railFade(opacity, RAIL_STATION_FADE),
     );
   }
   if (map.getLayer(RAIL_VECTOR_STATION_LABEL_LAYER_ID)) {
     map.setPaintProperty(
       RAIL_VECTOR_STATION_LABEL_LAYER_ID,
       "text-opacity",
-      opacity,
+      railFade(opacity, RAIL_STATION_LABEL_FADE),
     );
   }
 }
