@@ -3310,20 +3310,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     >
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Floating top bar — logo, search, and (desktop only) the
-          basemap-mode switch. On phones the Map tab owns basemap chrome,
-          so the search keeps the full width. */}
+      {/* Floating top bar — search, and (desktop only) the basemap-mode
+          switch. On phones the Map tab owns basemap chrome, so the search
+          keeps the full width. */}
       <div
         className={["ui-topbar", sidebarOpen ? "ui-topbar--with-panel" : ""].join(" ")}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`${ICON_BASE_PATH}/icon.svg`}
-          alt="BiosphereOne"
-          width={40}
-          height={40}
-          className="ui-logo"
-        />
         <div className="ui-search-wrap">
           <SearchBox onSelect={setFlyTarget} getNearby={() => { const m = mapRef.current; if (!m) return undefined; const c = m.getCenter(); return [c.lng, c.lat]; }} />
         </div>
@@ -3915,8 +3907,6 @@ const SEGMENTS: { key: BasemapMode; label: string; icon: ReactNode }[] = [
     ),
   },
 ];
-
-const ICON_BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 function BasemapSwitch({ mode, onModeChange }: BasemapSwitchProps) {
   return (
