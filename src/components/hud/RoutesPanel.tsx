@@ -14,7 +14,7 @@ import {
 export type RoutesMode = "walk" | "bike" | "car" | "transit";
 
 const MODES: { id: RoutesMode; label: string }[] = [
-  { id: "transit", label: "Train" },
+  { id: "transit", label: "Transit" },
   { id: "walk", label: "Walk" },
   { id: "bike", label: "Bike" },
   { id: "car", label: "Car" },
@@ -29,9 +29,15 @@ interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
   mode: RoutesMode;
   onModeChange: (mode: RoutesMode) => void;
+  onSearchComplete?: () => void;
 }
 
-export function RoutesPanel({ mapRef, mode, onModeChange }: Props) {
+export function RoutesPanel({
+  mapRef,
+  mode,
+  onModeChange,
+  onSearchComplete,
+}: Props) {
   const profile = useHiking((s) => s.profile);
   const setProfile = useHiking((s) => s.setProfile);
 
@@ -62,7 +68,7 @@ export function RoutesPanel({ mapRef, mode, onModeChange }: Props) {
       {mode === "car" ? (
         <CarPanel mapRef={mapRef} />
       ) : mode === "transit" ? (
-        <TransitPanel mapRef={mapRef} />
+        <TransitPanel mapRef={mapRef} onSearchComplete={onSearchComplete} />
       ) : (
         <HikingPanel
           key={mode}

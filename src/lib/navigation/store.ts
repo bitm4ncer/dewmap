@@ -10,10 +10,12 @@ interface NavigationState {
   muted: boolean;
   follow: "course" | "north";
   simulate: boolean;
+  guidance: "live" | "schedule";
   start: (plan: RoutePlan, options?: { simulate?: boolean; mode?: TravelMode }) => void;
   stop: () => void;
   setMuted: (m: boolean) => void;
   setFollow: (f: "course" | "north") => void;
+  setGuidance: (g: "live" | "schedule") => void;
 }
 
 export const useNavigation = create<NavigationState>((set) => ({
@@ -23,6 +25,7 @@ export const useNavigation = create<NavigationState>((set) => ({
   muted: false,
   follow: "course",
   simulate: false,
+  guidance: "live",
   start: (plan, options) =>
     set({
       active: true,
@@ -34,4 +37,5 @@ export const useNavigation = create<NavigationState>((set) => ({
   stop: () => set({ active: false, plan: null, mode: null, simulate: false }),
   setMuted: (muted) => set({ muted }),
   setFollow: (follow) => set({ follow }),
+  setGuidance: (guidance) => set({ guidance }),
 }));

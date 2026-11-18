@@ -64,6 +64,7 @@ import {
 } from "@/lib/history/basemap";
 import { useHikingLayers } from "./hiking/useHikingLayers";
 import { usePlannerLayers } from "./planner/usePlannerLayers";
+import { useLiveVehiclesLayer } from "./planner/useLiveVehiclesLayer";
 import { useNavigationEngine } from "@/lib/navigation/useNavigation";
 import { useNavigation } from "@/lib/navigation/store";
 import { NavigationOverlay } from "./navigation/NavigationOverlay";
@@ -1767,6 +1768,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     mapInstance,
     routesMode === "car" ? "car" : routesMode === "transit" ? "transit" : null,
   );
+  useLiveVehiclesLayer(mapInstance);
   const railNetworkStatus = useRailNetworkStatus();
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
@@ -1801,6 +1803,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
   const toggleFull = () => snapTo(sheetState === "full" ? "half" : "full");
   const collapseToPeek = useCallback(() => snapTo("peek"), [snapTo]);
+  const handleTransitSearchComplete = useCallback(() => {
+    if (sheetState === "full") snapTo("half");
+  }, [sheetState, snapTo]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -3551,7 +3556,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
           <div className="hud-scrollbar ui-panel-body">
             {activePane === "hiking" ? (
-              <RoutesPanel mapRef={mapRef} mode={routesMode} onModeChange={setRoutesMode} />
+              <RoutesPanel
+                mapRef={mapRef}
+                mode={routesMode}
+                onModeChange={setRoutesMode}
+                onSearchComplete={handleTransitSearchComplete}
+              />
             ) : activePane === "history" ? (
               <HistoryPanel
                 year={historyYear}

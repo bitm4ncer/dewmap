@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { geocode, prettyCategory } from "@/lib/geocode";
 import { geocodeStops, type MotisStop } from "@/lib/routing";
-import { findNearestStation } from "@/lib/planner/nearestStation";
+import { CloseIcon, MapPinIcon, RecenterIcon, StarIcon } from "@/components/ui/icons";
 
 export interface PickedPlace {
   name: string;
@@ -13,25 +13,28 @@ export interface PickedPlace {
   sub?: string;
   city?: string;
   kind?: "address" | "stop";
-  station?: {
-    name: string;
-    lat: number;
-    lon: number;
-    city?: string;
-    distanceM?: number;
-  };
 }
 
 interface Props {
   placeholder: string;
   kind: "address" | "stop" | "transit";
   onPick: (place: PickedPlace) => void;
+  /** Called when the user edits/clears a previously selected place. */
+  onClear?: () => void;
   getNearby?: () => [number, number] | undefined;
   autoFocus?: boolean;
   /** Controlled display label for an already-picked place. */
   selectedLabel?: string;
+  /** The actual selected place, when the parent has one. */
+  selectedPlace?: PickedPlace | null;
   /** Optional free-text city filter applied to every result. */
   cityFilter?: string;
+  /** Saved / recent places shown as one-tap chips. */
+  quickPlaces?: PickedPlace[];
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
+  /** Ask the parent to listen for the next map click. */
+  onPickOnMap?: () => void;
 }
 
 type Result = PickedPlace;
@@ -47,31 +50,43 @@ export function PlacePicker({
   placeholder,
   kind,
   onPick,
+  onClear,
   getNearby,
   autoFocus,
   selectedLabel,
+  selectedPlace,
   cityFilter,
+  quickPlaces = [],
+  favorite = false,
+  onToggleFavorite,
+  onPickOnMap,
 }: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const listId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const skipSearchRef = useRef(false);
   const lastSelectedRef = useRef<string | undefined>(undefined);
+  const editingRef = useRef(false);
   const mountedRef = useRef(true);
   const getNearbyRef = useRef(getNearby);
   useEffect(() => {
     getNearbyRef.current = getNearby;
   }, [getNearby]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    [],
-  );
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (skipSearchRef.current) {
@@ -86,12 +101,14 @@ export function PlacePicker({
       setResults([]);
       setOpen(false);
       setBusy(false);
+      setError(null);
       return;
     }
     const ctrl = new AbortController();
     abortRef.current?.abort();
     abortRef.current = ctrl;
     setBusy(true);
+    setError(null);
     const cityQuery = cityFilter?.trim() ?? "";
     const query = cityQuery ? `${text} ${cityQuery}` : text;
     const timer = window.setTimeout(async () => {
@@ -136,6 +153,14 @@ export function PlacePicker({
               }))
             : [];
 
+        if (
+          stopRes.status === "rejected"
+          && placeRes.status === "rejected"
+          && !ctrl.signal.aborted
+        ) {
+          throw new Error("Both place searches failed.");
+        }
+
         const merged =
           kind === "transit"
             ? [...stops.slice(0, 4), ...addresses.slice(0, 5)]
@@ -152,18 +177,19 @@ export function PlacePicker({
         });
 
         const filter = normalize(cityFilter?.trim() ?? "");
-        setResults(
-          filter
-            ? deduped.filter((r) =>
-                normalize(`${r.city ?? ""} ${r.sub ?? ""}`).includes(filter),
-              )
-            : deduped,
-        );
+        const filtered = filter
+          ? deduped.filter((r) =>
+              normalize(`${r.city ?? ""} ${r.sub ?? ""}`).includes(filter),
+            )
+          : deduped;
+        setResults(filtered);
         setOpen(true);
         setHighlight(0);
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         setResults([]);
+        setOpen(true);
+        setError("Search failed. Check your connection and try again.");
       } finally {
         if (!ctrl.signal.aborted) setBusy(false);
       }
@@ -184,81 +210,214 @@ export function PlacePicker({
   }, []);
 
   useEffect(() => {
-    if (selectedLabel === lastSelectedRef.current) return;
+    const previous = lastSelectedRef.current;
     lastSelectedRef.current = selectedLabel;
-    if (selectedLabel == null) return;
+    if (selectedLabel === previous) return;
+    if (selectedLabel != null) {
+      editingRef.current = false;
+      skipSearchRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect parent selection in the field
+      setQ(selectedLabel);
+      setOpen(false);
+      setResults([]);
+      setError(null);
+      return;
+    }
+    // Parent cleared the place. If the user is typing, leave their text alone.
+    if (editingRef.current) return;
     skipSearchRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reflect parent selection in the field
-    setQ(selectedLabel);
+    setQ("");
     setOpen(false);
     setResults([]);
+    setError(null);
   }, [selectedLabel]);
 
-  async function choose(r: Result) {
+  function choose(r: Result) {
+    editingRef.current = false;
     skipSearchRef.current = true;
     setQ(r.name);
     setOpen(false);
     setResults([]);
-
-    if (kind === "transit" && r.kind === "address") {
-      setBusy(true);
-      const station = await findNearestStation(r.lat, r.lon, r.name, r.city);
-      if (!mountedRef.current) return;
-      setBusy(false);
-      onPick({
-        ...r,
-        city: r.city ?? station?.city,
-        station: station
-          ? {
-              name: station.name,
-              lat: station.lat,
-              lon: station.lon,
-              city: station.city,
-              distanceM: Math.round(station.distanceM),
-            }
-          : undefined,
-      });
-      return;
-    }
-
+    setError(null);
     onPick(r);
   }
+
+  function clear() {
+    abortRef.current?.abort();
+    editingRef.current = false;
+    skipSearchRef.current = true;
+    setQ("");
+    setOpen(false);
+    setResults([]);
+    setError(null);
+    onClear?.();
+    inputRef.current?.focus();
+  }
+
+  function locate() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setError("Location is not available in this browser.");
+      return;
+    }
+    setLocating(true);
+    setError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (!mountedRef.current) return;
+        setLocating(false);
+        choose({
+          name: "My location",
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          kind: "address",
+          sub: "GPS",
+        });
+      },
+      (err) => {
+        if (!mountedRef.current) return;
+        setLocating(false);
+        setError(err.message || "Could not read your location.");
+      },
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 12_000 },
+    );
+  }
+
+  const showDropdown =
+    open && (results.length > 0 || Boolean(error) || (q.trim().length >= 2 && !busy));
+  const activeOption = results[highlight];
 
   return (
     <div ref={boxRef} className="relative min-w-0 flex-1">
       <input
+        ref={inputRef}
         type="text"
         value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onFocus={() => results.length > 0 && setOpen(true)}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (selectedPlace && !editingRef.current) {
+            editingRef.current = true;
+            onClear?.();
+          }
+          skipSearchRef.current = false;
+          setQ(value);
+          setError(null);
+        }}
+        onFocus={() => {
+          if (results.length > 0 || error) setOpen(true);
+        }}
         onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
+          if (e.key === "Escape") {
+            setOpen(false);
+            return;
+          }
           if (e.key === "ArrowDown") {
             e.preventDefault();
-            setHighlight((h) => Math.min(h + 1, results.length - 1));
+            setHighlight((h) => Math.min(h + 1, Math.max(0, results.length - 1)));
           }
           if (e.key === "ArrowUp") {
             e.preventDefault();
             setHighlight((h) => Math.max(h - 1, 0));
           }
-          if (e.key === "Enter" && results[highlight]) {
+          if (e.key === "Enter" && activeOption) {
             e.preventDefault();
-            void choose(results[highlight]);
+            choose(activeOption);
           }
         }}
         placeholder={placeholder}
         aria-label={placeholder}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={showDropdown}
+        aria-controls={listId}
+        aria-activedescendant={
+          showDropdown && activeOption ? `${listId}-opt-${highlight}` : undefined
+        }
         autoFocus={autoFocus}
         autoComplete="off"
         spellCheck={false}
         enterKeyHint="search"
-        className="ui-input"
+        className="ui-input pr-10"
       />
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-[color:var(--ink-mute)]">
-        {busy ? "…" : ""}
+      <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center">
+        {busy || locating ? (
+          <span className="px-1 text-[11px] text-[color:var(--ink-mute)]" aria-hidden>
+            …
+          </span>
+        ) : q ? (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Clear place"
+            className="grid h-8 w-8 place-items-center rounded-full text-[color:var(--ink-mute)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
+          >
+            <CloseIcon size={14} />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        {quickPlaces.slice(0, 4).map((place) => (
+          <button
+            key={`${place.id ?? place.name}-${place.lat}-${place.lon}`}
+            type="button"
+            onClick={() => choose(place)}
+            title={`${place.name}${place.city ? `, ${place.city}` : ""}`}
+            className="ui-badge max-w-[150px] truncate hover:bg-[color:var(--surf-3)]"
+          >
+            {place.name}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={locate}
+          disabled={locating}
+          className="ui-badge hover:bg-[color:var(--surf-3)] disabled:opacity-40"
+        >
+          <RecenterIcon size={12} className="mr-1 inline" />
+          My location
+        </button>
+        {onPickOnMap && (
+          <button
+            type="button"
+            onClick={onPickOnMap}
+            className="ui-badge hover:bg-[color:var(--surf-3)]"
+          >
+            <MapPinIcon size={12} className="mr-1 inline" />
+            Map
+          </button>
+        )}
+        {selectedPlace && onToggleFavorite && (
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            aria-pressed={favorite}
+            aria-label={favorite ? "Remove saved place" : "Save place"}
+            className={[
+              "ui-badge",
+              favorite
+                ? "bg-[color:var(--accent-soft)] text-[color:var(--accent)]"
+                : "hover:bg-[color:var(--surf-3)]",
+            ].join(" ")}
+          >
+            <StarIcon size={12} filled={favorite} className="mr-1 inline" />
+            {favorite ? "Saved" : "Save"}
+          </button>
+        )}
+      </div>
+
+      <span className="sr-only" aria-live="polite">
+        {busy
+          ? "Searching places"
+          : error
+            ? error
+            : showDropdown && results.length === 0 && q.trim().length >= 2
+              ? "No places found"
+              : ""}
       </span>
-      {open && results.length > 0 && (
+
+      {showDropdown && (
         <ul
+          id={listId}
           role="listbox"
           aria-label={placeholder}
           className="ui-search-dropdown max-h-72 overflow-y-auto p-1"
@@ -266,12 +425,13 @@ export function PlacePicker({
           {results.map((r, i) => (
             <li
               key={`${r.id ?? r.name}-${i}`}
+              id={`${listId}-opt-${i}`}
               role="option"
               aria-selected={i === highlight}
             >
               <button
                 type="button"
-                onClick={() => void choose(r)}
+                onClick={() => choose(r)}
                 onMouseEnter={() => setHighlight(i)}
                 data-active={i === highlight}
                 className="ui-search-row rounded-[10px]"
@@ -291,6 +451,11 @@ export function PlacePicker({
               </button>
             </li>
           ))}
+          {results.length === 0 && !busy && (
+            <li className="px-3 py-2 text-[12px] text-[color:var(--ink-dim)]">
+              {error ?? "No places found. Try a station name or a nearby address."}
+            </li>
+          )}
         </ul>
       )}
     </div>

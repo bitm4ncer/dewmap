@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatClock,
+  formatDayOffset,
   formatDistance,
   formatDuration,
   formatRelativeDelay,
@@ -47,6 +48,38 @@ describe("formatClock", () => {
   it("returns a dash for invalid timestamps", () => {
     expect(formatClock("not-a-date")).toBe("—");
     expect(formatClock("")).toBe("—");
+  });
+});
+
+describe("formatDayOffset", () => {
+  it("detects a midnight crossing in the journey zone", () => {
+    expect(
+      formatDayOffset(
+        "2026-11-18T23:30:00Z",
+        "2026-11-18T22:00:00Z",
+        "en-GB",
+        "Europe/Berlin",
+      ),
+    ).toBe("+1");
+  });
+
+  it("returns null for the same local day and handles negative offsets", () => {
+    expect(
+      formatDayOffset(
+        "2026-11-18T10:00:00Z",
+        "2026-11-18T12:00:00Z",
+        "en-GB",
+        "Europe/Berlin",
+      ),
+    ).toBeNull();
+    expect(
+      formatDayOffset(
+        "2026-11-17T22:30:00Z",
+        "2026-11-18T00:30:00Z",
+        "en-GB",
+        "Europe/Berlin",
+      ),
+    ).toBe("-1");
   });
 });
 

@@ -63,7 +63,21 @@ export interface TransitStopRef {
   /** City / municipality for disambiguating similarly named stops. */
   city?: string;
   platform?: string;
+  /** Platform from the timetable, before real-time changes. */
+  scheduledPlatform?: string;
   stopId?: string;
+  /** IANA zone of the stop, e.g. "Europe/Berlin". */
+  tz?: string;
+  /** Operator description, e.g. "Gleis 2, Gleis 3". */
+  description?: string;
+  /** MOTIS modes served at this stop. */
+  modes?: string[];
+  /** Intermediate-stop timing. */
+  arrival?: string;
+  departure?: string;
+  scheduledArrival?: string;
+  scheduledDeparture?: string;
+  cancelled?: boolean;
 }
 
 /** Whether a leg is walked, cycled, driven, or uses public transport. */
@@ -87,7 +101,19 @@ export interface TransitLeg {
   /** Short line label, e.g. "RNV 26" or "S1". */
   line?: string;
   agency?: string;
+  agencyUrl?: string;
   headsign?: string;
+  /** Provider route type, e.g. "REGIONAL_RAIL" or "BUS". */
+  routeType?: string;
+  /** Hex colour without or with a leading `#`. */
+  routeColor?: string;
+  routeTextColor?: string;
+  tripShortName?: string;
+  /** MOTIS accessibility flag, e.g. "YES" / "NOT_ACCESSIBLE". */
+  wheelchairAccessible?: string;
+  bikesAllowed?: boolean;
+  reservation?: boolean;
+  interlineWithPreviousLeg?: boolean;
   distanceKm?: number;
   /** `[lon, lat]` polyline for this leg. */
   coordinates: [number, number][];
@@ -96,11 +122,20 @@ export interface TransitLeg {
 }
 
 export interface TransitJourney {
+  /** MOTIS itinerary id when available. */
+  id?: string;
   departure: string;
   arrival: string;
   durationMin: number;
   transfers: number;
+  /** IANA zone of the first transit stop, when the provider supplies it. */
+  timeZone?: string;
   legs: TransitLeg[];
+}
+
+export interface RoutePlanMeta {
+  nextPageCursor?: string;
+  previousPageCursor?: string;
 }
 
 export interface RoutePlan {
@@ -122,6 +157,8 @@ export interface RoutePlan {
   hasHighway?: boolean;
   hasFerry?: boolean;
   transit?: TransitJourney;
+  /** Provider metadata that is not part of the route itself. */
+  meta?: RoutePlanMeta;
 }
 
 export interface RouteOptions {
@@ -146,6 +183,18 @@ export interface RouteOptions {
   searchWindowS?: number;
   /** MOTIS: request detailed transfer walking instructions. */
   detailedTransfers?: boolean;
+  /** MOTIS: continue a previous result page. */
+  pageCursor?: string;
+  /** MOTIS: restrict transit modes, e.g. ["RAIL", "BUS"]. */
+  transitModes?: string[];
+  /** MOTIS: maximum access/egress walk in seconds. */
+  maxPreTransitTimeS?: number;
+  maxPostTransitTimeS?: number;
+  /** MOTIS: hard accessibility / bicycle requirements. */
+  requireWheelchairAccessible?: boolean;
+  requireBikesAllowed?: boolean;
+  /** MOTIS: minimum stay in minutes for each via stop. */
+  viaMinimumStay?: number[];
 }
 
 export interface RouteRequest {
@@ -165,6 +214,11 @@ export interface RouteRequest {
   maxTransfers?: number;
   /** Transit: prefer wheelchair-accessible journeys. */
   wheelchair?: boolean;
+  /** Transit: exact provider stop ids, when the caller has them. */
+  fromPlace?: string;
+  toPlace?: string;
+  /** Transit: ordered via stop ids (MOTIS accepts at most two). */
+  via?: string[];
   /** Provider-specific knobs. */
   options?: RouteOptions;
 }

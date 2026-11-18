@@ -4,8 +4,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import { useNavigation } from "./store";
-import { computeRouteProgress, isOffRoute, type RouteProgress } from "./progress";
-import { bearingDeg } from "@/lib/routing/geo";
+import {
+  computeRouteProgress,
+  isOffRoute,
+  previewSpeedMps,
+  sampleRouteAtDistance,
+  type RouteProgress,
+} from "./progress";
 
 export interface LivePosition {
   lon: number;
@@ -19,32 +24,20 @@ interface Options {
   mapRef: React.MutableRefObject<MLMap | null>;
 }
 
-function simSpeed(plan: { mode: string }): number {
-  switch (plan.mode) {
-    case "walk":
-      return 1.5;
-    case "bike":
-      return 6;
-    case "transit":
-      return 25;
-    default:
-      return 22;
-  }
-}
-
 export function useNavigationEngine({ mapRef }: Options) {
   const active = useNavigation((s) => s.active);
   const plan = useNavigation((s) => s.plan);
   const muted = useNavigation((s) => s.muted);
   const follow = useNavigation((s) => s.follow);
   const simulate = useNavigation((s) => s.simulate);
+  const guidance = useNavigation((s) => s.guidance);
   const [position, setPosition] = useState<LivePosition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [offRoute, setOffRoute] = useState(false);
   const offSinceRef = useRef<number | null>(null);
   const lastSpokenRef = useRef<number | null>(null);
   const lastFollowRef = useRef<number>(0);
-  const simIndexRef = useRef(0);
+  const lastTransitAlertRef = useRef<string | null>(null);
 
   const progress: RouteProgress | null = useMemo(() => {
     if (!plan || !position) return null;
@@ -59,7 +52,7 @@ export function useNavigationEngine({ mapRef }: Options) {
     offSinceRef.current = null;
     lastSpokenRef.current = null;
     lastFollowRef.current = 0;
-    simIndexRef.current = 0;
+    lastTransitAlertRef.current = null;
   }, [plan?.id, active]);
 
   // Live GPS.
@@ -88,7 +81,13 @@ export function useNavigationEngine({ mapRef }: Options) {
         setError(null);
       },
       (err) => setError(err.message),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
+      {
+        // A train is usually followed on the timetable; walking to/from the
+        // stop still needs a precise fix. Avoid a hot GPS while on board.
+        enableHighAccuracy: plan.mode !== "transit",
+        maximumAge: plan.mode === "transit" ? 5_000 : 0,
+        timeout: 20_000,
+      },
     );
     return () => navigator.geolocation.clearWatch(watch);
   }, [active, plan, simulate]);
@@ -101,32 +100,26 @@ export function useNavigationEngine({ mapRef }: Options) {
     let cancelled = false;
     let last = performance.now();
     let travelled = 0;
-    const total = plan.distanceKm * 1000;
-    const speed = simSpeed(plan);
+    const total = Math.max(1, plan.distanceKm * 1000);
+    const speed = previewSpeedMps(plan);
     const tick = () => {
       if (cancelled) return;
       const now = performance.now();
       const dt = Math.min(0.5, (now - last) / 1000);
       last = now;
       travelled = Math.min(total, travelled + speed * dt);
-      const fraction = total > 0 ? travelled / total : 0;
-      const i = Math.min(
-        coords.length - 2,
-        Math.max(0, Math.floor(fraction * (coords.length - 1))),
-      );
-      const a = coords[i];
-      const b = coords[i + 1];
-      const t = fraction * (coords.length - 1) - i;
-      const lon = a[0] + (b[0] - a[0]) * t;
-      const lat = a[1] + (b[1] - a[1]) * t;
+      const sample = sampleRouteAtDistance(coords, travelled);
+      if (!sample) {
+        setError("Route geometry is not available.");
+        return;
+      }
       setPosition({
-        lon,
-        lat,
-        heading: bearingDeg(a, b),
+        lon: sample.lon,
+        lat: sample.lat,
+        heading: sample.bearing,
         speedMps: speed,
         accuracyM: 5,
       });
-      simIndexRef.current = i;
       if (travelled >= total) {
         setError("Destination reached.");
         return;
@@ -183,7 +176,7 @@ export function useNavigationEngine({ mapRef }: Options) {
   // position moved meaningfully.
   useEffect(() => {
     const map = mapRef.current;
-    if (!active || !map || !position) return;
+    if (!active || !plan || !map || !position) return;
     const now = Date.now();
     if (now - lastFollowRef.current < 900) return;
     if (map.isMoving() && follow === "north") return;
@@ -194,14 +187,64 @@ export function useNavigationEngine({ mapRef }: Options) {
       map.easeTo({
         center: [position.lon, position.lat],
         bearing,
-        zoom: Math.max(15, map.getZoom()),
+        zoom:
+          plan.mode === "transit"
+            ? Math.max(12, Math.min(15, map.getZoom()))
+            : Math.max(15, map.getZoom()),
         duration: 700,
         pitch: 0,
       });
     } catch {
       /* style not loaded */
     }
-  }, [active, mapRef, position, follow]);
+  }, [active, mapRef, position, follow, plan]);
+
+  // Transit exit alert: vibrate and speak shortly before the alighting stop.
+  useEffect(() => {
+    if (!active || muted || guidance !== "live" || !plan?.transit) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      const legs = plan.transit?.legs ?? [];
+      for (let index = 0; index < legs.length; index += 1) {
+        const leg = legs[index];
+        if (leg.mode !== "transit" || leg.cancelled) continue;
+        const arrival = Date.parse(leg.arrival);
+        if (!Number.isFinite(arrival)) continue;
+        const minutes = (arrival - now) / 60_000;
+        if (minutes <= 0 || minutes > 2) continue;
+        const key = `${leg.to.stopId ?? leg.to.name}@${leg.arrival}`;
+        if (lastTransitAlertRef.current === key) break;
+        lastTransitAlertRef.current = key;
+        const nav = navigator as Navigator & {
+          vibrate?: (pattern: number | number[]) => boolean;
+        };
+        nav.vibrate?.([180, 80, 180]);
+        if ("speechSynthesis" in window) {
+          const nextTransit = legs
+            .slice(index + 1)
+            .find((candidate) => candidate.mode === "transit");
+          const platform = leg.to.platform ? ` Platform ${leg.to.platform}.` : "";
+          const utter = new SpeechSynthesisUtterance(
+            nextTransit
+              ? `Change at ${leg.to.name} for ${nextTransit.line ?? "the next service"}.${platform}`
+              : `Next stop: ${leg.to.name}.${platform}`,
+          );
+          utter.lang = navigator.language?.toLowerCase().startsWith("de")
+            ? "de-DE"
+            : "en-US";
+          utter.rate = 0.95;
+          try {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utter);
+          } catch {
+            /* not fatal */
+          }
+        }
+        break;
+      }
+    }, 15_000);
+    return () => window.clearInterval(timer);
+  }, [active, guidance, muted, plan]);
 
   // Keep the screen awake while navigating.
   useEffect(() => {

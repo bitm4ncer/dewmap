@@ -9,6 +9,14 @@ export * from "./format";
 export * from "./http";
 export { decodePolyline, toLonLat } from "./polyline";
 export {
+  fetchLiveVehicles,
+  liveModeLabel,
+  normalizeLiveColor,
+  normalizeLiveVehicles,
+  type LiveVehicle,
+  type LiveVehicleQuery,
+} from "./liveVehicles";
+export {
   BROUTER_PROFILES,
   defaultBrouterProfile,
   deriveBrouterManeuvers,
@@ -27,6 +35,7 @@ export {
   type ValhallaCosting,
 } from "./providers/valhalla";
 export {
+  clearStopCache,
   decodeLegGeometry,
   geocodeStops,
   normalizeMotisItinerary,

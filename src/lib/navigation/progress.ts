@@ -5,8 +5,8 @@
  * geometry-derived maneuvers produced for BRouter hike/bike plans.
  */
 
-import type { Maneuver, RoutePlan } from "@/lib/routing";
-import { cumulativeDistances } from "@/lib/routing/geo";
+import type { Maneuver, RoutePlan } from "../routing";
+import { bearingDeg, cumulativeDistances } from "../routing/geo";
 
 export interface RouteProgress {
   /** Nearest segment index (start vertex). */
@@ -87,8 +87,10 @@ export function computeRouteProgress(
   const remainingM = Math.max(0, totalM - travelledM);
   const fraction = Math.min(1, Math.max(0, travelledM / totalM));
 
+  // Include a maneuver that starts on the current segment; the old
+  // `> index + 1` check skipped the first leg and the first instruction.
   const next =
-    plan.maneuvers.find((m) => m.startIndex > best.index + 1) ??
+    plan.maneuvers.find((m) => m.type !== "arrive" && m.endIndex > best.index) ??
     plan.maneuvers.find((m) => m.type === "arrive") ??
     null;
 
@@ -107,6 +109,61 @@ export function computeRouteProgress(
     next,
     nextDistanceM,
   };
+}
+
+export interface SampledPoint {
+  lon: number;
+  lat: number;
+  /** Bearing of the segment under the sample, degrees clockwise. */
+  bearing: number;
+}
+
+/**
+ * Sample a polyline by real travelled distance. Using vertex index instead
+ * made simulated navigation speed up on short segments and stall on long
+ * ones. Returns null for an empty/degenerate line.
+ */
+export function sampleRouteAtDistance(
+  coordinates: readonly [number, number, number?][],
+  distanceM: number,
+): SampledPoint | null {
+  if (coordinates.length < 2) return null;
+  const cum = cumulativeDistances(coordinates);
+  const total = cum[cum.length - 1];
+  const clamped = Math.max(0, Math.min(total, distanceM));
+
+  let index = 0;
+  while (index < cum.length - 2 && cum[index + 1] < clamped) index += 1;
+  const a = coordinates[index];
+  const b = coordinates[index + 1];
+  const segment = cum[index + 1] - cum[index];
+  const t = segment > 0 ? (clamped - cum[index]) / segment : 0;
+  return {
+    lon: a[0] + (b[0] - a[0]) * t,
+    lat: a[1] + (b[1] - a[1]) * t,
+    bearing: bearingDeg(a, b),
+  };
+}
+
+/**
+ * Simulation speed for previews. A fixed 25 m/s made a 600 km train trip
+ * take nearly seven hours; compress every preview to roughly 1–3 minutes
+ * while keeping walking/bike previews readable.
+ */
+export function previewSpeedMps(plan: {
+  mode: string;
+  distanceKm: number;
+}): number {
+  const base = plan.mode === "walk"
+    ? 1.5
+    : plan.mode === "bike"
+      ? 6
+      : plan.mode === "transit"
+        ? 25
+        : 22;
+  const total = Math.max(1, plan.distanceKm * 1000);
+  const targetSeconds = plan.mode === "transit" ? 90 : 60;
+  return Math.max(base, Math.min(3000, total / targetSeconds));
 }
 
 export const OFF_ROUTE_M = 55;

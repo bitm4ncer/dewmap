@@ -122,28 +122,69 @@ function cityOf(record: Record<string, unknown> | undefined): string | undefined
   return preferred ? readString(preferred, "name") : undefined;
 }
 
+function stopName(value: string | undefined): string {
+  if (value === "START") return "Start";
+  if (value === "END") return "Destination";
+  return value ?? "Unknown stop";
+}
+
 function parseStop(value: unknown): TransitStopRef {
   const stop = isRecord(value) ? value : undefined;
+  const modes = readArray(stop, "modes").filter(
+    (mode): mode is string => typeof mode === "string",
+  );
+  const stopId =
+    readString(stop, "stopId") ?? readString(stop, "id") ?? undefined;
+  const tz = readString(stop, "tz");
+  const description = readString(stop, "description");
+  const scheduledPlatform =
+    stringOrNumber(stop?.scheduledTrack) ?? stringOrNumber(stop?.scheduledPlatform);
+  const arrival = readString(stop, "arrival");
+  const departure = readString(stop, "departure");
+  const scheduledArrival = readString(stop, "scheduledArrival");
+  const scheduledDeparture = readString(stop, "scheduledDeparture");
   return {
-    name: readString(stop, "name") ?? "Unknown stop",
+    name: stopName(readString(stop, "name")),
     lat: readNumber(stop, "lat") ?? 0,
     lon: readNumber(stop, "lon") ?? 0,
     ...(cityOf(stop) ? { city: cityOf(stop) } : {}),
     ...(platformOf(stop) ? { platform: platformOf(stop) } : {}),
-    ...(readString(stop, "stopId")
-      ? { stopId: readString(stop, "stopId") }
-      : readString(stop, "id")
-        ? { stopId: readString(stop, "id") }
-        : {}),
+    ...(scheduledPlatform && scheduledPlatform !== platformOf(stop)
+      ? { scheduledPlatform }
+      : {}),
+    ...(stopId ? { stopId } : {}),
+    ...(tz ? { tz } : {}),
+    ...(description ? { description } : {}),
+    ...(modes.length > 0 ? { modes } : {}),
+    ...(arrival ? { arrival } : {}),
+    ...(departure ? { departure } : {}),
+    ...(scheduledArrival ? { scheduledArrival } : {}),
+    ...(scheduledDeparture ? { scheduledDeparture } : {}),
+    ...(readBoolean(stop, "cancelled") ? { cancelled: true } : {}),
   };
 }
 
 function normalizeLegMode(rawMode: string): TransitLegMode {
   const mode = rawMode.toUpperCase();
-  if (mode === "WALK" || mode === "ODM") return "walk";
+  if (mode === "WALK") return "walk";
+  // ODM (on-demand) is a transit service, not a walk. Treating it as a
+  // walk hid the vehicle, the line and the transfer count.
+  if (mode === "ODM") return "transit";
   if (mode === "BIKE" || mode === "BICYCLE") return "bike";
   if (mode === "CAR" || mode === "TAXI") return "car";
   return "transit";
+}
+
+function hexColor(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^#[0-9a-f]{3}$/i.test(trimmed) || /^#[0-9a-f]{6}$/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^[0-9a-f]{3}$/i.test(trimmed) || /^[0-9a-f]{6}$/i.test(trimmed)) {
+    return `#${trimmed}`;
+  }
+  return undefined;
 }
 
 function legDistanceKm(
@@ -227,8 +268,18 @@ function parseLeg(value: unknown): TransitLeg | null {
   const routeLongName = readString(value, "routeLongName");
   const line = routeShortName ?? displayName ?? routeLongName;
   const agency = readString(value, "agencyName");
+  const agencyUrl = readString(value, "agencyUrl");
   const headsign = readString(value, "headsign");
   const distanceKm = legDistanceKm(value, coordinates);
+  const routeType = readString(value, "routeType");
+  const routeColor = hexColor(readString(value, "routeColor"));
+  const routeTextColor = hexColor(readString(value, "routeTextColor"));
+  const tripShortName = readString(value, "tripShortName");
+  const wheelchairAccessible = readString(value, "wheelchairAccessible");
+  const reservationValue = value.reservation;
+  const reservation =
+    readBoolean(value, "reservation")
+    ?? (typeof reservationValue === "string" ? true : undefined);
 
   const cancelled =
     readBoolean(value, "cancelled")
@@ -250,7 +301,25 @@ function parseLeg(value: unknown): TransitLeg | null {
     coordinates,
     ...(line ? { line } : {}),
     ...(agency ? { agency } : {}),
+    ...(agencyUrl ? { agencyUrl } : {}),
     ...(headsign ? { headsign } : {}),
+    ...(routeType ? { routeType } : {}),
+    ...(routeColor ? { routeColor } : {}),
+    ...(routeTextColor ? { routeTextColor } : {}),
+    ...(tripShortName ? { tripShortName } : {}),
+    ...(wheelchairAccessible ? { wheelchairAccessible } : {}),
+    ...(readBoolean(value, "bikesAllowed") !== undefined
+      ? { bikesAllowed: readBoolean(value, "bikesAllowed") }
+      : {}),
+    ...(reservation !== undefined ? { reservation } : {}),
+    ...(readBoolean(value, "interlineWithPreviousLeg") !== undefined
+      ? {
+          interlineWithPreviousLeg: readBoolean(
+            value,
+            "interlineWithPreviousLeg",
+          ),
+        }
+      : {}),
     ...(distanceKm !== undefined ? { distanceKm } : {}),
   };
 
@@ -271,6 +340,7 @@ function stopKey(stop: TransitStopRef): string {
 export function normalizeMotisItinerary(
   value: unknown,
   index = 0,
+  meta?: { nextPageCursor?: string; previousPageCursor?: string },
 ): RoutePlan {
   const itinerary = isRecord(value) ? value : undefined;
   const legs = readArray(itinerary, "legs")
@@ -343,19 +413,26 @@ export function normalizeMotisItinerary(
     readNumber(itinerary, "transfers")
     ?? Math.max(0, transitLegs.length - 1);
 
+  const timeZone =
+    transitLegs.find((leg) => leg.from.tz)?.from.tz
+    ?? [...legs].reverse().find((leg) => leg.to.tz)?.to.tz;
+  const providerId = readString(itinerary, "id");
   const journey: TransitJourney = {
+    ...(providerId ? { id: providerId } : {}),
     departure,
     arrival,
     durationMin: durationS / 60,
     transfers,
+    ...(timeZone ? { timeZone } : {}),
     legs,
   };
 
   const startKey = stopKey(legs[0].from);
   const endKey = stopKey(legs[legs.length - 1].to);
+  const fallbackId = `motis:${index}:${transitLegs.length}:${startKey}:${endKey}:${departure}`;
 
   return {
-    id: `motis:${index}:${transitLegs.length}:${startKey}:${endKey}:${departure}`,
+    id: providerId ? `motis:${providerId}` : fallbackId,
     mode: "transit",
     provider: "motis",
     distanceKm: sumCoordinateKm(coordinates),
@@ -366,6 +443,9 @@ export function normalizeMotisItinerary(
       ? `${transitLegs.length} transit leg${transitLegs.length === 1 ? "" : "s"}`
       : "Walk",
     transit: journey,
+    ...(meta && (meta.nextPageCursor || meta.previousPageCursor)
+      ? { meta }
+      : {}),
   };
 }
 
@@ -417,8 +497,8 @@ export async function planMotis(request: RouteRequest): Promise<RoutePlan[]> {
   const from = request.waypoints[0];
   const to = request.waypoints[request.waypoints.length - 1];
   const params = new URLSearchParams({
-    fromPlace: `${from.lat},${from.lon}`,
-    toPlace: `${to.lat},${to.lon}`,
+    fromPlace: request.fromPlace ?? `${from.lat},${from.lon}`,
+    toPlace: request.toPlace ?? `${to.lat},${to.lon}`,
     time: resolveTime(request.departAt),
     arriveBy: String(request.arriveBy ?? false),
     numItineraries: String(Math.min(Math.max(1, request.alternatives ?? 3), 5)),
@@ -435,6 +515,46 @@ export async function planMotis(request: RouteRequest): Promise<RoutePlan[]> {
       String(Math.max(0, Math.round(request.options.searchWindowS))),
     );
   }
+  if (request.options?.pageCursor) {
+    params.set("pageCursor", request.options.pageCursor);
+  }
+  if (request.options?.transitModes?.length) {
+    params.set("transitModes", request.options.transitModes.join(","));
+  }
+  if (request.options?.maxPreTransitTimeS !== undefined) {
+    params.set(
+      "maxPreTransitTime",
+      String(Math.max(0, Math.round(request.options.maxPreTransitTimeS))),
+    );
+  }
+  if (request.options?.maxPostTransitTimeS !== undefined) {
+    params.set(
+      "maxPostTransitTime",
+      String(Math.max(0, Math.round(request.options.maxPostTransitTimeS))),
+    );
+  }
+  if (request.options?.requireWheelchairAccessible) {
+    params.set("requireWheelchairAccessible", "true");
+  }
+  if (request.options?.requireBikesAllowed) {
+    params.set("requireBikesAllowed", "true");
+  }
+  if (request.via?.length) {
+    const via = request.via.filter((id) => id.trim().length > 0).slice(0, 2);
+    if (via.length > 0) {
+      params.set("via", via.join(","));
+      const stay = request.options?.viaMinimumStay ?? [];
+      params.set(
+        "viaMinimumStay",
+        via
+          .map((_, index) => {
+            const value = stay[index];
+            return Number.isFinite(value) ? Math.max(0, Math.round(value!)) : 1;
+          })
+          .join(","),
+      );
+    }
+  }
 
   const data = await fetchJson<unknown>(
     `${MOTIS_BASE}/plan?${params.toString()}`,
@@ -450,6 +570,12 @@ export async function planMotis(request: RouteRequest): Promise<RoutePlan[]> {
   const itineraries = readArray(root, "itineraries").filter(isRecord);
   const direct = readArray(root, "direct").filter(isRecord);
   const results = itineraries.length > 0 ? itineraries : direct;
+  const nextPageCursor = readString(root, "nextPageCursor");
+  const previousPageCursor = readString(root, "previousPageCursor");
+  const meta = {
+    ...(nextPageCursor ? { nextPageCursor } : {}),
+    ...(previousPageCursor ? { previousPageCursor } : {}),
+  };
 
   if (results.length === 0) {
     throw new ProviderError(
@@ -460,11 +586,14 @@ export async function planMotis(request: RouteRequest): Promise<RoutePlan[]> {
   }
 
   return results.map((itinerary, index) =>
-    normalizeMotisItinerary(itinerary, index),
+    normalizeMotisItinerary(itinerary, index, meta),
   );
 }
 
-/** Search stops (and only stops) by free text. */
+const STOP_CACHE_TTL_MS = 5 * 60_000;
+const stopCache = new Map<string, { at: number; stops: MotisStop[] }>();
+
+/** Search stops (and only stops) by free text. Results are cached for 5 min. */
 export async function geocodeStops(
   text: string,
   signal?: AbortSignal,
@@ -472,6 +601,11 @@ export async function geocodeStops(
 ): Promise<MotisStop[]> {
   const query = text.trim();
   if (query.length < 2) return [];
+  const cacheKey = `${query.toLowerCase()}|${limit}`;
+  const cached = stopCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < STOP_CACHE_TTL_MS) {
+    return cached.stops;
+  }
 
   const params = new URLSearchParams({ text: query, type: "STOP" });
   const data = await fetchJson<unknown>(
@@ -519,5 +653,11 @@ export async function geocodeStops(
     if (stops.length >= Math.max(1, limit)) break;
   }
 
+  stopCache.set(cacheKey, { at: Date.now(), stops });
   return stops;
+}
+
+/** Test hook; not used by the UI. */
+export function clearStopCache(): void {
+  stopCache.clear();
 }

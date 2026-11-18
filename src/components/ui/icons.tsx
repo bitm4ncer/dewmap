@@ -94,6 +94,30 @@ export function CloseIcon({ size = 18, className }: IconProps) {
   );
 }
 
+export function MapPinIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  );
+}
+
+export function StarIcon({
+  size = 18,
+  className,
+  filled = false,
+}: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      {...base(size, className)}
+      fill={filled ? "currentColor" : "none"}
+    >
+      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+    </svg>
+  );
+}
+
 export function FlagIcon({ size = 22, className }: IconProps) {
   return (
     <svg {...base(size, className)}>
