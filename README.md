@@ -41,7 +41,7 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 |---|---|
 | **Search** | Places, streets and stations via Photon, with detail cards for OSM places: photos, opening hours, contact, website and Wikipedia/Wikidata. |
 | **Basemaps** | Three picker categories: true **Vector** styles (CARTO, OpenFreeMap, VersaTiles), **Drawn** raster cartography (basemap.de, basemap.at, swisstopo, IGN, PDOK, historical scans such as Siegfried, Dufour and État-Major) and **Image** layers (Esri, Sentinel-2, NASA GIBS, orthophotos, Vienna aerial series). Group filters and year variants keep the collection navigable; regional layers only appear while the map centre is inside their coverage. The Graphite-tinted CARTO dark style is the default. |
-| **Places** | Shops, restaurants, museums, sport venues and open spaces appear as small category icons from zoom 15, Google-Maps style. Switch them off under **View → Places**. Place cards open street-level imagery and 360° panoramas from Panoramax when available. |
+| **Places** | Shops, restaurants, museums, sport venues and open spaces appear as small category icons from zoom 15, Google-Maps style. Switch them off under **View → Places**. Place cards open street-level imagery and 360° panoramas from Panoramax when available. **View → Street View coverage** shows Panoramax picture coverage for the current viewport at city zoom; tap a green point or cluster to open it. |
 | **Modes** | Image, Hybrid (satellite plus transport) and Vector. |
 | **Projection** | Flat Mercator or a 3D globe. |
 | **Orientation** | North-up, route-up or compass heading. |

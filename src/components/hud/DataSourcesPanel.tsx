@@ -79,7 +79,7 @@ const SOURCES: Source[] = [
   {
     name: "Panoramax",
     detail:
-      "Open street-level imagery and 360° panoramas for Street View in place cards. Imagery is CC BY-SA 4.0 or Licence Ouverte.",
+      "Open street-level imagery and 360° panoramas for Street View in place cards and the optional coverage layer. Imagery is CC BY-SA 4.0 or Licence Ouverte.",
     href: "https://panoramax.fr/",
   },
   {

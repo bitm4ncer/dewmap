@@ -36,8 +36,13 @@ import { SettingsGear } from "./SettingsGear";
 import { SearchBox } from "./SearchBox";
 import { Spinner } from "./ui/Spinner";
 import { PoiDetail } from "./poi/PoiDetail";
+import { PanoramaViewer } from "./poi/PanoramaViewer";
 import { prefersReducedMotion } from "@/lib/motion";
-import type { PoiSelection } from "@/lib/poi";
+import type { PanoramaxStreetView, PoiSelection } from "@/lib/poi";
+import {
+  fetchPanoramaxCoverage,
+  type PanoramaxCoverage,
+} from "@/lib/poi/panoramax";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
 import {
@@ -167,6 +172,36 @@ const HYBRID_OVERLAY_ATTRIB =
 interface ViewState {
   center: [number, number];
   zoom: number;
+}
+
+const COVERAGE_SOURCE_ID = "panoramax-coverage";
+const COVERAGE_CLUSTER_LAYER_ID = "panoramax-coverage-clusters";
+const COVERAGE_POINT_LAYER_ID = "panoramax-coverage-points";
+const COVERAGE_HIT_LAYER_ID = "panoramax-coverage-hit";
+const COVERAGE_MIN_ZOOM = 13;
+type CoverageStatus = "idle" | "zoom" | "loading" | "ready" | "empty";
+const EMPTY_COVERAGE: PanoramaxCoverage = {
+  type: "FeatureCollection",
+  features: [],
+};
+
+function removeCoverageLayers(map: MLMap) {
+  for (const id of [
+    COVERAGE_HIT_LAYER_ID,
+    COVERAGE_POINT_LAYER_ID,
+    COVERAGE_CLUSTER_LAYER_ID,
+  ]) {
+    try {
+      if (map.getLayer(id)) map.removeLayer(id);
+    } catch {
+      // A style swap may already have removed the layer.
+    }
+  }
+  try {
+    if (map.getSource(COVERAGE_SOURCE_ID)) map.removeSource(COVERAGE_SOURCE_ID);
+  } catch {
+    // The source may belong to the previous style.
+  }
 }
 
 const INITIAL_VIEW: ViewState = { center: [6.775, 51.2277], zoom: 12 };
@@ -1537,6 +1572,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     lon: number;
     lat: number;
   } | null>(null);
+  const [coverageData, setCoverageData] =
+    useState<PanoramaxCoverage>(EMPTY_COVERAGE);
+  const [coverageCount, setCoverageCount] = useState(0);
+  const [coverageStatus, setCoverageStatus] =
+    useState<CoverageStatus>("idle");
+  const [coverageViewer, setCoverageViewer] =
+    useState<PanoramaxStreetView | null>(null);
   const sheetBeforePoiRef = useRef<SheetState | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
@@ -1588,6 +1630,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     railOn,
     railwayOpacity,
     poiOn,
+    coverageOn,
     ndviOn,
     ndviOpacity,
     speciesOn,
@@ -1618,6 +1661,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setRailOn,
     setRailwayOpacity,
     setPoiOn,
+    setCoverageOn,
     setNdviOn,
     setNdviOpacity,
     setSpeciesOn,
@@ -2846,6 +2890,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (cancelled || !map.isStyleLoaded()) return;
       try {
         ensurePoiLayers(map);
+        // Coverage is a focused mode: dim the POI pins so the green
+        // Panoramax dots and clusters stay readable.
+        if (map.getLayer(POI_ICON_LAYER_ID)) {
+          map.setPaintProperty(
+            POI_ICON_LAYER_ID,
+            "icon-opacity",
+            coverageOn ? 0.28 : 1,
+          );
+        }
+        if (map.getLayer(POI_LABEL_LAYER_ID)) {
+          map.setPaintProperty(
+            POI_LABEL_LAYER_ID,
+            "text-opacity",
+            coverageOn ? 0.2 : 1,
+          );
+        }
       } catch (error) {
         console.warn("[poi] layers could not be added", error);
       }
@@ -2908,7 +2968,276 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("mouseenter", POI_HIT_LAYER_ID, showPointer);
       map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
     };
-  }, [poiOn, active, mapInstance, openPoi]);
+  }, [poiOn, coverageOn, active, mapInstance, openPoi]);
+
+  // ── Panoramax street-level coverage ───────────────────────────────
+  // The layer is deliberately viewport-based: it only appears at city
+  // zoom, where individual pictures are meaningful. Panning debounces one
+  // keyless STAC request and aborts the previous one.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || !coverageOn) return;
+
+    let disposed = false;
+    let controller: AbortController | null = null;
+    let timer: number | null = null;
+
+    const load = async () => {
+      if (disposed) return;
+      if (map.getZoom() < COVERAGE_MIN_ZOOM) {
+        controller?.abort();
+        controller = null;
+        setCoverageData(EMPTY_COVERAGE);
+        setCoverageCount(0);
+        setCoverageStatus("zoom");
+        return;
+      }
+
+      const bounds = map.getBounds();
+      if (!bounds) return;
+      const bbox: [number, number, number, number] = [
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth(),
+      ];
+      controller?.abort();
+      const ctrl = new AbortController();
+      controller = ctrl;
+      setCoverageStatus("loading");
+      try {
+        const data = await fetchPanoramaxCoverage(bbox, ctrl.signal);
+        if (disposed || ctrl.signal.aborted) return;
+        setCoverageData(data);
+        setCoverageCount(data.features.length);
+        setCoverageStatus(data.features.length ? "ready" : "empty");
+      } catch {
+        if (!disposed && !ctrl.signal.aborted) {
+          setCoverageStatus("empty");
+          setCoverageCount(0);
+        }
+      }
+    };
+
+    const schedule = () => {
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void load();
+      }, 450);
+    };
+
+    schedule();
+    map.on("moveend", schedule);
+    map.on("zoomend", schedule);
+    return () => {
+      disposed = true;
+      if (timer != null) window.clearTimeout(timer);
+      controller?.abort();
+      map.off("moveend", schedule);
+      map.off("zoomend", schedule);
+    };
+  }, [coverageOn, mapInstance]);
+
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    if (!coverageOn) {
+      removeCoverageLayers(map);
+      return;
+    }
+
+    let cancelled = false;
+    let frame = 0;
+
+    const onPointClick = (event: maplibregl.MapLayerMouseEvent) => {
+      const feature = event.features?.[0];
+      if (!feature || feature.geometry?.type !== "Point") return;
+      const props = feature.properties ?? {};
+      const viewerUrl = typeof props.viewerUrl === "string" ? props.viewerUrl : "";
+      const id = typeof props.id === "string" ? props.id : "";
+      if (!viewerUrl || !id) return;
+      const [lon, lat] = feature.geometry.coordinates;
+      event.preventDefault();
+      event.originalEvent?.stopPropagation();
+      setCoverageViewer({
+        provider: "Panoramax",
+        id,
+        lon,
+        lat,
+        ...(typeof props.thumbUrl === "string" && props.thumbUrl
+          ? { thumbUrl: props.thumbUrl }
+          : {}),
+        ...(typeof props.sdUrl === "string" && props.sdUrl
+          ? { sdUrl: props.sdUrl }
+          : {}),
+        ...(typeof props.capturedAt === "string" && props.capturedAt
+          ? { capturedAt: props.capturedAt }
+          : {}),
+        license:
+          typeof props.license === "string" && props.license
+            ? props.license
+            : "CC BY-SA 4.0",
+        ...(typeof props.licenseUrl === "string" && props.licenseUrl
+          ? { licenseUrl: props.licenseUrl }
+          : {}),
+        attribution:
+          typeof props.attribution === "string" && props.attribution
+            ? props.attribution
+            : "© Panoramax contributors",
+        viewerUrl,
+        sourceUrl:
+          typeof props.sourceUrl === "string" && props.sourceUrl
+            ? props.sourceUrl
+            : "https://panoramax.fr/",
+      });
+    };
+
+    const onClusterClick = (event: maplibregl.MapLayerMouseEvent) => {
+      const feature = event.features?.[0];
+      const clusterId = feature?.properties?.cluster_id;
+      if (
+        !feature ||
+        feature.geometry?.type !== "Point" ||
+        typeof clusterId !== "number"
+      ) {
+        return;
+      }
+      const source = map.getSource(COVERAGE_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (!source) return;
+      const center = feature.geometry.coordinates as [number, number];
+      source
+        .getClusterExpansionZoom(clusterId)
+        .then((zoom) => {
+          map.easeTo({
+            center,
+            zoom,
+            duration: prefersReducedMotion() ? 0 : 450,
+          });
+        })
+        .catch(() => {
+          // Ignore a cluster that disappears after a basemap swap.
+        });
+    };
+
+    const showPointer = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const hidePointer = () => {
+      map.getCanvas().style.cursor = "";
+    };
+
+    const apply = () => {
+      if (cancelled || !map.isStyleLoaded()) return false;
+      const source = map.getSource(COVERAGE_SOURCE_ID) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (source) {
+        source.setData(coverageData);
+      } else {
+        map.addSource(COVERAGE_SOURCE_ID, {
+          type: "geojson",
+          data: coverageData,
+          cluster: true,
+          clusterRadius: 40,
+          clusterMaxZoom: 15,
+        });
+      }
+
+      if (!map.getLayer(COVERAGE_CLUSTER_LAYER_ID)) {
+        map.addLayer({
+          id: COVERAGE_CLUSTER_LAYER_ID,
+          type: "circle",
+          source: COVERAGE_SOURCE_ID,
+          minzoom: COVERAGE_MIN_ZOOM,
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-color": THEME.coverage,
+            "circle-radius": [
+              "step",
+              ["get", "point_count"],
+              14,
+              10,
+              18,
+              50,
+              22,
+            ],
+            "circle-opacity": 0.82,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": THEME.casing,
+          },
+        });
+      }
+
+      if (!map.getLayer(COVERAGE_POINT_LAYER_ID)) {
+        map.addLayer({
+          id: COVERAGE_POINT_LAYER_ID,
+          type: "circle",
+          source: COVERAGE_SOURCE_ID,
+          minzoom: COVERAGE_MIN_ZOOM,
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-color": THEME.coverage,
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              13,
+              3.2,
+              17,
+              5.2,
+            ],
+            "circle-opacity": 0.92,
+            "circle-stroke-width": 1.2,
+            "circle-stroke-color": THEME.casing,
+          },
+        });
+      }
+
+      if (!map.getLayer(COVERAGE_HIT_LAYER_ID)) {
+        map.addLayer({
+          id: COVERAGE_HIT_LAYER_ID,
+          type: "circle",
+          source: COVERAGE_SOURCE_ID,
+          minzoom: COVERAGE_MIN_ZOOM,
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-radius": 14,
+            "circle-color": "rgba(0,0,0,0.01)",
+            "circle-stroke-width": 0,
+          },
+        });
+      }
+      return true;
+    };
+
+    const waitForStyle = () => {
+      if (cancelled) return;
+      if (!apply()) frame = requestAnimationFrame(waitForStyle);
+    };
+    waitForStyle();
+    map.on("style.load", apply);
+
+    map.on("click", COVERAGE_HIT_LAYER_ID, onPointClick);
+    map.on("click", COVERAGE_CLUSTER_LAYER_ID, onClusterClick);
+    map.on("mouseenter", COVERAGE_HIT_LAYER_ID, showPointer);
+    map.on("mouseleave", COVERAGE_HIT_LAYER_ID, hidePointer);
+    map.on("mouseenter", COVERAGE_CLUSTER_LAYER_ID, showPointer);
+    map.on("mouseleave", COVERAGE_CLUSTER_LAYER_ID, hidePointer);
+
+    return () => {
+      cancelled = true;
+      if (frame) cancelAnimationFrame(frame);
+      map.off("style.load", apply);
+      map.off("click", COVERAGE_HIT_LAYER_ID, onPointClick);
+      map.off("click", COVERAGE_CLUSTER_LAYER_ID, onClusterClick);
+      map.off("mouseenter", COVERAGE_HIT_LAYER_ID, showPointer);
+      map.off("mouseleave", COVERAGE_HIT_LAYER_ID, hidePointer);
+      map.off("mouseenter", COVERAGE_CLUSTER_LAYER_ID, showPointer);
+      map.off("mouseleave", COVERAGE_CLUSTER_LAYER_ID, hidePointer);
+    };
+  }, [coverageOn, coverageData, mapInstance]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────
   useEffect(() => {
@@ -3692,6 +4021,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       POI_HIT_LAYER_ID,
       POI_ICON_LAYER_ID,
       POI_LABEL_LAYER_ID,
+      COVERAGE_HIT_LAYER_ID,
+      COVERAGE_POINT_LAYER_ID,
+      COVERAGE_CLUSTER_LAYER_ID,
       historyLayers.siteLayer,
       historyLayers.siteHit,
       ...historyLayers.clusterDots,
@@ -4087,6 +4419,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onBasemapModeChange={setBasemapMode}
                   poiOn={poiOn}
                   onPoiChange={setPoiOn}
+                  coverageOn={coverageOn}
+                  coverageStatus={coverageStatus}
+                  coverageCount={coverageCount}
+                  onCoverageChange={setCoverageOn}
                 />
 
                 <BasemapPanel
@@ -4177,6 +4513,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         onCenter={centerPoi}
         onPlanRoute={planPoiRoute}
       />
+
+      {coverageViewer && (
+        <PanoramaViewer
+          streetView={coverageViewer}
+          title="Panoramax coverage"
+          onClose={() => setCoverageViewer(null)}
+        />
+      )}
 
       <NavigationOverlay
         progress={navigation.progress}
@@ -4659,6 +5003,10 @@ interface ViewPanelProps {
   onBasemapModeChange: (m: BasemapMode) => void;
   poiOn: boolean;
   onPoiChange: (on: boolean) => void;
+  coverageOn: boolean;
+  coverageStatus: CoverageStatus;
+  coverageCount: number;
+  onCoverageChange: (on: boolean) => void;
 }
 
 function ViewPanel({
@@ -4670,7 +5018,25 @@ function ViewPanel({
   onBasemapModeChange,
   poiOn,
   onPoiChange,
+  coverageOn,
+  coverageStatus,
+  coverageCount,
+  onCoverageChange,
 }: ViewPanelProps) {
+  const coverageHint = !coverageOn
+    ? "Green dots where Panoramax has imagery"
+    : coverageStatus === "zoom"
+      ? "Zoom in to see coverage"
+      : coverageStatus === "loading"
+        ? "Loading coverage…"
+        : coverageStatus === "empty"
+          ? "No Panoramax imagery in this view"
+          : coverageStatus === "ready"
+            ? `${coverageCount >= 800 ? "800+" : coverageCount} picture${
+                coverageCount === 1 ? "" : "s"
+              } in view`
+            : "Green dots open Street View";
+
   return (
     <HudPanel label="View">
       <div className="ui-section">
@@ -4766,6 +5132,29 @@ function ViewPanel({
             onClick={() => onPoiChange(!poiOn)}
             className="hud-switch"
             data-on={poiOn}
+          >
+            <span className="hud-switch-thumb" aria-hidden />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col">
+            <span className="ui-row-title flex items-center gap-2">
+              <span className="coverage-dot" aria-hidden />
+              Street View coverage
+            </span>
+            <span className="text-[10.5px] text-[color:var(--ink-mute)]">
+              {coverageHint}
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={coverageOn}
+            aria-label="Street View coverage on/off"
+            onClick={() => onCoverageChange(!coverageOn)}
+            className="hud-switch"
+            data-on={coverageOn}
           >
             <span className="hud-switch-thumb" aria-hidden />
           </button>

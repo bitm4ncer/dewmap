@@ -43,6 +43,8 @@ export interface Settings {
   railStyle: RailStyle;
   /** Small POI dots (shops, food, culture, sport) above the basemap. */
   poiOn: boolean;
+  /** Panoramax street-level coverage points for the current viewport. */
+  coverageOn: boolean;
   /** Biosphere panel — independent overlay toggles, can stack. */
   ndviOn: boolean;
   ndviOpacity: number;
@@ -88,6 +90,7 @@ export interface Settings {
   setRailwayOpacity: (o: number) => void;
   setRailStyle: (style: RailStyle) => void;
   setPoiOn: (on: boolean) => void;
+  setCoverageOn: (on: boolean) => void;
   setNdviOn: (on: boolean) => void;
   setNdviOpacity: (o: number) => void;
   setSpeciesOn: (on: boolean) => void;
@@ -130,6 +133,7 @@ export const useSettings = create<Settings>()(
       railwayOpacity: 0.85,
       railStyle: "lines",
       poiOn: true,
+      coverageOn: false,
       ndviOn: false,
       ndviOpacity: 0.7,
       speciesOn: false,
@@ -169,6 +173,7 @@ export const useSettings = create<Settings>()(
       setRailwayOpacity: (o) => set({ railwayOpacity: clamp01(o) }),
       setRailStyle: (style) => set({ railStyle: style }),
       setPoiOn: (on) => set({ poiOn: on }),
+      setCoverageOn: (on) => set({ coverageOn: on }),
       setNdviOn: (on) => set({ ndviOn: on }),
       setNdviOpacity: (o) => set({ ndviOpacity: clamp01(o) }),
       setSpeciesOn: (on) => set({ speciesOn: on }),
@@ -216,6 +221,7 @@ export const useSettings = create<Settings>()(
         railwayOpacity: state.railwayOpacity,
         railStyle: state.railStyle,
         poiOn: state.poiOn,
+        coverageOn: state.coverageOn,
         ndviOn: state.ndviOn,
         ndviOpacity: state.ndviOpacity,
         speciesOn: state.speciesOn,
@@ -244,6 +250,9 @@ export const useSettings = create<Settings>()(
         // predate this toggle.
         if (typeof p.poiOn !== "boolean") {
           p.poiOn = true;
+        }
+        if (typeof p.coverageOn !== "boolean") {
+          p.coverageOn = false;
         }
         // v21 → v22: raster cartography moved out of the vector slot.
         // A drawn map that was active in vector mode becomes an image

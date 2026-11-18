@@ -1148,6 +1148,15 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .hud-btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
 
+.coverage-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 999px;
+  background: #6fd3a6;
+  box-shadow: 0 0 0 1px rgba(11, 14, 16, 0.8);
+}
+
 /* ────────────────────────────────────────────────────────────────────────
    Toggle switch — smaller, borderless, fill-only
    ──────────────────────────────────────────────────────────────────── */

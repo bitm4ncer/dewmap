@@ -13,6 +13,23 @@ export interface PanoramaxStreetView {
   sourceUrl: string;
 }
 
+export interface PanoramaxCoverageProperties {
+  id: string;
+  viewerUrl: string;
+  thumbUrl: string;
+  sdUrl: string;
+  license: string;
+  licenseUrl: string;
+  attribution: string;
+  capturedAt: string;
+  sourceUrl: string;
+}
+
+export type PanoramaxCoverage = GeoJSON.FeatureCollection<
+  GeoJSON.Point,
+  PanoramaxCoverageProperties
+>;
+
 interface PanoramaxLink {
   rel?: string;
   href?: string;
@@ -205,4 +222,72 @@ export async function findPanoramaxStreetView(
   const facade = await searchStreetView(lon, lat, "3-50", "60", signal);
   if (facade) return facade;
   return searchStreetView(lon, lat, "3-100", "180", signal);
+}
+
+function toCoverageFeature(
+  streetView: PanoramaxStreetView,
+): GeoJSON.Feature<GeoJSON.Point, PanoramaxCoverageProperties> {
+  return {
+    type: "Feature",
+    geometry: {
+      type: "Point",
+      coordinates: [streetView.lon, streetView.lat],
+    },
+    properties: {
+      id: streetView.id,
+      viewerUrl: streetView.viewerUrl,
+      thumbUrl: streetView.thumbUrl ?? "",
+      sdUrl: streetView.sdUrl ?? "",
+      license: streetView.license,
+      licenseUrl: streetView.licenseUrl ?? "",
+      attribution: streetView.attribution,
+      capturedAt: streetView.capturedAt ?? "",
+      sourceUrl: streetView.sourceUrl,
+    },
+  };
+}
+
+/**
+ * Load Panoramax pictures inside the current map viewport for the
+ * coverage layer. No key, no mutation, just the public STAC search API.
+ */
+export async function fetchPanoramaxCoverage(
+  bbox: [number, number, number, number],
+  signal?: AbortSignal,
+): Promise<PanoramaxCoverage> {
+  const [west, south, east, north] = bbox;
+  const url = new URL(SEARCH_URL);
+  url.searchParams.set("bbox", `${west},${south},${east},${north}`);
+  url.searchParams.set("limit", "800");
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      signal,
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    return { type: "FeatureCollection", features: [] };
+  }
+  if (!response.ok) return { type: "FeatureCollection", features: [] };
+
+  let data: PanoramaxResponse;
+  try {
+    data = (await response.json()) as PanoramaxResponse;
+  } catch {
+    return { type: "FeatureCollection", features: [] };
+  }
+
+  const features = Array.isArray(data.features) ? data.features : [];
+  const items: PanoramaxStreetView[] = [];
+  for (const feature of features) {
+    const coords = featureCoordinates(feature);
+    if (!coords) continue;
+    const streetView = toStreetView(feature, coords);
+    if (streetView) items.push(streetView);
+  }
+  return {
+    type: "FeatureCollection",
+    features: items.map(toCoverageFeature),
+  };
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findPanoramaxStreetView } from "./panoramax";
+import { fetchPanoramaxCoverage, findPanoramaxStreetView } from "./panoramax";
 
 function jsonResponse(value: unknown): Response {
   return {
@@ -96,6 +96,42 @@ describe("findPanoramaxStreetView", () => {
     const fallbackUrl = String(fetchMock.mock.calls[1]?.[0]);
     expect(fallbackUrl).toContain("place_distance=3-100");
     expect(fallbackUrl).toContain("place_fov_tolerance=180");
+  });
+
+  it("builds GeoJSON coverage features for the viewport", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
+      void _input;
+      return jsonResponse({
+        features: [
+          {
+            id: "coverage-1",
+            geometry: { coordinates: [13.405, 52.52] },
+            properties: {
+              "view:azimuth": 90,
+              license: "CC-BY-SA-4.0",
+              "geovisio:status": "ready",
+            },
+            assets: {
+              thumb: { href: "https://example.test/thumb.jpg" },
+              sd: { href: "https://example.test/sd.jpg" },
+            },
+          },
+        ],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const coverage = await fetchPanoramaxCoverage([13.39, 52.51, 13.42, 52.53]);
+
+    expect(coverage.type).toBe("FeatureCollection");
+    expect(coverage.features).toHaveLength(1);
+    expect(coverage.features[0]?.geometry.coordinates).toEqual([13.405, 52.52]);
+    expect(coverage.features[0]?.properties.id).toBe("coverage-1");
+    expect(coverage.features[0]?.properties.license).toBe("CC-BY-SA-4.0");
+    expect(coverage.features[0]?.properties.viewerUrl).toContain("pic=coverage-1");
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    expect(url).toContain("bbox=13.39%2C52.51%2C13.42%2C52.53");
+    expect(url).toContain("limit=800");
   });
 
   it("returns null when there is no nearby picture", async () => {
