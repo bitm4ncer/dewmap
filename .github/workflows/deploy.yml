@@ -36,6 +36,22 @@ jobs:
           echo "NEXT_PUBLIC_BASE_PATH=/${REPO_NAME}" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SITE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}" >> "$GITHUB_ENV"
 
+      - name: Download latest history data
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$(gh release list --limit 50 --json tagName --jq '.[].tagName' | grep '^history-data-' | head -1 || true)"
+          if [ -z "$TAG" ]; then
+            echo "No history-data release found; deploying without the global dataset."
+            exit 0
+          fi
+          mkdir -p /tmp/history-data
+          gh release download "$TAG" --pattern 'history-data-*.tar.gz' --dir /tmp/history-data
+          mkdir -p public/data/history
+          tar -xzf /tmp/history-data/history-data-*.tar.gz -C public/data/history
+          ls -lh public/data/history
+
       - name: Build static export
         run: npm run build
 
