@@ -4,6 +4,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { HikingPhase, RouteCandidate, Waypoint } from "./types";
 import { BROUTER_PROFILES, type BrouterProfile } from "./routing";
+import { migrateLegacyStorage } from "../legacyStorage";
+
+migrateLegacyStorage();
 
 const VALID_PROFILE_IDS = new Set<string>(BROUTER_PROFILES.map((p) => p.id));
 
@@ -138,7 +141,7 @@ export const useHiking = create<HikingState>()(
       setNotice: (notice) => set({ notice }),
     }),
     {
-      name: "biosphere1:hiking",
+      name: "kugelmaps:hiking",
       // v4: route geometry moved out of localStorage (quota-safe); routes
       // are recomputed from waypoints on mount.
       version: 4,

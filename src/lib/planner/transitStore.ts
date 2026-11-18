@@ -5,6 +5,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { RoutePlan } from "../routing";
 import type { PlannerPhase } from "./carStore";
 import type { JourneySort } from "./transitFormat";
+import { migrateLegacyStorage } from "../legacyStorage";
+
+migrateLegacyStorage();
 
 export interface TransitPlace {
   name: string;
@@ -361,7 +364,7 @@ export const useTransit = create<TransitState>()(
         })),
     }),
     {
-      name: "biosphere1:transit",
+      name: "kugelmaps:transit",
       version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({

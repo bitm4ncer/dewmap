@@ -1708,14 +1708,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [activePane, setActivePane] = useState<SidebarPane>("control");
   const [routesMode, setRoutesMode] = useState<RoutesMode>(() => {
     if (typeof window === "undefined") return "transit";
-    const stored = window.localStorage.getItem("biosphere.routesMode");
+    const stored = window.localStorage.getItem("kugelmaps.routesMode");
     return stored === "walk" || stored === "bike" || stored === "car"
       ? stored
       : "transit";
   });
   useEffect(() => {
     try {
-      window.localStorage.setItem("biosphere.routesMode", routesMode);
+      window.localStorage.setItem("kugelmaps.routesMode", routesMode);
     } catch {
       /* private mode */
     }
@@ -1932,7 +1932,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // we just skip the manual tap when we're confident it was already
     // granted before. If the OS has revoked it, the standard prompt
     // re-appears as expected.
-    const GEO_FLAG = "biosphere.geo.autoTrack";
+    const GEO_FLAG = "kugelmaps.geo.autoTrack";
     geolocate.on("geolocate", () => {
       try {
         window.localStorage.setItem(GEO_FLAG, "1");

@@ -77,7 +77,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
               id={descId}
               className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--ink-dim)]"
             >
-              BiosphereOne runs entirely in your browser — no backend, no
+              KugelMaps runs entirely in your browser — no backend, no
               proxy. Create an OAuth client in your{" "}
               <a
                 href="https://dataspace.copernicus.eu/"

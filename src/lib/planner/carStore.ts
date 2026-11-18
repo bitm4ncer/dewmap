@@ -4,6 +4,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { RoutePlan } from "@/lib/routing";
 import type { Waypoint } from "@/lib/hiking/types";
+import { migrateLegacyStorage } from "../legacyStorage";
+
+migrateLegacyStorage();
 
 export type CarProfile = "fastest" | "shortest" | "avoid-highways" | "avoid-tolls";
 
@@ -108,7 +111,7 @@ export const useCar = create<CarState>()(
       setNotice: (notice) => set({ notice }),
     }),
     {
-      name: "biosphere1:car",
+      name: "kugelmaps:car",
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({

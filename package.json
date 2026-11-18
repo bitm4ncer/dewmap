@@ -1,6 +1,7 @@
 {
-  "name": "biosphere1",
-  "version": "0.1.0",
+  "name": "kugelmaps",
+  "version": "0.2.0",
+  "description": "Maps, trains and the real world — a client-side navigation and exploration app.",
   "private": true,
   "scripts": {
     "dev": "next dev",

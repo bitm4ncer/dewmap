@@ -14,7 +14,7 @@
  * change never has to write a migration.
  */
 
-const DB_NAME = "biosphere1-rail-tiles";
+const DB_NAME = "kugelmaps-rail-tiles";
 const DB_VERSION = 1;
 const STORE = "tiles";
 /** 14 days. Railways change rarely — long TTL is fine. */

@@ -491,7 +491,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "biosphere-transit.ics";
+    anchor.download = "kugelmaps-transit.ics";
     anchor.click();
     URL.revokeObjectURL(url);
   }

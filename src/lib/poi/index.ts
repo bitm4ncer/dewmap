@@ -8,6 +8,9 @@ import type {
   PoiSelection,
   PoiSocial,
 } from "./types";
+import { migrateLegacyStorage } from "../legacyStorage";
+
+migrateLegacyStorage();
 
 export type {
   PoiDetails,
@@ -18,7 +21,7 @@ export type {
 } from "./types";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
-const STORAGE_PREFIX = "biosphere.poi.v1.";
+const STORAGE_PREFIX = "kugelmaps.poi.v1.";
 const memory = new Map<string, { at: number; value: PoiDetails }>();
 
 function cacheKey(selection: PoiSelection): string {

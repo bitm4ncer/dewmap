@@ -626,11 +626,11 @@ export function buildIcs(journey: RoutePlan): string {
       return `${time} ${stopLabel(leg.from)} → ${stopLabel(leg.to)} · ${line}`;
     })
     .join("\n");
-  const uid = `${(journey.id || "journey").replace(/[^a-zA-Z0-9._-]/g, "-")}@biosphere1`;
+  const uid = `${(journey.id || "journey").replace(/[^a-zA-Z0-9._-]/g, "-")}@kugelmaps`;
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Biosphere1//Transit//EN",
+    "PRODID:-//KugelMaps//Transit//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",

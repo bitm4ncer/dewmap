@@ -1,15 +1,16 @@
 import type { MetadataRoute } from "next";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
 
 export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "BiosphereOne",
-    short_name: "BiosphereOne",
-    description:
-      "Hiking, cycling, driving and public-transport navigation with live satellite and environmental layers.",
+    name: SITE_NAME,
+    short_name: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    id: ".",
     lang: "en",
-    categories: ["navigation", "travel", "maps"],
+    categories: ["navigation", "travel", "maps", "utilities"],
     start_url: ".",
     scope: ".",
     display: "standalone",
@@ -23,10 +24,22 @@ export default function manifest(): MetadataRoute.Manifest {
         type: "image/svg+xml",
       },
       {
+        src: "icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
         src: "icon-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
+      },
+      {
+        src: "icon-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
       {
         src: "apple-icon.png",

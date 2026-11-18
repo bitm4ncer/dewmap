@@ -8,6 +8,7 @@ import {
   DEFAULT_IMAGE_BASEMAP_ID,
   DEFAULT_VECTOR_BASEMAP_ID,
 } from "./basemaps";
+import { migrateLegacyStorage } from "./legacyStorage";
 
 export type Projection = "mercator" | "globe";
 export type RailStyle = "tiles" | "lines";
@@ -101,6 +102,9 @@ export interface Settings {
 export const HISTORY_YEAR_MIN = 1500;
 export const HISTORY_YEAR_MAX = new Date().getFullYear();
 
+// Copy settings written under the old brand before the store hydrates.
+migrateLegacyStorage();
+
 export const useSettings = create<Settings>()(
   persist(
     (set) => ({
@@ -177,7 +181,7 @@ export const useSettings = create<Settings>()(
         }),
     }),
     {
-      name: "biosphere1:settings",
+      name: "kugelmaps:settings",
       version: 19,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({

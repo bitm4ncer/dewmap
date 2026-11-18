@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## 2026-11-18 — Rebrand: BiosphereOne → KugelMaps
+
+Full brand pass across the app, metadata and docs.
+
+### Brand
+
+- New name **KugelMaps** in the window title, PWA manifest, Apple web app
+  title, credentials modal, GPX creator, calendar export (`PRODID`, UID and
+  filename) and service-worker cache name.
+- New app icon from `.design/AppIcon.svg`: `src/app/icon.svg`,
+  `src/app/favicon.ico`, `src/app/apple-icon.png`, PWA 192/512/maskable
+  icons and a 1200×630 Open Graph image.
+- The nature-data pane keeps its internal `biosphere` key, but the UI
+  already labels it **Nature** (NDVI, land cover, species, forest loss,
+  NO₂, Natura 2000). No brand string remains in the interface.
+
+### SEO
+
+- Expanded metadata: canonical URL, Open Graph, Twitter card, keywords,
+  robots directives and JSON-LD `WebApplication`.
+- Added `robots.txt` and `sitemap.xml` route handlers.
+- `metadataBase` derives from `NEXT_PUBLIC_SITE_URL`, so canonical and
+  social URLs follow the deployed origin and base path.
+
+### Storage
+
+- Zustand keys and the rail-tile IndexedDB are now `kugelmaps:*` and
+  `kugelmaps-rail-tiles`.
+- A one-time migration copies legacy `biosphere1:*`, `biosphere.*` and
+  `biosphere.poi.v1.*` values before the stores hydrate. Nothing is
+  deleted, and existing settings, routes, favourites and cached POIs
+  carry over.
+
+### Build
+
+- `package.json` renamed to `kugelmaps`, version `0.2.0`.
+- The GitHub Pages workflow derives `NEXT_PUBLIC_BASE_PATH` and
+  `NEXT_PUBLIC_SITE_URL` from the repository name, so renaming the repo
+  needs no workflow edit.
+
+### Docs
+
+- README rewritten around the train-first / exploration positioning.
+
 ## Branch `claude/biosphere-audit-refactor-PCD7s` — 2026-05-04
 
 Audit + targeted refactor pass. See `AUDIT.md` for the full pre-/post-refactor

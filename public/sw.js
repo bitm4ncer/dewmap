@@ -1,4 +1,4 @@
-/* BiosphereOne shell service worker.
+/* KugelMaps shell service worker.
  *
  * Caches the app shell and hashed Next.js chunks so the interface opens
  * offline after the first visit. Map tiles and routing APIs stay
@@ -6,7 +6,7 @@
  * online use only.
  */
 
-const CACHE = "biosphere-shell-v1";
+const CACHE = "kugelmaps-shell-v1";
 const SCOPE = self.registration.scope;
 
 const SHELL = [
