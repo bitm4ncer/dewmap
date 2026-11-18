@@ -18,7 +18,16 @@ describe("transit panel layout", () => {
   it("keeps the When field at a compact width", () => {
     expect(src).toContain('className="ui-input ui-input-date"');
   });
+
+  it("does not pin the journey actions while scrolling", () => {
+    expect(journeyDetail).not.toContain("sticky");
+  });
 });
+
+const journeyDetail = readFileSync(
+  new URL("./JourneyDetail.tsx", import.meta.url),
+  "utf8",
+);
 
 const picker = readFileSync(
   new URL("./PlacePicker.tsx", import.meta.url),

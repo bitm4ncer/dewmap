@@ -101,7 +101,7 @@ export function JourneyDetail({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-10 flex flex-wrap gap-2 bg-[color:var(--surf-1)] py-1">
+      <div className="flex flex-wrap gap-2 py-1">
         <button
           type="button"
           onClick={onStart}
