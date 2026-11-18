@@ -336,3 +336,65 @@ export function HeadingIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function LandCoverIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1" />
+      <path d="M14 20.5h6M17 17.5v6" />
+    </svg>
+  );
+}
+
+export function NdviIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M4.5 19.5C4.5 11 10.5 4.5 20 4.5c0 9.5-6.5 15-14.5 15Z" />
+      <path d="M5 19c3.5-4 7-7.5 11.5-10" />
+    </svg>
+  );
+}
+
+export function SpeciesIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <ellipse cx="7" cy="8" rx="2" ry="2.6" />
+      <ellipse cx="12" cy="6" rx="2" ry="2.6" />
+      <ellipse cx="17" cy="8" rx="2" ry="2.6" />
+      <ellipse cx="19" cy="13" rx="1.8" ry="2.3" />
+      <path d="M6 17.5c0-2.8 2.7-5 6-5s6 2.2 6 5c0 1.5-1.2 2.5-2.8 2.5-1 0-2-.6-3.2-.6s-2.2.6-3.2.6C7.2 20 6 19 6 17.5Z" />
+    </svg>
+  );
+}
+
+export function ForestLossIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 3 7 10h3l-3 4.5h10L14 10h3Z" />
+      <path d="M12 14.5V21" />
+      <path d="M8.5 20.5h7" />
+      <path d="M3 6.5h2.5M4.25 5.25v2.5" />
+    </svg>
+  );
+}
+
+export function AirQualityIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M3 8h11a3 3 0 1 0-3-3" />
+      <path d="M3 12h15a3 3 0 1 1-3 3" />
+      <path d="M3 16h7a2.5 2.5 0 1 1-2.5 2.5" />
+    </svg>
+  );
+}
+
+export function NaturaIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6Z" />
+      <path d="m8.8 12 2.1 2.1 4.4-4.4" />
+    </svg>
+  );
+}

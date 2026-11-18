@@ -55,13 +55,19 @@ import {
   ChevronRightIcon,
   ChevronUpIcon,
   CloseIcon,
+  AirQualityIcon,
   CompassIcon,
   FlatIcon,
+  ForestLossIcon,
   GlobeIcon,
   HeadingIcon,
   HybridIcon,
   ImageIcon,
+  LandCoverIcon,
+  NaturaIcon,
+  NdviIcon,
   RouteIcon,
+  SpeciesIcon,
   VectorIcon,
 } from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
@@ -3540,6 +3546,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [mapInstance]);
 
+  const activeOverlays: { key: string; label: string; icon: ReactNode }[] = [
+    landCoverOn && { key: "land-cover", label: "Land Cover", icon: <LandCoverIcon size={16} /> },
+    ndviOn && { key: "ndvi", label: "NDVI", icon: <NdviIcon size={16} /> },
+    speciesOn && { key: "species", label: "Species", icon: <SpeciesIcon size={16} /> },
+    forestLossOn && { key: "forest-loss", label: "Forest Loss", icon: <ForestLossIcon size={16} /> },
+    no2On && { key: "air-quality", label: "Air Quality", icon: <AirQualityIcon size={16} /> },
+    naturaSitesOn && { key: "protected-areas", label: "Protected Areas", icon: <NaturaIcon size={16} /> },
+  ].filter(Boolean) as { key: string; label: string; icon: ReactNode }[];
+
   return (
     <div
       className="relative h-full w-full"
@@ -3562,6 +3577,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       >
         <ChevronRightIcon size={18} />
       </button>
+
+      {activeOverlays.length > 0 && (
+        <div className="map-overlay-badges" role="group" aria-label="Active map overlays">
+          {activeOverlays.map((overlay) => (
+            <span
+              key={overlay.key}
+              className="map-overlay-badge"
+              role="img"
+              aria-label={overlay.label}
+              title={overlay.label}
+            >
+              {overlay.icon}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Floating top bar — search, and (desktop only) the basemap-mode
           switch. On phones the Map tab owns basemap chrome, so the search

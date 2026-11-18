@@ -186,6 +186,18 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
   });
 
+  it("stacks active overlay badges above the locate control", () => {
+    expect(block(".map-overlay-badges")?.body).toContain("display: none");
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.trim().endsWith(".map-overlay-badges") &&
+          b.body.includes("bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 148px)"),
+      ),
+    ).toBe(true);
+    expect(block(".map-overlay-badge")?.body).toContain("width: 28px");
+  });
+
   it("starts map attribution collapsed and narrow on phones", () => {
     expect(
       blocks.some(

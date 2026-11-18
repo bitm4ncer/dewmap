@@ -2,6 +2,14 @@
 
 import type { ReactNode } from "react";
 import { HudPanel } from "./HudPanel";
+import {
+  AirQualityIcon,
+  ForestLossIcon,
+  LandCoverIcon,
+  NaturaIcon,
+  NdviIcon,
+  SpeciesIcon,
+} from "@/components/ui/icons";
 
 interface SpeciesTaxonOption {
   key: string | null;
@@ -136,6 +144,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
     <div className="flex flex-col gap-3">
       <BiosphereLayerCard
         label="Land Cover"
+        icon={<LandCoverIcon size={16} />}
         on={props.landCoverOn}
         opacity={props.landCoverOpacity}
         onToggle={props.onLandCoverOnChange}
@@ -147,6 +156,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
 
       <BiosphereLayerCard
         label="NDVI"
+        icon={<NdviIcon size={16} />}
         on={props.ndviOn}
         opacity={props.ndviOpacity}
         onToggle={props.onNdviOnChange}
@@ -164,6 +174,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
 
       <BiosphereLayerCard
         label="Species"
+        icon={<SpeciesIcon size={16} />}
         on={props.speciesOn}
         opacity={props.speciesOpacity}
         onToggle={props.onSpeciesOnChange}
@@ -206,6 +217,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
 
       <BiosphereLayerCard
         label="Forest Loss"
+        icon={<ForestLossIcon size={16} />}
         on={props.forestLossOn}
         opacity={props.forestLossOpacity}
         onToggle={props.onForestLossOnChange}
@@ -230,6 +242,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
 
       <BiosphereLayerCard
         label="Air Quality · NO₂"
+        icon={<AirQualityIcon size={16} />}
         on={props.no2On}
         opacity={props.no2Opacity}
         onToggle={props.onNo2OnChange}
@@ -255,6 +268,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
 
       <BiosphereLayerCard
         label="Protected Areas"
+        icon={<NaturaIcon size={16} />}
         on={props.naturaSitesOn}
         opacity={props.naturaSitesOpacity}
         onToggle={props.onNaturaSitesOnChange}
@@ -277,6 +291,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
 
 interface BiosphereLayerCardProps {
   label: string;
+  icon?: ReactNode;
   caption: string;
   on: boolean;
   opacity: number;
@@ -290,6 +305,7 @@ interface BiosphereLayerCardProps {
 
 function BiosphereLayerCard({
   label,
+  icon,
   caption,
   on,
   opacity,
@@ -304,9 +320,16 @@ function BiosphereLayerCard({
     <HudPanel>
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
-            {label}
-          </h3>
+          <div className="flex min-w-0 items-center gap-2">
+            {icon && (
+              <span className={on ? "text-[color:var(--accent)]" : "text-[color:var(--ink-dim)]"}>
+                {icon}
+              </span>
+            )}
+            <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
+              {label}
+            </h3>
+          </div>
           <button
             type="button"
             role="switch"
