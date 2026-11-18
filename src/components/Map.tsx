@@ -2278,7 +2278,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
     };
     if (map.isStyleLoaded()) apply();
-    else map.once("style.load", apply);
+    // Always listen for the next style: switching back from another
+    // vector basemap replaces the style and drops all paint overrides.
+    map.on("style.load", apply);
     return () => {
       map.off("style.load", apply);
       map.off("idle", apply);

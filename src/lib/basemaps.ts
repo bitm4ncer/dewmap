@@ -116,6 +116,17 @@ export const BASEMAPS: Basemap[] = [
   {
     id: "streets-dark",
     label: "Streets · dark",
+    subtitle: "Graphite tint · softened labels",
+    kind: "style",
+    category: "vector",
+    url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+    maxzoom: 19,
+    attribution: CARTO_ATTRIB,
+  },
+  {
+    id: "dark-matter",
+    label: "Dark Matter",
+    subtitle: "CARTO original · untinted",
     kind: "style",
     category: "vector",
     url: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
