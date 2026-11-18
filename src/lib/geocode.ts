@@ -15,6 +15,41 @@ export interface GeocodeResult {
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
 
+function distanceKm(a: [number, number], b: [number, number]): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const h =
+    Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Nearby results win over far string matches. Each API rank is worth
+ * 20 km and the first 50 km are free, so a local supermarket outranks a
+ * same-named village abroad without hiding a strong far city match.
+ */
+export function rankByProximity<T extends { coordinates: [number, number] }>(
+  results: T[],
+  nearby?: [number, number],
+): T[] {
+  if (!nearby || !Number.isFinite(nearby[0]) || !Number.isFinite(nearby[1])) {
+    return results;
+  }
+  return results
+    .map((result, rank) => ({
+      result,
+      score:
+        rank * 20
+        + Math.max(0, distanceKm(nearby, result.coordinates) - 50),
+    }))
+    .sort((a, b) => a.score - b.score)
+    .map((entry) => entry.result);
+}
+
 interface PhotonFeature {
   geometry: { type: "Point"; coordinates: [number, number] };
   properties: {
@@ -147,7 +182,7 @@ export async function geocode(
   if (!res.ok) throw new Error(`Geocoder error: ${res.status}`);
 
   const data = (await res.json()) as { features: PhotonFeature[] };
-  return data.features.map((f, i) => {
+  const results = data.features.map((f, i) => {
     const p = f.properties;
     const coordinates = f.geometry.coordinates;
     const osmType = p.osm_type?.toUpperCase();
@@ -170,6 +205,7 @@ export async function geocode(
       ...(typeof p.osm_id === "number" ? { osmId: p.osm_id } : {}),
     } satisfies GeocodeResult;
   });
+  return rankByProximity(results, options.nearby);
 }
 
 /** Pretty-print Photon's OSM value/key as a human-readable category badge. */
