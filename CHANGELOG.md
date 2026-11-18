@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-11-18 — History worldwide heritage layer
+
+### Added
+
+- Static worldwide heritage dataset built from Wikidata (curated
+  heritage/historic classes, ~250k cap) and published as versioned PMTiles
+  (four H3 cluster bands z0–7, sites z8–9).
+- History pane rendering clusters/sites from PMTiles, with heritage and
+  UNESCO toggles, category chips, year filtering at city zoom, a data-as-of
+  label and Wikipedia/Commons detail popups.
+- Monthly `History data` workflow and a deploy fallback that keeps the app
+  working when the dataset is missing or a range host is broken.
+- Robust PMTiles probe: a 206 with `Content-Encoding: gzip` (Firefox on
+  GitHub Pages) is rejected and the archive is loaded once as a file.
+
+### Changed
+
+- The History pane's legacy live OSM/Wikidata layer is only enabled as a
+  fallback when the global dataset fails; it no longer fans out requests on
+  a cold world view.
+
+### Docs
+
+- `docs/superpowers/specs/2026-11-18-history-worldwide-design.md`
+- `docs/superpowers/plans/2026-11-18-history-worldwide.md`
+- `docs/audit/2026-11-18-history-plan-critique.md`
+- `docs/audit/2026-11-18-history-worldwide-verification.md`
+
 ## 2026-11-18 — History tab: reliable landmarks + image enrichment
 
 ### Fixed

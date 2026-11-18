@@ -68,7 +68,7 @@ const SOURCES: Source[] = [
   {
     name: "Wikipedia · Wikidata",
     detail:
-      "Descriptions, dates, official websites and social profiles. Photos from Wikimedia Commons.",
+      "Descriptions, dates, official websites and social profiles. The worldwide heritage layer is a curated Wikidata extract refreshed monthly. Photos from Wikimedia Commons.",
     href: "https://www.wikidata.org/",
   },
   {

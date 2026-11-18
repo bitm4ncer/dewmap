@@ -4,7 +4,7 @@
 
 **Goal:** Ship a fast, worldwide historic-sites layer for the History tab: a curated static Wikidata heritage dataset rendered as PMTiles clusters (z0–7) and sites (z8–9), with honest year/category filters, heritage/UNESCO toggles, detail popups, monthly refresh and a safe fallback when the dataset is unavailable.
 
-**Architecture:** A build-time pipeline aggregates Wikidata via QLever into one row per item, normalizes/categorizes it, builds H3 cluster bands and two PMTiles archives, validates them, and publishes a versioned manifest. At runtime MapLibre reads the archives through the PMTiles protocol; a robust range probe falls back to a full-file `FileSource` on broken hosts. The existing live OSM loader stays untouched behind its current toggle and is not part of v1.
+**Architecture:** A build-time pipeline aggregates Wikidata via QLever into one row per item, normalizes/categorizes it, builds H3 cluster bands and five PMTiles archives (four bands + sites), validates them, and publishes a versioned manifest. At runtime MapLibre reads the archives through the PMTiles protocol; a robust range probe falls back to a full-file `FileSource` on broken hosts. The existing live OSM loader stays untouched behind its current toggle and is not part of v1.
 
 **Tech Stack:** Next.js 16 static export, React 19, MapLibre GL JS 5, `pmtiles`, Zustand, Vitest, tippecanoe (build-time), QLever/WDQS, `h3-js` (build-time), GitHub Actions/Pages.
 
@@ -235,7 +235,8 @@ git commit -m "feat(history): export and normalize the global heritage dataset"
 - `clusterSites(sites, { resolution }): ClusterFeature[]`
   - `id`, `coordinates`, `count`, `heritageCount`, `unescoCount`.
 - `buildArchives({ inputGeoJsonl, outDir, tippecanoe })` writes:
-  - `<outDir>/<buildId>/history-clusters.pmtiles` (z0–7, layer `history_clusters`)
+  - `<outDir>/<buildId>/history-clusters-<min>-<max>.pmtiles` (one per
+    band: 0–1, 2–3, 4–5, 6–7; layer `history_clusters`)
   - `<outDir>/<buildId>/history-sites.pmtiles` (z8–9, layer `history_sites`)
   - `<outDir>/manifest.json` (pointer with `buildId`, files, bytes, sha256, counts, builtAt, attribution)
 - `build-all.mjs` orchestrates export → normalize → build; defaults:
@@ -442,7 +443,7 @@ git commit -m "ci(history): monthly data release and resilient Pages deploy"
     archive (clusters and sites):
     - range: `pmtiles://<absolute file url>`, archive added via
       `protocol.add(new PMTiles(absoluteUrl))`;
-    - full: `pmtiles://history-clusters.pmtiles` /
+    - full: `pmtiles://history-clusters-<min>-<max>.pmtiles` /
       `pmtiles://history-sites.pmtiles` after adding
       `new PMTiles(new FileSource(new File([blob], basename)))`.
   - the file basename keeps the two full-mode archives distinct in the

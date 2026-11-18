@@ -179,7 +179,8 @@ supports large CSV exports), with WDQS as a fallback. The reviewed
      `tippecanoe: { minzoom, maxzoom }` with non-overlapping bands.
    - cap each band at 5,000 features by merging to a coarser resolution.
 5. Tippecanoe:
-   - `history-clusters.pmtiles` z0–7, layer `history_clusters`.
+   - `history-clusters-<min>-<max>.pmtiles` (one per band: 0–1, 2–3,
+     4–5, 6–7), layer `history_clusters`.
    - `history-sites.pmtiles` z8–9, layer `history_sites`.
    - Point features, `--drop-densest-as-needed`, size budget.
 6. Validate: schema, duplicate IDs, coordinate ranges, category
@@ -194,10 +195,12 @@ supports large CSV exports), with WDQS as a fallback. The reviewed
      "builtAt": "2026-11-18T04:00:00Z",
      "counts": { "sites": 250000, "clusters": 40000 },
      "files": {
-       "clusters": { "path": "history-20261118-0400/history-clusters.pmtiles",
-                     "bytes": 123, "sha256": "..." },
-       "sites":    { "path": "history-20261118-0400/history-sites.pmtiles",
-                     "bytes": 456, "sha256": "..." }
+       "clusters": [
+         { "path": "history-20261118-0400/history-clusters-0-1.pmtiles",
+           "bytes": 123, "sha256": "...", "minzoom": 0, "maxzoom": 1 }
+       ],
+       "sites": { "path": "history-20261118-0400/history-sites.pmtiles",
+                  "bytes": 456, "sha256": "..." }
      },
      "attribution": ["Wikidata contributors (CC0)", "..."]
    }
@@ -232,8 +235,9 @@ explicit “load global dataset” action on metered connections.
 - Register one `pmtiles` protocol at app startup; add the opened archive
   to the protocol explicitly.
 - Probe range support before creating the source; full mode uses a
-  `FileSource` keyed by the archive basename (`history-clusters.pmtiles`,
-  `history-sites.pmtiles`) so the two archives do not collide.
+  `FileSource` keyed by the archive basename
+  (`history-clusters-<min>-<max>.pmtiles`, `history-sites.pmtiles`) so the
+  five archives do not collide.
 - Add two MapLibre sources with **absolute** `pmtiles://` URLs:
   - `history-global-clusters` (vector, z0–7), circle layer with count
     labels.
@@ -364,7 +368,7 @@ archive/image-database enrichment.
 
 - **Global max zoom:** 9 (clusters z0–7, sites z8–9); overzoom above.
 - **Data URL:** same-origin Pages by default, configurable for S3/R2.
-- **Archives:** two files (clusters/sites), versioned directory.
+- **Archives:** five files (four cluster bands + sites), versioned directory.
 - **Labels:** English `rdfs:label` in tiles; localized detail on click.
 - **Year range:** data keeps BCE; the slider starts at 1500; ancient and
   undated sites are visible from the first position with clear badges.
