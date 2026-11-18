@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BiosphereOne — Graphite, flat</title>
+<style>
+  * { box-sizing: border-box; }
+  html { background: #0c0f11; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #e8ecee;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { padding: 32px 28px 90px; max-width: 1280px; margin: 0 auto; }
+  .page-head { margin-bottom: 22px; max-width: 780px; }
+  .page-head .kicker { font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: #6f7d84; margin-bottom: 9px; }
+  .page-head h1 { font-size: 23px; font-weight: 620; letter-spacing: -.015em; margin: 0 0 9px; }
+  .page-head p { margin: 0; font-size: 13px; line-height: 1.55; color: #93a0a6; }
+
+  /* ══ the theme ═══════════════════════════════════════════════
+     Graphite: no borders, no shadows. Separation comes from the
+     surface ramp, translucent glass and one pigeon-blue accent. */
+  .theme {
+    --bg:#121619; --s0:#161B1E; --s1:#1B2125; --s2:#222A2F; --s3:#2B3439;
+    --ink:#E9EEF0; --ink-dim:#A7B4BA; --ink-mute:#909EA5;
+    --accent:#8DACBB; --accent-soft:rgba(141,172,187,.14); --accent-strong:rgba(141,172,187,.28);
+    --accent-ink:#0F1416;
+    --warn:#D8A25F; --danger:#DE8A7E; --info:#8FBCDE; --locator:#C98274;
+    --glass:rgba(14,18,21,.84);
+    --glass-strong:rgba(14,18,21,.92);
+    --r-card:14px; --r-btn:10px; --r-pill:999px;
+    --ease: cubic-bezier(.32,.72,0,1);
+    --map-a:#3B433F; --map-b:#4A554E; --map-c:#2E3532;
+  }
+  body[data-map="bright"] .theme { --map-a:#DCE4E7; --map-b:#C7D5DA; --map-c:#B2C4CB; }
+  body[data-sep="crisp"] .theme {
+    --bg:#0A0D0F; --s0:#121719; --s1:#222B31; --s2:#2E383F; --s3:#40505A;
+    --ink:#F1F5F7; --ink-dim:#B8C4CA; --ink-mute:#96A4AB;
+    --glass:rgba(14,18,21,.84); --glass-strong:rgba(14,18,21,.92);
+  }
+  .theme {
+    background: var(--bg); color: var(--ink);
+    border-radius: 22px; padding: 22px;
+  }
+  @supports (background: color-mix(in srgb, white 50%, transparent)) {
+    .theme { background: linear-gradient(180deg, var(--s0), var(--bg) 460px); }
+  }
+
+  /* ── header ───────────────────────────────────────────────── */
+  .head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+  .letter {
+    width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 700; flex: none;
+  }
+  .head .name { font-size: 15.5px; font-weight: 620; letter-spacing: -.01em; }
+  .head .desc { font-size: 12px; color: var(--ink-mute); margin-top: 3px; line-height: 1.45; }
+  .head .tokens { margin-left: auto; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  .tok { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--ink-mute); }
+  .tok i { width: 15px; height: 15px; border-radius: 4px; display: block; }
+  .tok b { font-weight: 500; font-family: ui-monospace, Menlo, monospace; font-size: 9.5px; color: var(--ink-dim); }
+
+  /* surface ramp — the whole hierarchy lives here */
+  .ramp { display: flex; gap: 6px; margin-bottom: 8px; }
+  .ramp div { flex: 1; border-radius: 9px; padding: 8px 10px 9px; min-width: 0; }
+  .ramp .n { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; font-weight: 650; opacity: .78; }
+  .ramp .v { font-size: 9.5px; font-family: ui-monospace, Menlo, monospace; margin-top: 3px; opacity: .85; }
+  .ramp-note { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-mute); margin: 0 2px 20px; }
+
+  .demo-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .demo-bar .lbl { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-mute); font-weight: 650; margin-right: 2px; }
+  .tool { border: 0; background: var(--s2); color: var(--ink-dim); font: inherit; font-size: 11px; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  .tool[data-on="true"] { background: var(--accent); color: var(--accent-ink); }
+  .demo-bar .hint { margin-left: auto; font-size: 10.5px; color: var(--ink-mute); }
+
+  /* ── shell ────────────────────────────────────────────────── */
+  .specimen { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .specimen { grid-template-columns: 1fr; } .head .tokens { display: none; } }
+
+  .shell { position: relative; border-radius: var(--r-card); overflow: hidden; background: var(--s0); min-height: 430px; }
+  .map-band {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(100% 90% at 12% 4%, var(--map-a) 0%, transparent 58%),
+      radial-gradient(80% 90% at 92% 96%, var(--map-b) 0%, transparent 62%),
+      linear-gradient(152deg, var(--map-c), var(--map-b) 55%, var(--map-a));
+  }
+  .map-band::after {
+    content:""; position:absolute; inset:0;
+    background-image:
+      repeating-linear-gradient(115deg, rgba(255,255,255,.055) 0 1px, transparent 1px 30px),
+      repeating-linear-gradient(25deg, rgba(0,0,0,.055) 0 1px, transparent 1px 38px);
+    mix-blend-mode: overlay;
+  }
+  .map-veil { position:absolute; inset:0; background: linear-gradient(180deg, rgba(0,0,0,.14), transparent 32%, transparent 68%, rgba(0,0,0,.18)); }
+
+  .glass { background: var(--glass); backdrop-filter: blur(18px) saturate(1.08); -webkit-backdrop-filter: blur(18px) saturate(1.08); }
+  .glass-strong { background: var(--glass-strong); backdrop-filter: blur(22px) saturate(1.1); -webkit-backdrop-filter: blur(22px) saturate(1.1); }
+
+  .topbar { position:absolute; top:11px; left:11px; right:11px; display:flex; gap:8px; align-items:center; z-index:4; }
+  .search {
+    flex:1; min-width:0; display:flex; align-items:center; gap:8px; height:38px; padding:0 13px;
+    border-radius: var(--r-pill); color: var(--ink-dim); font-size:12px;
+  }
+  .search span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .search svg { flex:none; opacity:.8; }
+  .search kbd { margin-left:auto; flex:none; font: inherit; font-size:10px; border-radius:4px; padding:2px 6px; color:var(--ink-mute); background: var(--s2); }
+  .seg { display:flex; gap:2px; padding:3px; border-radius: var(--r-pill); flex:none; }
+  .seg button {
+    border:0; background:transparent; color:var(--ink-dim); font:inherit; font-size:10.5px;
+    padding:5px 10px; border-radius:var(--r-pill); cursor:pointer; white-space:nowrap;
+  }
+  .seg button[data-on="true"] { background: var(--accent); color: var(--accent-ink); }
+
+  .map-controls { position:absolute; left:11px; bottom:11px; display:flex; flex-direction:column; gap:4px; z-index:4; }
+  .ctl {
+    width:34px; height:34px; display:grid; place-items:center; border-radius:9px;
+    background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    color: var(--ink-dim); cursor:pointer; padding:0; border:0;
+  }
+  .ctl:hover { background: var(--s2); color: var(--ink); }
+  .ctl[data-on="true"] { background: var(--accent); color: var(--accent-ink); backdrop-filter: none; }
+
+  .panel {
+    position:absolute; right:11px; top:62px; width: 248px; z-index:4;
+    border-radius:12px; padding: 12px; overflow: hidden;
+  }
+  .panel-tabs { display:flex; gap:2px; background: var(--s2); border-radius:8px; padding:3px; margin-bottom:12px; }
+  .panel-tabs button {
+    flex:1; border:0; background:transparent; color:var(--ink-dim); font:inherit; font-size:9.5px;
+    padding:5px 1px; border-radius:6px; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
+  }
+  .panel-tabs button[data-on="true"] { background: var(--s1); color: var(--accent); }
+  .panel-tabs svg { width:14px; height:14px; }
+
+  .section-head { display:flex; align-items:baseline; margin: 12px 0 5px; }
+  .section-head .label { font-size:9px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-mute); font-weight:650; }
+
+  .row { display:flex; align-items:center; gap:8px; padding:8px 0; }
+  .row + .row { margin-top: 2px; }
+  .row .stack { min-width:0; flex:1; display:block; }
+  .row .t { font-size:11.5px; font-weight:560; letter-spacing:-.005em; }
+  .row .s { font-size:10px; color:var(--ink-mute); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row:hover { background: var(--s2); border-radius: 8px; margin: 0 -6px; padding-left:6px; padding-right:6px; }
+
+  .switch { width:31px; height:18px; border-radius:999px; background: var(--s3); position:relative; flex:none; border:0; cursor:pointer; padding:0; }
+  .switch::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background: var(--s1); transition: transform .15s var(--ease); }
+  .switch[data-on="true"] { background: var(--accent); }
+  .switch[data-on="true"]::after { transform: translateX(13px); background:#fff; }
+
+  .led { width:30px; height:15px; border-radius:5px; background: var(--s3); display:flex; align-items:center; padding:2px; flex:none; cursor:pointer; border:0; }
+  .led i { width:7px; height:7px; border-radius:2px; background: var(--ink-mute); opacity:.5; transition: all .15s var(--ease); }
+  .led[data-on="true"] { background: var(--accent); }
+  .led[data-on="true"] i { background: var(--accent-ink); opacity:1; margin-left:auto; }
+
+  .chip { border:0; background: var(--s2); color:var(--ink-dim); font:inherit; font-size:10px; padding:4px 9px; border-radius:var(--r-pill); cursor:pointer; }
+  .chip:hover { background: var(--s3); color: var(--ink); }
+  .chip[data-on="true"] { background: var(--accent-soft); color: var(--accent); }
+
+  .btn {
+    border:0; font:inherit; font-size:11px; font-weight:560; padding:8px 13px;
+    border-radius: var(--r-btn); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    background: var(--s2); color: var(--ink-dim);
+  }
+  .btn:hover { background: var(--s3); color: var(--ink); }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); color: var(--accent-ink); }
+  .btn-block { width:100%; }
+
+  .track { height:4px; border-radius:2px; background: var(--s3); position:relative; margin: 8px 1px; }
+  .track i { position:absolute; left:0; top:0; bottom:0; width:62%; border-radius:2px; background: var(--accent); }
+  .track b { position:absolute; left:62%; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:50%; background:var(--ink); }
+
+  .badge { display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:600; padding:2px 7px; border-radius:5px; white-space:nowrap; }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); }
+  .badge-warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+  .badge-live { background: var(--accent); color: var(--accent-ink); }
+  .dot { width:5px; height:5px; border-radius:50%; background: currentColor; }
+
+  /* markers */
+  .pin { position:absolute; left:41%; top:30%; width:20px; height:26px; z-index:3; filter: drop-shadow(0 4px 8px rgba(0,0,0,.35)); }
+  .me { position:absolute; left:47%; top:60%; width:20px; height:20px; z-index:3; }
+  .me .pulse { position:absolute; inset:0; border-radius:50%; background: var(--locator); opacity:.3; animation: pulse 2.6s ease-out infinite; }
+  .me .dotcore { position:absolute; inset:5px; border-radius:50%; background: var(--locator); box-shadow:0 0 0 2px rgba(255,255,255,.9), 0 1px 6px rgba(0,0,0,.5); }
+  @keyframes pulse { 0% { transform: scale(1); opacity:.3 } 70% { opacity:0 } 100% { transform: scale(1.5); opacity:0 } }
+
+  .area { position:absolute; left:13%; top:55%; width:70px; height:46px; border-radius:50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent) 10%, transparent) 72%, transparent); z-index:2; }
+  .sector { position:absolute; right:34%; top:12%; width:80px; height:54px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 5%, transparent), 0 0 26px color-mix(in srgb, var(--accent) 18%, transparent); z-index:2; }
+  .route { position:absolute; inset:0; z-index:2; }
+  .attrib { position:absolute; left:11px; right:292px; bottom:6px; font-size:8px; color: var(--ink-dim); z-index:4; text-shadow:0 1px 2px rgba(0,0,0,.55); }
+
+  /* ── blocks ───────────────────────────────────────────────── */
+  .blocks { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .block { padding: 13px 14px; border-radius: 12px; background: var(--s1); }
+  .block.tint { background: var(--s0); }
+  .block .k { font-size:9px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-mute); font-weight:650; margin-bottom:9px; }
+  .wrap { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+
+  .list-row { display:flex; align-items:center; gap:9px; padding:9px 10px; border-radius:9px; cursor:pointer; }
+  .list-row .stack { min-width:0; flex:1; display:block; }
+  .list-row .t { font-size:11.5px; font-weight:560; }
+  .list-row .s { font-size:9.5px; color:var(--ink-mute); margin-top:2px; }
+  .list-row[data-on="true"] { background: var(--accent-soft); }
+  .list-row[data-on="true"] .t { color: var(--accent); }
+  .list-row[data-on="true"] .s { color: var(--ink-dim); }
+  .list-row .tick { width:6px; height:6px; border-radius:50%; background: transparent; flex:none; }
+  .list-row[data-on="true"] .tick { background: var(--accent); }
+  .list-row:hover { background: var(--s2); }
+  .list-row[data-on="true"]:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+
+  .legend { display:flex; align-items:center; gap:2px; }
+  .legend span { width:20px; height:9px; }
+  .legend span:first-child { border-radius:5px 0 0 5px; }
+  .legend span:last-child { border-radius:0 5px 5px 0; }
+  .legend-labels { display:flex; justify-content:space-between; font-size:9px; color:var(--ink-mute); margin-top:6px; }
+
+  .timeline { display:flex; align-items:center; }
+  .tl-dot { width:9px; height:9px; border-radius:50%; background: var(--accent-soft); flex:none; }
+  .tl-dot[data-filled="true"] { background: var(--accent); }
+  .tl-dot[data-active="true"] { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .tl-line { flex:1; height:1px; background: var(--s3); }
+  .tl-labels { display:flex; justify-content:space-between; font-size:9px; color:var(--ink-mute); margin-top:8px; }
+
+  .input {
+    width:100%; height:34px; border-radius:9px; border:0; background: var(--s2);
+    color: var(--ink); font:inherit; font-size:11.5px; padding:0 11px;
+  }
+  .input::placeholder { color: var(--ink-mute); }
+  .input:focus { outline:0; box-shadow: 0 0 0 3px var(--accent-strong); background: var(--s3); }
+
+  .mk-row { display:flex; align-items:center; gap:16px; }
+  .mk { display:flex; flex-direction:column; align-items:center; gap:7px; font-size:9px; color:var(--ink-mute); }
+  .mk-box { width:48px; height:42px; display:grid; place-items:center; background: var(--bg); border-radius:9px; }
+
+  .state-grid { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  .state { display:flex; align-items:center; justify-content:center; min-height:34px; border-radius:9px; font-size:10.5px; color:var(--ink-dim); background:var(--bg); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="page-head">
+    <div class="kicker">BiosphereOne · UI rework</div>
+    <h1>Graphite — flat, borderless</h1>
+    <p>No borders and no shadows. Separation comes from a five-step surface ramp, translucent glass over the map, and one pigeon-blue accent for action and selection. Everything you see below is built from those three tools.</p>
+  </header>
+
+  <section class="theme">
+    <div class="head">
+      <div class="letter">G</div>
+      <div>
+        <div class="name">Graphite</div>
+        <div class="desc">Cool grey, flat, calm. The map is the only saturated thing on screen.</div>
+      </div>
+      <div class="tokens">
+        <div class="tok"><i style="background:var(--bg)"></i><b>bg <span data-ramp="--bg">#121619</span></b></div>
+        <div class="tok"><i style="background:var(--s1)"></i><b>surface <span data-ramp="--s1">#1B2125</span></b></div>
+        <div class="tok"><i style="background:var(--ink)"></i><b>ink <span data-ramp="--ink">#E9EEF0</span></b></div>
+        <div class="tok"><i style="background:var(--accent)"></i><b>accent #8DACBB</b></div>
+      </div>
+    </div>
+
+    <div class="ramp">
+      <div style="background:var(--bg); color:var(--ink-mute)"><div class="n">bg</div><div class="v" data-ramp="--bg">#121619</div></div>
+      <div style="background:var(--s0); color:var(--ink-mute)"><div class="n">s0</div><div class="v" data-ramp="--s0">#161B1E</div></div>
+      <div style="background:var(--s1); color:var(--ink-mute)"><div class="n">s1</div><div class="v" data-ramp="--s1">#1B2125</div></div>
+      <div style="background:var(--s2); color:var(--ink-mute)"><div class="n">s2</div><div class="v" data-ramp="--s2">#222A2F</div></div>
+      <div style="background:var(--s3); color:var(--ink-mute)"><div class="n">s3</div><div class="v" data-ramp="--s3">#2B3439</div></div>
+      <div style="background:var(--accent); color:var(--accent-ink)"><div class="n">accent</div><div class="v" data-ramp="--accent">#8DACBB</div></div>
+    </div>
+    <div class="ramp-note"><span>page → card → row → control</span><span>one accent, nothing else</span></div>
+
+    <div class="demo-bar">
+      <span class="lbl">Surface separation</span>
+      <button class="tool" data-sep-btn="soft" data-on="true">Soft</button>
+      <button class="tool" data-sep-btn="crisp">Crisp</button>
+      <span class="lbl" style="margin-left:14px">Basemap</span>
+      <button class="tool" data-map-btn="dark" data-on="true">Dark tiles</button>
+      <button class="tool" data-map-btn="bright">Bright tiles</button>
+      <span class="hint">Glass must stay readable over snow and clouds.</span>
+    </div>
+
+    <div class="specimen">
+      <div class="shell">
+        <div class="map-band"></div><div class="map-veil"></div>
+        <svg class="route" viewBox="0 0 640 430" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M20 360 C 110 320, 160 280, 226 258 S 320 236, 372 180 S 470 116, 540 48" fill="none" stroke="#0B0E10" stroke-opacity=".5" stroke-width="8" stroke-linecap="round"/>
+          <path d="M20 360 C 110 320, 160 280, 226 258 S 320 236, 372 180 S 470 116, 540 48" fill="none" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <div class="area"></div>
+        <div class="sector"></div>
+        <div class="pin">
+          <svg width="20" height="26" viewBox="0 0 20 26" aria-hidden="true">
+            <path d="M10 0C4.5 0 0 4.4 0 9.8 0 17 10 26 10 26s10-9 10-16.2C20 4.4 15.5 0 10 0Z" fill="var(--accent)"/>
+            <circle cx="10" cy="9.6" r="3.6" fill="#121619"/>
+          </svg>
+        </div>
+        <div class="me"><span class="pulse"></span><span class="dotcore"></span></div>
+
+        <div class="topbar">
+          <div class="search glass">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 5 5"/></svg>
+            <span>Search place or address</span>
+            <kbd>⌘K</kbd>
+          </div>
+          <div class="seg glass"><button data-on="true">Image</button><button>Hybrid</button><button>Vector</button></div>
+        </div>
+
+        <div class="map-controls">
+          <button class="ctl" title="Zoom in"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="ctl" title="Zoom out"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="ctl" data-on="true" title="Locate"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+          <button class="ctl" title="Compass"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 3 8 6 1-6 1-3 8-3-8-6-1 6-1Z"/></svg></button>
+        </div>
+
+        <div class="panel glass-strong">
+          <div class="panel-tabs">
+            <button data-on="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6 9 4l6 2 6-2v14l-6 2-6-2-6 2Z"/><path d="M9 4v14M15 6v14"/></svg>Map</button>
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19 9 5l5 9 2-4 4 9Z"/></svg>Routes</button>
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c5-5 8-8.5 8-12a8 8 0 1 0-16 0c0 3.5 3 7 8 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>Bio</button>
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>History</button>
+          </div>
+
+          <div class="section-head"><span class="label">Layers</span></div>
+          <div class="row">
+            <div class="stack"><div class="t">Live weather</div><div class="s">VIIRS · 7-day scrubber</div></div>
+            <button class="switch" data-on="true" aria-label="Live weather"></button>
+          </div>
+          <div class="row">
+            <div class="stack"><div class="t">Rail network</div><div class="s">Overpass · zoom 9+</div></div>
+            <button class="led" data-on="true" aria-label="Rail network"><i></i></button>
+          </div>
+          <div class="row">
+            <div class="stack"><div class="t">Sentinel-2 overlay</div><div class="s">2024 · opacity 42%</div></div>
+            <span class="badge badge-live"><span class="dot"></span>Live</span>
+          </div>
+
+          <div class="track"><i></i><b></b></div>
+          <div class="wrap" style="margin-top:10px">
+            <button class="chip" data-on="true">2024</button><button class="chip">2023</button><button class="chip">2022</button>
+          </div>
+        </div>
+
+        <div class="attrib">© EOX · CARTO · Copernicus</div>
+      </div>
+
+      <div class="blocks">
+        <div class="block">
+          <div class="k">Basemap list</div>
+          <div class="list-row" data-on="true"><span class="tick"></span><div class="stack"><div class="t">Satellite · HD</div><div class="s">Esri · Maxar mosaic · sub-meter</div></div><span class="badge badge-live">Live</span></div>
+          <div class="list-row"><span class="tick"></span><div class="stack"><div class="t">Sentinel-2 · 2024</div><div class="s">EOX cloudless mosaic · 10 m</div></div></div>
+          <div class="list-row"><span class="tick"></span><div class="stack"><div class="t">Streets · light</div><div class="s">CARTO · vector</div></div></div>
+        </div>
+
+        <div class="block">
+          <div class="k">Status &amp; indicators</div>
+          <div class="mk-row">
+            <div class="mk"><div class="mk-box"><span class="badge badge-accent"><span class="dot"></span>NDVI</span></div><span>badge</span></div>
+            <div class="mk"><div class="mk-box"><span class="badge badge-warn">Cloud 42%</span></div><span>warning</span></div>
+            <div class="mk"><div class="mk-box"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div><span>active</span></div>
+            <div class="mk"><div class="mk-box"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 22 21H2Z"/><path d="M12 9v5M12 17.5v.5"/></svg></div><span>error</span></div>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="k">NDVI legend</div>
+          <div class="legend">
+            <span style="background:#8E7A6A"></span><span style="background:#A9A07C"></span><span style="background:#B9B98C"></span><span style="background:#A8BE93"></span><span style="background:#87B092"></span><span style="background:#5E977F"></span><span style="background:#3E7C6B"></span>
+          </div>
+          <div class="legend-labels"><span>-1</span><span>0</span><span>0.5</span><span>1</span></div>
+        </div>
+
+        <div class="block">
+          <div class="k">Snapshot timeline</div>
+          <div class="timeline">
+            <span class="tl-dot" data-filled="true"></span><span class="tl-line"></span>
+            <span class="tl-dot" data-filled="true"></span><span class="tl-line"></span>
+            <span class="tl-dot" data-filled="true"></span><span class="tl-line"></span>
+            <span class="tl-dot" data-filled="true"></span><span class="tl-line"></span>
+            <span class="tl-dot" data-active="true"></span><span class="tl-line"></span>
+            <span class="tl-dot"></span><span class="tl-line"></span>
+            <span class="tl-dot"></span>
+          </div>
+          <div class="tl-labels"><span>Mar</span><span>Jun</span><span>Sep</span><span>Dec</span></div>
+        </div>
+
+        <div class="block">
+          <div class="k">States</div>
+          <div class="state-grid">
+            <span class="state" style="background:var(--accent);color:var(--accent-ink)">Primary</span>
+            <span class="state" style="background:var(--s2)">Secondary</span>
+            <span class="state" style="background:var(--accent-soft);color:var(--accent)">Selected</span>
+            <span class="state" style="color:var(--ink-mute)">Disabled</span>
+          </div>
+        </div>
+
+        <div class="block">
+          <div class="k">Actions</div>
+          <input class="input" placeholder="Search species or taxon" style="margin-bottom:8px" />
+          <div class="wrap" style="margin-bottom:6px"><button class="btn btn-primary btn-block">Start timeline</button></div>
+          <div class="wrap"><button class="btn" style="flex:1">Export GPX</button><button class="btn" style="flex:1">Share view</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  function syncVars() {
+    var cs = getComputedStyle(document.querySelector('.theme'));
+    document.querySelectorAll('[data-ramp]').forEach(function (el) {
+      var v = cs.getPropertyValue(el.getAttribute('data-ramp')).trim();
+      if (v) el.textContent = v;
+    });
+  }
+  syncVars();
+
+  document.querySelectorAll('[data-map-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.body.setAttribute('data-map', btn.getAttribute('data-map-btn'));
+      document.querySelectorAll('[data-map-btn]').forEach(function (b) {
+        b.setAttribute('data-on', String(b === btn));
+      });
+    });
+  });
+
+  document.querySelectorAll('[data-sep-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.getAttribute('data-sep-btn');
+      document.body.setAttribute('data-sep', mode);
+      document.querySelectorAll('[data-sep-btn]').forEach(function (b) {
+        b.setAttribute('data-on', String(b === btn));
+      });
+      syncVars();
+    });
+  });
+</script>
+</body>
+</html>
