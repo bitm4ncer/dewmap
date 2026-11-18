@@ -1,9 +1,11 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- remote OSM/Wikimedia photos with unknown dimensions */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchPoiDetails } from "@/lib/poi";
-import type { PoiDetails, PoiSelection } from "@/lib/poi";
+import type { PanoramaxStreetView, PoiDetails, PoiSelection } from "@/lib/poi";
+import { findPanoramaxStreetView } from "@/lib/poi/panoramax";
+import { PanoramaViewer } from "./PanoramaViewer";
 import { parseOpeningHours } from "@/lib/poi/openingHours";
 import {
   createSpring,
@@ -57,6 +59,27 @@ function categoryLabel(value: string | undefined): string {
   return raw.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function StreetViewIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="7.4" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M12 4.6v14.8M4.6 12h14.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="12" r="2.1" fill="currentColor" />
+    </svg>
+  );
+}
+
 function safeInsetBottom(): number {
   if (typeof document === "undefined") return 0;
   const probe = document.createElement("div");
@@ -84,6 +107,8 @@ function PoiDetailContent({
   const [expanded, setExpanded] = useState(false);
   const [resizing, setResizing] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [streetView, setStreetView] = useState<PanoramaxStreetView | null>(null);
+  const [streetViewOpen, setStreetViewOpen] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{
     mode: "compact" | "expanded";
@@ -119,6 +144,18 @@ function PoiDetailContent({
       });
     return () => ctrl.abort();
   }, [selection, reload]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    findPanoramaxStreetView(selection.lon, selection.lat, ctrl.signal)
+      .then((value) => {
+        if (!ctrl.signal.aborted) setStreetView(value);
+      })
+      .catch(() => {
+        // A missing Street View must never block the place card.
+      });
+    return () => ctrl.abort();
+  }, [selection.lon, selection.lat]);
 
   useEffect(() => {
     cardRef.current?.focus({ preventScroll: true });
@@ -408,6 +445,10 @@ function PoiDetailContent({
     closeCard();
   };
 
+  const closeStreetView = useCallback(() => {
+    setStreetViewOpen(false);
+  }, []);
+
   const planRoute = () => {
     haptic("tap");
     onPlanRoute?.(routeSelection);
@@ -428,10 +469,11 @@ function PoiDetailContent({
   });
 
   return (
-    <section
-      ref={cardRef}
-      tabIndex={-1}
-      className="poi-detail"
+    <>
+      <section
+        ref={cardRef}
+        tabIndex={-1}
+        className="poi-detail"
       role="region"
       aria-label="Place details"
       data-loading={loading ? "true" : "false"}
@@ -711,6 +753,17 @@ function PoiDetailContent({
                       Plan Route
                     </button>
                   )}
+                  {streetView && (
+                    <button
+                      type="button"
+                      className="poi-action"
+                      onClick={() => setStreetViewOpen(true)}
+                      title="Open Panoramax Street View"
+                    >
+                      <StreetViewIcon />
+                      Street View
+                    </button>
+                  )}
                   {details.website && (
                     <a
                       className={`poi-action${onPlanRoute ? "" : " poi-action--primary"}`}
@@ -918,7 +971,15 @@ function PoiDetailContent({
           </div>
         </div>
       )}
-    </section>
+      </section>
+      {streetViewOpen && streetView && (
+        <PanoramaViewer
+          streetView={streetView}
+          title={details?.name ?? name}
+          onClose={closeStreetView}
+        />
+      )}
+    </>
   );
 }
 
