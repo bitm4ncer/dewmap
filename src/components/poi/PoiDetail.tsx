@@ -6,6 +6,15 @@ import { fetchPoiDetails } from "@/lib/poi";
 import type { PoiDetails, PoiSelection } from "@/lib/poi";
 import { parseOpeningHours } from "@/lib/poi/openingHours";
 import {
+  createSpring,
+  prefersReducedMotion,
+  rubberband,
+  SPRING,
+  VelocityTracker,
+  type SpringHandle,
+} from "@/lib/motion";
+import { haptic } from "@/lib/haptics";
+import {
   ChevronDownIcon,
   ChevronUpIcon,
   ClockIcon,
@@ -46,6 +55,17 @@ function categoryLabel(value: string | undefined): string {
   return raw.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function safeInsetBottom(): number {
+  if (typeof document === "undefined") return 0;
+  const probe = document.createElement("div");
+  probe.style.cssText =
+    "position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none";
+  document.body.appendChild(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Number.isFinite(height) ? height : 0;
+}
+
 function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
   const [details, setDetails] = useState<PoiDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,9 +75,21 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const [closing, setClosing] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{ y: number; moved: boolean } | null>(null);
-  const heroDragRef = useRef<{ y: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{
+    mode: "compact" | "expanded";
+    startY: number;
+    startHeight: number;
+    lastHeight: number;
+    moved: boolean;
+  } | null>(null);
+  const compactHeightRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const springRef = useRef<SpringHandle | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const trackerRef = useRef(new VelocityTracker());
   const suppressTapRef = useRef(false);
 
   useEffect(() => {
@@ -86,18 +118,24 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
   }, []);
 
   useEffect(() => {
-    if (expanded) cardRef.current?.focus({ preventScroll: true });
+    const el = cardRef.current;
+    if (!el) return;
+    if (expanded) el.focus({ preventScroll: true });
+    else {
+      const desktop = window.matchMedia("(min-width: 768px)").matches;
+      compactHeightRef.current = desktop ? 148 : 152 + safeInsetBottom();
+    }
   }, [expanded]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (expanded) setExpanded(false);
-      else onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expanded, onClose]);
+  useEffect(
+    () => () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current);
+      springRef.current?.stop();
+      springRef.current = null;
+    },
+    [],
+  );
 
   const retry = () => {
     setLoading(true);
@@ -158,45 +196,229 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
     }
   };
 
-  const startDrag = (
-    target: React.RefObject<{ y: number; moved: boolean } | null>,
-    y: number,
-  ) => {
-    target.current = { y, moved: false };
+  const consumeSuppressedTap = () => {
+    if (!suppressTapRef.current) return false;
+    suppressTapRef.current = false;
+    return true;
   };
 
-  const moveDrag = (
-    target: React.RefObject<{ y: number; moved: boolean } | null>,
-    y: number,
-  ) => {
-    const drag = target.current;
-    if (!drag) return;
-    if (Math.abs(y - drag.y) > 10) {
-      drag.moved = true;
-    }
-  };
-
-  const finishCompactDrag = (y: number) => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag?.moved) return;
-    const dy = y - drag.y;
-    if (Math.abs(dy) <= 30) return;
-    // The browser may skip the synthetic click after a touch gesture.
-    // Reset the suppressor shortly after so the next real tap is not lost.
+  const suppressNextTap = () => {
     suppressTapRef.current = true;
     window.setTimeout(() => {
       suppressTapRef.current = false;
     }, 400);
-    if (dy < -30) setExpanded(true);
-    else onClose();
   };
 
-  const finishHeroDrag = (y: number) => {
-    const drag = heroDragRef.current;
-    heroDragRef.current = null;
-    if (drag?.moved && y - drag.y > 40) setExpanded(false);
+  const expandedHeight = () => {
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    if (window.matchMedia("(min-width: 768px)").matches) return vh - 90;
+    return Math.min(vh * 0.78, 760);
   };
+
+  const compactHeight = () => {
+    if (window.matchMedia("(min-width: 768px)").matches) return 148;
+    return 152 + safeInsetBottom();
+  };
+
+  const stopCardSpring = () => {
+    springRef.current?.stop();
+    springRef.current = null;
+    cardRef.current?.removeAttribute("data-springing");
+  };
+
+  const animateHeight = (target: number, velocity: number) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const from = el.getBoundingClientRect().height;
+    stopCardSpring();
+    if (prefersReducedMotion() || Math.abs(target - from) < 0.5) {
+      el.style.removeProperty("height");
+      return;
+    }
+    el.setAttribute("data-springing", "true");
+    el.style.height = `${from}px`;
+    const handle: SpringHandle = createSpring({
+      from,
+      to: target,
+      velocity: Math.max(-6000, Math.min(6000, velocity)),
+      config: SPRING.card,
+      onUpdate: (value) => {
+        el.style.height = `${value}px`;
+      },
+      onComplete: () => {
+        el.style.removeProperty("height");
+        el.removeAttribute("data-springing");
+        if (springRef.current === handle) springRef.current = null;
+      },
+    });
+    springRef.current = handle;
+  };
+
+  const beginResize = (
+    mode: "compact" | "expanded",
+    event: React.PointerEvent<HTMLElement>,
+  ) => {
+    const el = cardRef.current;
+    if (!el || closing) return;
+    stopCardSpring();
+    const height = el.getBoundingClientRect().height;
+    if (mode === "compact") compactHeightRef.current = height;
+    trackerRef.current.reset();
+    trackerRef.current.add(event.clientY, event.timeStamp);
+    dragRef.current = {
+      mode,
+      startY: event.clientY,
+      startHeight: height,
+      lastHeight: height,
+      moved: false,
+    };
+    setResizing(true);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointers may not be capturable.
+    }
+  };
+
+  const moveResize = (y: number, timeStamp: number) => {
+    const drag = dragRef.current;
+    const el = cardRef.current;
+    if (!drag || !el) return;
+    trackerRef.current.add(y, timeStamp);
+    if (Math.abs(y - drag.startY) > 10) drag.moved = true;
+    if (!drag.moved) return;
+
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const compact = compactHeightRef.current ?? drag.startHeight;
+    const max = expandedHeight();
+    const raw = drag.startHeight + (drag.startY - y);
+    const next = rubberband(raw, compact, max, vh);
+    drag.lastHeight = next;
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      el.style.height = `${next}px`;
+    });
+  };
+
+  const clearResize = () => {
+    dragRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    setResizing(false);
+    animateHeight(expanded ? expandedHeight() : compactHeight(), 0);
+  };
+
+  const finishResize = (event: React.PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    const el = cardRef.current;
+    if (!drag || !el) return;
+    const moved = drag.moved;
+    const height = drag.lastHeight || el.getBoundingClientRect().height;
+    const heightVelocity = -trackerRef.current.velocity(event.timeStamp);
+    const compact = compactHeightRef.current ?? drag.startHeight;
+    const max = expandedHeight();
+    dragRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    setResizing(false);
+    if (!moved) {
+      el.style.removeProperty("height");
+      return;
+    }
+
+    el.style.height = `${height}px`;
+    suppressNextTap();
+    if (drag.mode === "compact") {
+      if (height < compact - 32 || heightVelocity < -600) {
+        haptic("snap");
+        closeCard();
+        return;
+      }
+      const nextExpanded = height > compact + 48 || heightVelocity > 350;
+      if (nextExpanded !== expanded) {
+        haptic("snap");
+        setExpanded(true);
+      }
+      animateHeight(nextExpanded ? max : compact, heightVelocity);
+      return;
+    }
+
+    const nextExpanded = height > max - 90 && heightVelocity > -350;
+    if (nextExpanded !== expanded) {
+      haptic("snap");
+      setExpanded(false);
+    }
+    animateHeight(nextExpanded ? max : compact, heightVelocity);
+  };
+
+  const expand = () => {
+    if (consumeSuppressedTap() || closing || expanded) return;
+    haptic("snap");
+    setExpanded(true);
+    animateHeight(expandedHeight(), 0);
+  };
+
+  const collapse = () => {
+    if (closing || !expanded) return;
+    haptic("snap");
+    setExpanded(false);
+    animateHeight(compactHeight(), 0);
+  };
+
+  const closeCard = () => {
+    if (closing) return;
+    const el = cardRef.current;
+    dragRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    stopCardSpring();
+    setResizing(false);
+    if (!el || prefersReducedMotion()) {
+      onClose();
+      return;
+    }
+    setClosing(true);
+    el.setAttribute("data-closing", "true");
+    el.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      el.style.transform = "translateY(100%)";
+      el.style.opacity = "0";
+    });
+    closeTimerRef.current = window.setTimeout(() => {
+      onClose();
+    }, 260);
+  };
+
+  const close = () => {
+    if (closing) return;
+    haptic("tap");
+    closeCard();
+  };
+
+  const directions = () => {
+    haptic("tap");
+    onDirections?.(directionsSelection);
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (expanded) {
+        setExpanded(false);
+        animateHeight(compactHeight(), 0);
+      } else {
+        closeCard();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   return (
     <section
@@ -207,31 +429,31 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
       aria-label="Place details"
       data-loading={loading ? "true" : "false"}
       data-expanded={expanded ? "true" : "false"}
+      data-resizing={resizing ? "true" : "false"}
+      data-closing={closing ? "true" : "false"}
     >
       {!expanded ? (
         <div
           className="poi-mini"
           onPointerDown={(e) => {
             if ((e.target as HTMLElement).closest(".poi-mini-actions")) return;
-            startDrag(dragRef, e.clientY);
+            beginResize("compact", e);
           }}
-          onPointerMove={(e) => moveDrag(dragRef, e.clientY)}
-          onPointerUp={(e) => finishCompactDrag(e.clientY)}
-          onPointerCancel={() => {
-            dragRef.current = null;
+          onPointerMove={(e) => {
+            if (dragRef.current?.mode === "compact") {
+              moveResize(e.clientY, e.timeStamp);
+            }
           }}
+          onPointerUp={(e) => {
+            if (dragRef.current?.mode === "compact") finishResize(e);
+          }}
+          onPointerCancel={clearResize}
         >
           <span className="poi-grip" aria-hidden />
           <button
             type="button"
             className="poi-mini-main"
-            onClick={() => {
-              if (suppressTapRef.current) {
-                suppressTapRef.current = false;
-                return;
-              }
-              setExpanded(true);
-            }}
+            onClick={expand}
             aria-label={`Open details for ${name}`}
           >
             <span className="poi-mini-thumb">
@@ -272,7 +494,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
               <button
                 type="button"
                 className="poi-mini-btn"
-                onClick={() => onDirections(directionsSelection)}
+                onClick={directions}
                 aria-label="Directions"
                 title="Directions"
               >
@@ -282,7 +504,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             <button
               type="button"
               className="poi-mini-btn"
-              onClick={() => setExpanded(true)}
+              onClick={expand}
               aria-label="Expand place details"
               aria-expanded={false}
             >
@@ -291,7 +513,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             <button
               type="button"
               className="poi-mini-btn"
-              onClick={onClose}
+              onClick={close}
               aria-label="Close place details"
             >
               <CloseIcon size={18} />
@@ -304,17 +526,17 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             className={`poi-hero${hasImage ? "" : " poi-hero--empty"}`}
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).closest("button, a")) return;
-              startDrag(heroDragRef, e.clientY);
+              beginResize("expanded", e);
             }}
             onPointerMove={(e) => {
-              if (!heroDragRef.current) return;
-              const drag = heroDragRef.current;
-              if (Math.abs(e.clientY - drag.y) > 10) drag.moved = true;
+              if (dragRef.current?.mode === "expanded") {
+                moveResize(e.clientY, e.timeStamp);
+              }
             }}
-            onPointerUp={(e) => finishHeroDrag(e.clientY)}
-            onPointerCancel={() => {
-              heroDragRef.current = null;
+            onPointerUp={(e) => {
+              if (dragRef.current?.mode === "expanded") finishResize(e);
             }}
+            onPointerCancel={clearResize}
           >
             {hasImage && current && (
               <img
@@ -339,7 +561,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             <div className="poi-hero-shade" />
             <button
               type="button"
-              onClick={() => setExpanded(false)}
+              onClick={collapse}
               className="poi-close poi-collapse"
               aria-label="Minimize place details"
               aria-expanded
@@ -348,7 +570,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               className="poi-close"
               aria-label="Close place details"
             >
@@ -440,7 +662,7 @@ function PoiDetailContent({ selection, onClose, onDirections }: ContentProps) {
                     <button
                       type="button"
                       className="poi-action poi-action--primary"
-                      onClick={() => onDirections(directionsSelection)}
+                      onClick={directions}
                     >
                       <DirectionsIcon size={16} />
                       Directions

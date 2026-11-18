@@ -90,10 +90,13 @@ body {
   --r-pill:   999px;
 
   /* Motion */
-  --ease:     cubic-bezier(0.32, 0.72, 0, 1);
-  --dur-fast: 150ms;
-  --dur-base: 220ms;
-  --dur-slow: 300ms;
+  --ease:      cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast:  150ms;
+  --dur-base:  220ms;
+  --dur-slow:  300ms;
+  --dur-snap:  260ms;
+  --dur-press: 90ms;
 
   /* Topology */
   --topbar-h:     calc(56px + var(--safe-top));
@@ -397,13 +400,16 @@ body {
     background: var(--surf-0);
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     contain: layout paint;
-    transition: height var(--dur-slow) var(--ease);
+    /* Height is driven by the spring driver in useSheetGesture. */
+    transition: none;
     --hud-peek-h: calc(76px + var(--safe-bottom));
   }
 
-  .hud-bottom-sheet[data-dragging="true"] {
+  .hud-bottom-sheet[data-dragging="true"],
+  .hud-bottom-sheet[data-springing="true"] {
     transition: none;
     user-select: none;
+    will-change: height;
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] { --sheet-base: var(--hud-peek-h); }
@@ -505,6 +511,9 @@ body {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+    transition:
+      opacity var(--dur-base) var(--ease),
+      visibility 0s linear var(--dur-base);
   }
 }
 
@@ -1320,7 +1329,10 @@ input[type="range"].hud-slider::-moz-range-thumb {
   align-items: center;
   gap: 10px;
   padding: calc(var(--safe-top) + 10px) 12px 0;
-  transition: padding-right var(--dur-base) var(--ease);
+  transition:
+    padding-right var(--dur-base) var(--ease),
+    opacity var(--dur-base) var(--ease),
+    visibility 0s linear 0s;
 }
 
 /* Search leads; the basemap switch claims the trailing edge. */
@@ -1642,6 +1654,36 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 @keyframes ui-skeleton { to { background-position: -200% 0; } }
 
+/* Ring spinner ---------------------------------------------------------- */
+.ui-spinner {
+  display: inline-block;
+  flex: none;
+  animation: ui-spin 0.8s linear infinite;
+}
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+.ui-loading-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.hud-popup-body[data-state="loading"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hud-popup-body[data-state="loading"]::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 25%, var(--accent) 75% 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
+  animation: ui-spin 0.8s linear infinite;
+}
+
 /* Toast ---------------------------------------------------------------- */
 .ui-toast {
   position: fixed;
@@ -1688,7 +1730,28 @@ input[type="range"].hud-slider::-moz-range-thumb {
   color: var(--ink);
   border-radius: 22px 22px 0 0;
   contain: layout paint;
-  transition: height var(--dur-base) var(--ease);
+  /* Height is driven by the spring driver in PoiDetail. */
+  transition: none;
+  animation: poi-card-in var(--dur-snap) var(--ease-snap);
+}
+
+.poi-detail[data-resizing="true"],
+.poi-detail[data-springing="true"] {
+  transition: none;
+  will-change: height;
+  user-select: none;
+}
+
+.poi-detail[data-closing="true"] {
+  transition:
+    transform var(--dur-snap) var(--ease-snap),
+    opacity var(--dur-base) var(--ease);
+  pointer-events: none;
+}
+
+@keyframes poi-card-in {
+  from { opacity: 0.6; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .poi-detail[data-expanded="true"] {
@@ -1705,6 +1768,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .poi-mini {
   position: relative;
   display: flex;
+  touch-action: none;
   flex: 1;
   min-height: 0;
   align-items: center;
@@ -1846,6 +1910,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .poi-hero {
   position: relative;
   height: 190px;
+  touch-action: none;
   flex: none;
   overflow: hidden;
   border-radius: 22px 22px 0 0;
@@ -2241,4 +2306,49 @@ input[type="range"].hud-slider::-moz-range-thumb {
   textarea {
     font-size: 16px !important;
   }
+}
+
+/* Touch polish --------------------------------------------------------- */
+:where(button, a, [role="button"], .ui-seg, .hud-sheet-tab) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ui-panel-body,
+.poi-scroll,
+.ui-search-dropdown {
+  -webkit-overflow-scrolling: touch;
+}
+
+.hud-sheet-tab,
+.hud-icon-btn,
+.poi-action,
+.poi-mini-btn,
+.ui-seg,
+.hud-btn-primary,
+.hud-btn-ghost {
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+
+.hud-icon-btn:active,
+.poi-action:active,
+.poi-mini-btn:active,
+.ui-seg:active,
+.hud-btn-primary:active:not(:disabled),
+.hud-btn-ghost:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Inputs keep text selection and the native caret. */
+input,
+textarea,
+select {
+  touch-action: auto;
+  -webkit-user-select: text;
+  user-select: text;
 }

@@ -1,12 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { haptic } from "../../lib/haptics";
+import {
+  chooseDetent,
+  createSpring,
+  prefersReducedMotion,
+  rubberband,
+  SPRING,
+  VelocityTracker,
+  type SpringHandle,
+} from "../../lib/motion";
+
+export { rubberband } from "../../lib/motion";
 
 export type SheetState = "peek" | "modes" | "half" | "full";
 
 const ORDER: SheetState[] = ["peek", "modes", "half", "full"];
 
 const GESTURE_AXIS_PX = 10;
+const TAP_DISTANCE_PX = 6;
+const TAP_VELOCITY = 100;
+
+function clampVelocity(value: number): number {
+  return Math.max(-6000, Math.min(6000, value));
+}
+
+function measureSafeBottom(): number {
+  if (typeof document === "undefined") return 0;
+  const probe = document.createElement("div");
+  probe.style.cssText =
+    "position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none";
+  document.body.appendChild(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Number.isFinite(height) ? height : 0;
+}
 
 /** A swipe counts only when it is clearly vertical; otherwise the tap wins. */
 export function gestureDirection(dx: number, dy: number): "up" | "down" | "none" {
@@ -22,6 +51,17 @@ export function canDrag(state: SheetState, direction: "up" | "down" | "none"): b
   return false;
 }
 
+/** True at the edges, where a pull should stretch instead of changing state. */
+export function canOverscroll(
+  state: SheetState,
+  direction: "up" | "down" | "none",
+): boolean {
+  return (
+    (state === "peek" && direction === "down")
+    || (state === "full" && direction === "up")
+  );
+}
+
 /** Direction- and velocity-aware snap target for a released drag. */
 export function pickSnap(
   state: SheetState,
@@ -29,29 +69,33 @@ export function pickSnap(
   velocity: number,
   snap: { peek: number; modes: number; half: number; full: number },
 ): SheetState {
-  const idx = ORDER.indexOf(state);
-  const current = snap[state];
-  const flick = velocity > 0.65 ? -1 : velocity < -0.65 ? 1 : 0;
-  const direction = flick !== 0 ? flick : height > current ? 1 : -1;
-  const next = Math.max(0, Math.min(ORDER.length - 1, idx + direction));
-  if (next === idx) return state;
-  const nextHeight = snap[ORDER[next]];
-  const travelled = Math.abs(height - current);
-  const passed = travelled >= Math.max(24, Math.abs(nextHeight - current) * 0.25);
-  return flick !== 0 || passed ? ORDER[next] : state;
+  return chooseDetent(
+    state,
+    height,
+    velocity,
+    ORDER.map((s) => ({ state: s, height: snap[s] })),
+  );
 }
 
-/** Header swipes resize; body swipes stay native scrolling except down at top. */
+/**
+ * Header swipes resize. At the top edge of the panel body, a vertical
+ * gesture also belongs to the sheet: up grows it, down collapses it.
+ * Only when the content is actually scrolled do we leave the gesture to the
+ * native scroll view.
+ */
 export function canStartDrag(
   state: SheetState,
   direction: "up" | "down" | "none",
   fromBody: boolean,
   scrollTop: number,
 ): boolean {
-  if (!canDrag(state, direction)) return false;
-  if (!fromBody) return true;
-  if (direction === "up") return false;
-  return scrollTop <= 0;
+  if (!fromBody) {
+    return canDrag(state, direction) || canOverscroll(state, direction);
+  }
+  if (scrollTop > 0) return false;
+  if (direction === "up") return state !== "full";
+  if (direction === "down") return state !== "peek";
+  return false;
 }
 
 interface Options {
@@ -62,15 +106,12 @@ interface Options {
 }
 
 /**
- * Pointer-driven bottom-sheet gesture with velocity-aware snapping.
+ * Pointer-driven bottom sheet with native-like spring detents.
  *
- * The sheet keeps its CSS snap height (`peek` / `half` / `full`). During a
- * drag we write a pixel height into `--sheet-h` on the element; on release
- * we remove it again and let the CSS transition animate to the chosen snap
- * point. `data-dragging` disables the transition while the finger is down.
- *
- * The handle is also a real button: Enter/Space toggles peek, ArrowUp/Down
- * moves one snap point, so the sheet stays keyboard-accessible.
+ * The gesture writes a pixel height into `--sheet-h` while the finger is
+ * down. On release a spring (with the gesture velocity) carries the sheet to
+ * the projected detent. If the user touches the sheet mid-flight, the spring
+ * is stopped at its current height and the drag continues without a jump.
  */
 export function useSheetGesture({ state, onChange, enabled }: Options) {
   const sheetRef = useRef<HTMLElement | null>(null);
@@ -79,27 +120,30 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     pointerId: number;
     startY: number;
     startHeight: number;
-    lastY: number;
-    lastT: number;
-    velocity: number;
+    lastHeight: number;
   } | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const safeBottomRef = useRef(0);
+  const frameRef = useRef<number | null>(null);
+  const springRef = useRef<SpringHandle | null>(null);
+  const trackerRef = useRef(new VelocityTracker());
 
-  const clearInlineHeight = useCallback(() => {
-    sheetRef.current?.style.removeProperty("--sheet-h");
+  const stopSpring = useCallback(() => {
+    springRef.current?.stop();
+    springRef.current = null;
+    const el = sheetRef.current;
+    el?.removeAttribute("data-springing");
+    return el?.getBoundingClientRect().height ?? 0;
   }, []);
 
   const heights = useCallback(() => {
     const vh = window.visualViewport?.height ?? window.innerHeight;
-    const topbar =
-      document.querySelector<HTMLElement>(".ui-topbar")?.offsetHeight ?? 56;
-    const peek = 76;
+    const safe = safeBottomRef.current;
+    const peek = 76 + safe;
     return {
       peek,
       modes: peek + 60,
       half: Math.round(vh * 0.48),
-      full: Math.max(peek + 80, Math.round(vh - topbar)),
-      min: 48,
+      full: vh,
       vh,
     };
   }, []);
@@ -118,16 +162,59 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     [heights],
   );
 
+  const animateTo = useCallback(
+    (target: SheetState, velocity = 0) => {
+      const el = sheetRef.current;
+      if (!el) {
+        onChange(target);
+        return;
+      }
+      const from = el.getBoundingClientRect().height;
+      const to = heightFor(target);
+      springRef.current?.stop();
+      springRef.current = null;
+      onChange(target);
+
+      if (!enabled || prefersReducedMotion() || Math.abs(to - from) < 0.5) {
+        el.style.removeProperty("--sheet-h");
+        el.removeAttribute("data-springing");
+        return;
+      }
+
+      el.setAttribute("data-springing", "true");
+      el.style.setProperty("--sheet-h", `${from}px`);
+      const handle: SpringHandle = createSpring({
+        from,
+        to,
+        velocity: clampVelocity(velocity),
+        config:
+          target === "peek" || target === "modes"
+            ? SPRING.sheetPeek
+            : SPRING.sheetSnap,
+        onUpdate: (value) => {
+          el.style.setProperty("--sheet-h", `${value}px`);
+        },
+        onComplete: () => {
+          el.style.removeProperty("--sheet-h");
+          el.removeAttribute("data-springing");
+          if (springRef.current === handle) springRef.current = null;
+        },
+      });
+      springRef.current = handle;
+    },
+    [enabled, heightFor, onChange],
+  );
+
   const snapTo = useCallback(
     (target: SheetState) => {
-      clearInlineHeight();
-      onChange(target);
+      animateTo(target, 0);
     },
-    [clearInlineHeight, onChange],
+    [animateTo],
   );
 
   const nearest = useCallback(
-    (height: number, velocity: number) => pickSnap(state, height, velocity, heights()),
+    (height: number, velocity: number) =>
+      pickSnap(state, height, velocity, heights()),
     [heights, state],
   );
 
@@ -143,17 +230,19 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       } catch {
         // Synthetic pointers (tests, some browsers) may not be capturable.
       }
+      stopSpring();
+      const height = el.getBoundingClientRect().height;
+      trackerRef.current.reset();
+      trackerRef.current.add(e.clientY, e.timeStamp);
       dragRef.current = {
         pointerId: e.pointerId,
         startY: e.clientY,
-        startHeight: el.getBoundingClientRect().height,
-        lastY: e.clientY,
-        lastT: e.timeStamp,
-        velocity: 0,
+        startHeight: height,
+        lastHeight: height,
       };
       setDragging(true);
     },
-    [enabled],
+    [enabled, stopSpring],
   );
 
   const onPointerMove = useCallback(
@@ -161,19 +250,13 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       const drag = dragRef.current;
       const el = sheetRef.current;
       if (!drag || !el || drag.pointerId !== e.pointerId) return;
-      const now = e.timeStamp;
-      const dt = Math.max(1, now - drag.lastT);
-      drag.velocity = (e.clientY - drag.lastY) / dt;
-      drag.lastY = e.clientY;
-      drag.lastT = now;
-
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
+      trackerRef.current.add(e.clientY, e.timeStamp);
+      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = requestAnimationFrame(() => {
         const h = heights();
-        const next = Math.max(
-          h.min,
-          Math.min(h.full, drag.startHeight + (drag.startY - e.clientY)),
-        );
+        const raw = drag.startHeight + (drag.startY - e.clientY);
+        const next = rubberband(raw, h.peek, h.full, h.vh);
+        drag.lastHeight = next;
         el.style.setProperty("--sheet-h", `${next}px`);
       });
     },
@@ -185,23 +268,30 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
       dragRef.current = null;
-      if (rafRef.current != null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
       }
-      const el = sheetRef.current;
-      const height = el?.getBoundingClientRect().height ?? drag.startHeight;
-      const moved = Math.abs(drag.lastY - drag.startY);
+      const h = heights();
+      const raw = drag.startHeight + (drag.startY - e.clientY);
+      const height = rubberband(raw, h.peek, h.full, h.vh);
+      const velocityY = trackerRef.current.velocity(e.timeStamp);
+      const heightVelocity = -velocityY;
+      const moved = Math.abs(e.clientY - drag.startY);
       setDragging(false);
-      // A plain tap on the handle toggles peek ↔ half, like the old
-      // button behaviour, without fighting the drag threshold.
-      if (moved < 6 && Math.abs(drag.velocity) < 0.1) {
-        snapTo(state === "peek" ? "half" : "peek");
+
+      if (moved < TAP_DISTANCE_PX && Math.abs(velocityY) < TAP_VELOCITY) {
+        haptic("tap");
+        animateTo(state === "peek" ? "half" : "peek", 0);
         return;
       }
-      snapTo(nearest(height, drag.velocity));
+
+      const target = nearest(height, heightVelocity);
+      sheetRef.current?.style.setProperty("--sheet-h", `${height}px`);
+      if (target !== state) haptic("snap");
+      animateTo(target, heightVelocity);
     },
-    [nearest, snapTo, state],
+    [animateTo, heights, nearest, state],
   );
 
   const onPointerCancel = useCallback(
@@ -209,14 +299,14 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
       dragRef.current = null;
-      if (rafRef.current != null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
       }
       setDragging(false);
-      clearInlineHeight();
+      animateTo(state, 0);
     },
-    [clearInlineHeight],
+    [animateTo, state],
   );
 
   const onKeyDown = useCallback(
@@ -245,12 +335,13 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       startX: number;
       startY: number;
       startHeight: number;
+      scrollTop: number;
+      lastHeight: number;
       lastY: number;
-      lastT: number;
-      velocity: number;
       started: boolean;
       inBody: boolean;
       onGrabber: boolean;
+      tracker: VelocityTracker;
     } | null = null;
 
     const onStart = (e: TouchEvent) => {
@@ -260,16 +351,18 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       }
       const target = e.target as HTMLElement;
       const t = e.touches[0];
+      const scroller = el.querySelector<HTMLElement>(".ui-panel-body");
       touch = {
         startX: t.clientX,
         startY: t.clientY,
         startHeight: el.getBoundingClientRect().height,
+        scrollTop: scroller?.scrollTop ?? 0,
+        lastHeight: el.getBoundingClientRect().height,
         lastY: t.clientY,
-        lastT: e.timeStamp,
-        velocity: 0,
         started: false,
         inBody: Boolean(target.closest(".ui-panel-body")),
         onGrabber: Boolean(target.closest(".hud-bottom-sheet-grabber")),
+        tracker: new VelocityTracker(),
       };
     };
 
@@ -283,49 +376,61 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
           t.clientY - touch.startY,
         );
         if (direction === "none") return;
-        const scroller = el.querySelector<HTMLElement>(".ui-panel-body");
-        if (
-          !canStartDrag(
-            state,
-            direction,
-            touch.inBody,
-            scroller?.scrollTop ?? 0,
-          )
-        ) {
+        if (!canStartDrag(state, direction, touch.inBody, touch.scrollTop)) {
           touch = null;
           return;
         }
+        stopSpring();
+        const current = el.getBoundingClientRect().height;
         touch.started = true;
+        touch.startY = t.clientY;
+        touch.startHeight = current;
+        touch.lastHeight = current;
+        touch.lastY = t.clientY;
+        touch.tracker.reset();
+        touch.tracker.add(t.clientY, e.timeStamp);
         setDragging(true);
-        touch.lastY = touch.startY;
-        touch.lastT = e.timeStamp;
       }
       if (e.cancelable) e.preventDefault();
-      const h = heights();
-      const next = Math.max(
-        h.min,
-        Math.min(h.full, touch.startHeight + (touch.startY - t.clientY)),
-      );
-      el.style.setProperty("--sheet-h", `${next}px`);
-      const dt = Math.max(1, e.timeStamp - touch.lastT);
-      touch.velocity = (t.clientY - touch.lastY) / dt;
+      touch.tracker.add(t.clientY, e.timeStamp);
       touch.lastY = t.clientY;
-      touch.lastT = e.timeStamp;
+      const activeTouch = touch;
+      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = requestAnimationFrame(() => {
+        const h = heights();
+        const raw = activeTouch.startHeight + (activeTouch.startY - t.clientY);
+        const next = rubberband(raw, h.peek, h.full, h.vh);
+        activeTouch.lastHeight = next;
+        el.style.setProperty("--sheet-h", `${next}px`);
+      });
     };
 
     const onEnd = (e: TouchEvent) => {
       if (!touch) return;
       if (!touch.started) {
-        if (touch.onGrabber) snapTo(state === "peek" ? "half" : "peek");
+        if (touch.onGrabber) {
+          haptic("tap");
+          animateTo(state === "peek" ? "half" : "peek", 0);
+        }
         touch = null;
         return;
       }
       // A drag must not fall through as a click on the tab underneath.
       if (e.cancelable) e.preventDefault();
       suppressClickUntil = performance.now() + 500;
-      const height = el.getBoundingClientRect().height;
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+      const h = heights();
+      const raw = touch.startHeight + (touch.startY - touch.lastY);
+      const height = rubberband(raw, h.peek, h.full, h.vh);
+      const heightVelocity = -touch.tracker.velocity(e.timeStamp);
       setDragging(false);
-      snapTo(nearest(height, touch.velocity));
+      const target = nearest(height, heightVelocity);
+      el.style.setProperty("--sheet-h", `${height}px`);
+      if (target !== state) haptic("snap");
+      animateTo(target, heightVelocity);
       touch = null;
     };
 
@@ -342,26 +447,45 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     el.addEventListener("touchcancel", onEnd);
     el.addEventListener("click", onClickCapture, true);
     return () => {
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
       el.removeEventListener("touchstart", onStart);
       el.removeEventListener("touchmove", onMove);
       el.removeEventListener("touchend", onEnd);
       el.removeEventListener("touchcancel", onEnd);
       el.removeEventListener("click", onClickCapture, true);
     };
-  }, [enabled, heights, nearest, snapTo, state]);
+  }, [animateTo, enabled, heights, nearest, state, stopSpring]);
 
   useEffect(() => {
     if (!enabled) return;
     const onResize = () => {
-      clearInlineHeight();
+      safeBottomRef.current = measureSafeBottom();
+      springRef.current?.stop();
+      springRef.current = null;
+      const el = sheetRef.current;
+      el?.removeAttribute("data-springing");
+      el?.style.removeProperty("--sheet-h");
     };
+    onResize();
     window.addEventListener("resize", onResize);
     window.visualViewport?.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
       window.visualViewport?.removeEventListener("resize", onResize);
     };
-  }, [clearInlineHeight, enabled]);
+  }, [enabled]);
+
+  useEffect(
+    () => () => {
+      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+      springRef.current?.stop();
+      springRef.current = null;
+    },
+    [],
+  );
 
   return {
     sheetRef,

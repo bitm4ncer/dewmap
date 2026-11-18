@@ -24,6 +24,7 @@ import { ElevationChart } from "@/components/hiking/ElevationChart";
 import { geocode, prettyCategory, type GeocodeResult } from "@/lib/geocode";
 import { useNavigation } from "@/lib/navigation/store";
 import { deriveBrouterManeuvers, formatDuration, type RoutePlan } from "@/lib/routing";
+import { prefersReducedMotion } from "@/lib/motion";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -171,7 +172,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
           [west, south],
           [east, north],
         ],
-        { padding: 70, duration: 700, maxZoom: 14 },
+        { padding: 70, duration: prefersReducedMotion() ? 0 : 700, maxZoom: 14 },
       );
     }
   }, [selectedCandidateId, candidates, mapRef]);

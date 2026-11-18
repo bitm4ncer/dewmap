@@ -9,6 +9,7 @@ import { planRoutes, formatDuration, formatDistance, isAbortError } from "@/lib/
 import type { RoutePlan } from "@/lib/routing";
 import { useNavigation } from "@/lib/navigation/store";
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from "@/components/ui/icons";
+import { prefersReducedMotion } from "@/lib/motion";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -106,7 +107,7 @@ export function CarPanel({ mapRef }: Props) {
         [west, south],
         [east, north],
       ],
-      { padding: { top: 90, bottom: typeof window !== "undefined" && window.innerWidth < 768 ? 280 : 80, left: 60, right: 60 }, duration: 650, maxZoom: 14 },
+      { padding: { top: 90, bottom: typeof window !== "undefined" && window.innerWidth < 768 ? 280 : 80, left: 60, right: 60 }, duration: prefersReducedMotion() ? 0 : 650, maxZoom: 14 },
     );
   }, [mapRef, selected]);
 

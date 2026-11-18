@@ -24,6 +24,7 @@ import {
   sortJourneys,
   type JourneySort,
 } from "@/lib/planner/transitFormat";
+import { prefersReducedMotion } from "@/lib/motion";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -379,7 +380,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         ],
         {
           padding: { top: 90, bottom, left: 48, right: 48 },
-          duration: 650,
+          duration: prefersReducedMotion() ? 0 : 650,
           maxZoom: 14,
         },
       );

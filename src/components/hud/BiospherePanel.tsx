@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { HudPanel } from "./HudPanel";
+import { Spinner } from "../ui/Spinner";
 
 interface SpeciesTaxonOption {
   key: string | null;
@@ -349,11 +350,21 @@ function BiosphereLayerCard({
         {legend && on && <LegendBar spec={legend} />}
         {swatches && on && <SwatchGrid spec={swatches} />}
 
-        {status && (
-          <p className="hud-mono text-[11.5px] text-[color:var(--ink-mute)]">
-            {status}
-          </p>
-        )}
+        {status
+          && (typeof status === "string" && status.startsWith("resolving") ? (
+            <span
+              className="ui-loading-inline hud-mono text-[11.5px] text-[color:var(--ink-mute)]"
+              role="status"
+              aria-live="polite"
+            >
+              <Spinner size={12} />
+              <span>{status}</span>
+            </span>
+          ) : (
+            <p className="hud-mono text-[11.5px] text-[color:var(--ink-mute)]">
+              {status}
+            </p>
+          ))}
       </div>
     </HudPanel>
   );
