@@ -212,6 +212,16 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".map-overlay-badge")?.body).toContain("width: 28px");
   });
 
+  it("renders expanded map information as a card", () => {
+    const card = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".maplibregl-ctrl-attrib.maplibregl-compact-show"),
+    );
+    expect(card?.body).toContain("width: 280px");
+    expect(css).toContain('content: "Map information"');
+    expect(css).toContain("top: 8px !important");
+  });
+
   it("starts map attribution collapsed and narrow on phones", () => {
     expect(
       blocks.some(
