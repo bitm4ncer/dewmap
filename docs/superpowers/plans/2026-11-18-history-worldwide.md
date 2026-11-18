@@ -57,7 +57,7 @@ Use QLever (`https://qlever.dev/api/wikidata`) with:
   museum). A bare `P1435` is not enough: require `P1435` **and** one of
   those cultural/historic classes, so natural protected areas do not
   enter the dataset;
-- exclude `P31/P279*` humans, events, organizations, administrative areas,
+- exclude **direct `P31`** humans, events, organizations, administrative areas,
   cities, artworks/publications, transport stops/streets, natural
   protected areas, and items without a label;
 - `GROUP BY ?item ?name ?coord` with `MIN(?inception)`, `MAX(?dissolved)`,
@@ -68,7 +68,7 @@ Use QLever (`https://qlever.dev/api/wikidata`) with:
 - [ ] **Step 2: Export and build a world sample**
 
 Run the export, normalize to GeoJSONL, and build:
-`tippecanoe -o sites.pmtiles -l history_sites -Z8 -z9 --drop-densest-as-needed --force sites.geojsonl`
+`tippecanoe -o sites.pmtiles -l history_sites -Z8 -z9 -r1 --force sites.geojsonl`
 Build a second archive for clusters if the H3 script is ready; otherwise
 record only the site archive size.
 
@@ -277,14 +277,15 @@ features by merging to the next coarser resolution if necessary.
 - Write `clusters.geojsonl` and `sites.geojsonl`.
 - Run tippecanoe twice:
   - `-Z0 -z7 -l history_clusters --drop-densest-as-needed --force`
-  - `-Z8 -z9 -l history_sites --drop-densest-as-needed --force`
+  - `-Z8 -z9 -l history_sites -r1 --force`
 - Direct PMTiles output via the `.pmtiles` extension.
 - Compute SHA-256 for each archive; write the versioned manifest.
 - `--skip-tiles` supports dry runs/tests.
 - `build-all.mjs` calls `export-wikidata.mjs`, `normalize.mjs`, then
   `build.mjs`; it is the command CI runs.
 - Fail on tippecanoe non-zero, missing layer, or > 40 MB; emit a warning
-  and a reduced variant (lower cap) if 25–40 MB.
+  and a warning if 25–40 MB; a hard failure leaves the last good release
+  in place rather than blocking app deploys.
 
 - [ ] **Step 5: Run tests and a dry build**
 
@@ -396,8 +397,9 @@ git commit -m "feat(history): validate archives, layers and size budgets"
 - If the download fails (no release, GitHub outage), log a warning and
   continue; the runtime fallback handles the missing manifest.
 - Keep `npm run build` after the data step.
-- Add a `workflow_dispatch` input `force_data` that triggers a fresh data
-  build before deploy.
+- Manual data refresh happens through the separate **History data**
+  workflow; the deploy workflow consumes its newest release (including
+  `workflow_run`).
 
 - [ ] **Step 3: Verify locally**
 
@@ -621,7 +623,7 @@ git commit -m "feat(history): detail popup for global heritage sites"
 - Settings: `historyHeritageOnly` (default false), `historyUnescoOnly`
   (default false), no `historyGlobalOn` user setting (internal default on).
 - Category selection lives in local `Map.tsx` state (not persisted) in v1.
-- Timeline caption: "Zeit- und Kategoriefilter ab Stadtzoom (z8)" /
+- Timeline caption: "Year and category filters apply from city zoom (z8)" /
   "Year and category filters from city zoom (z8)".
 - Status row: global dataset `ready/loading/error`, data-as-of date,
   attribution link.

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   tileFor,
   validateArchive,
+  validateCategoryCoverage,
   validateManifest,
   validateSites,
 } from "./validate.mjs";
@@ -63,6 +64,27 @@ describe("validateSites", () => {
     assert.ok(result.errors.some((error) => error.includes("category")));
     assert.ok(result.errors.some((error) => error.includes("inception")));
     assert.ok(result.errors.some((error) => error.includes("duplicate")));
+  });
+});
+
+describe("validateCategoryCoverage", () => {
+  it("requires the advertised categories in a large build", () => {
+    const ok = validateCategoryCoverage(
+      [
+        { category: "castle" },
+        { category: "religious" },
+        { category: "archaeological" },
+      ],
+      { minTotal: 3, required: ["castle", "religious", "archaeological"] },
+    );
+    assert.equal(ok.ok, true);
+
+    const missing = validateCategoryCoverage(
+      [{ category: "castle" }, { category: "castle" }],
+      { minTotal: 2, required: ["castle", "museum"] },
+    );
+    assert.equal(missing.ok, false);
+    assert.ok(missing.errors.some((error) => error.includes("museum")));
   });
 });
 

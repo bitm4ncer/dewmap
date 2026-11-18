@@ -1,6 +1,7 @@
 "use client";
 
 import { HISTORY_YEAR_MAX, HISTORY_YEAR_MIN } from "@/lib/settings";
+import { Spinner } from "../ui/Spinner";
 
 interface HistoryTimelineProps {
   year: number;
@@ -59,7 +60,12 @@ export function HistoryTimeline({
         <span className="hud-mono text-[16px] text-[color:var(--accent)]">
           {year}
         </span>
-        <span className="hud-mono text-[12px] uppercase tracking-wider text-[color:var(--ink-dim)]">
+        <span
+          className="hud-mono inline-flex items-center gap-2 text-[12px] uppercase tracking-wider text-[color:var(--ink-dim)]"
+          role={loading ? "status" : undefined}
+          aria-live={loading ? "polite" : undefined}
+        >
+          {loading && <Spinner size={12} />}
           {loading
             ? visibleCount > 0
               ? `${visibleCount} site${visibleCount === 1 ? "" : "s"} · loading…`

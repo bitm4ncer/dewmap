@@ -67,6 +67,7 @@ import {
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import { useHistoryLayers } from "./history/useHistoryLayers";
+import { globalLayerIds } from "@/lib/history/global-layers";
 import {
   escapeHistoryHtml,
   fetchSiteDetail,
@@ -1816,7 +1817,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const sidebarOpen = sheetState !== "peek";
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
   const [historyCategories, setHistoryCategories] = useState<HistoricCategory[]>([]);
-  const historyGlobalActive = activePane === "history" && sidebarOpen;
+  const historyGlobalActive = activePane === "history";
   const historyGlobal = useHistoryLayers(mapInstance, {
     enabled: historyGlobalActive,
     year: historyYear,
@@ -1855,8 +1856,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 detail.image,
               )}" alt="" loading="lazy" />`
             : "";
+          const commons = detail.image
+            ? `<a class="hud-popup-link" href="${escapeHistoryHtml(
+                detail.image,
+              )}" target="_blank" rel="noopener noreferrer">Commons ↗</a>`
+            : "";
           popup.setHTML(
-            `${siteDetailHeader(site)}${summary}${image}${siteDetailLinks(site)}`,
+            `${siteDetailHeader(site)}${summary}${image}${commons}${siteDetailLinks(
+              site,
+              coordinates,
+            )}`,
           );
         })
         .catch(() => {
@@ -1867,6 +1876,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
   const liveHistoryLandmarksOn =
     historyLandmarksOn && historyGlobalActive && historyGlobal.status === "error";
+
+  useEffect(() => {
+    if (activePane === "history") return;
+    historyPopupRef.current?.remove();
+    historyPopupRef.current = null;
+  }, [activePane]);
 
   const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
     state: sheetState,
@@ -3674,15 +3689,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
+    const historyLayers = globalLayerIds();
+    const interactiveLayers = new Set([
+      RAIL_STATIONS_HIT_LAYER_ID,
+      HISTORY_LANDMARKS_HIT_LAYER_ID,
+      historyLayers.siteLayer,
+      ...historyLayers.clusterDots,
+    ]);
     const onClick = (event: MapMouseEvent) => {
       if (event.defaultPrevented) return;
       const hit = map
         .queryRenderedFeatures(event.point)
-        .some(
-          (feature) =>
-            feature.layer?.id === RAIL_STATIONS_HIT_LAYER_ID
-            || feature.layer?.id === HISTORY_LANDMARKS_HIT_LAYER_ID,
-        );
+        .some((feature) => interactiveLayers.has(feature.layer?.id ?? ""));
       if (hit) return;
       openPoi({
         lon: event.lngLat.lng,
@@ -3936,7 +3954,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 globalStatus={historyGlobal.status}
                 globalCount={historyGlobal.count}
                 globalTotal={historyGlobal.total}
+                siteZoom={historyGlobal.siteZoom}
                 globalDataAsOf={historyGlobal.dataAsOf}
+                fullBlocked={historyGlobal.fullBlocked}
+                onLoadFull={historyGlobal.retryFullDownload}
                 categories={historyCategories}
                 onCategoriesChange={setHistoryCategories}
                 heritageOnly={historyHeritageOnly}

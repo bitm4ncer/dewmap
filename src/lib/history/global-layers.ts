@@ -124,7 +124,7 @@ function sitePaint(): CircleLayerSpecification["paint"] {
     ],
     "circle-stroke-color": "#FFFFFF",
     "circle-stroke-width": 1.1,
-    "circle-opacity": 0.9,
+    "circle-opacity": ["case", ["has", "inception"], 0.9, 0.45],
   } as CircleLayerSpecification["paint"];
 }
 
@@ -266,9 +266,11 @@ export function removeGlobalLayers(map: MLMap) {
   }
 }
 
-export function countGlobalSites(map: Pick<MLMap, "querySourceFeatures">): number {
-  const features = map.querySourceFeatures(GLOBAL_SITE_SOURCE_ID, {
-    sourceLayer: "history_sites",
+export function countGlobalSites(
+  map: Pick<MLMap, "queryRenderedFeatures">,
+): number {
+  const features = map.queryRenderedFeatures({
+    layers: [GLOBAL_SITE_LAYER_ID],
   });
   const ids = new Set<string>();
   for (const feature of features) {

@@ -26,6 +26,10 @@ function defaultBaseUrl(): string {
 }
 
 export function dataBaseUrl(baseUrl = defaultBaseUrl()): string {
+  const configured = process.env.NEXT_PUBLIC_HISTORY_DATA_URL;
+  if (configured) {
+    return new URL(configured, baseUrl).href.replace(/\/*$/, "/");
+  }
   return new URL("data/history/", baseUrl).href;
 }
 
@@ -40,14 +44,26 @@ export function historyFileUrl(path: string, baseUrl?: string): string {
 export async function probeHistoryArchive(
   url: string,
   fetchImpl: typeof fetch = fetch,
+  expectedBytes?: number,
+  signal?: AbortSignal,
 ): Promise<ProbeResult> {
   const response = await fetchImpl(url, {
     headers: { Range: "bytes=0-7" },
     cache: "no-store",
+    signal,
   });
 
   if (response.status === 200) {
-    return { mode: "full", blob: await response.blob() };
+    const blob = await response.blob();
+    const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+    if (
+      head.byteLength !== 8 ||
+      new TextDecoder().decode(head.slice(0, 7)) !== PMTILES_MAGIC ||
+      head[7] !== 3
+    ) {
+      return { mode: "missing" };
+    }
+    return { mode: "full", blob };
   }
   if (response.status !== 206) {
     return { mode: "missing" };
@@ -58,8 +74,16 @@ export async function probeHistoryArchive(
   if (encoding && encoding !== "identity") {
     return { mode: "full" };
   }
-  if (!contentRange || !/^bytes 0-7\/(\d+|\*)$/.test(contentRange)) {
+  const rangeMatch = contentRange?.match(/^bytes 0-7\/(\d+|\*)$/);
+  if (!rangeMatch) {
     return { mode: "full" };
+  }
+  if (
+    expectedBytes !== undefined &&
+    rangeMatch[1] !== "*" &&
+    Number(rangeMatch[1]) !== expectedBytes
+  ) {
+    return { mode: "missing" };
   }
 
   const bytes = new Uint8Array(await response.arrayBuffer());
@@ -67,8 +91,8 @@ export async function probeHistoryArchive(
     return { mode: "full" };
   }
   const prefix = new TextDecoder().decode(bytes.slice(0, 7));
-  if (prefix !== PMTILES_MAGIC) {
-    return { mode: "full" };
+  if (prefix !== PMTILES_MAGIC || bytes[7] !== 3) {
+    return { mode: "missing" };
   }
   return { mode: "range" };
 }
@@ -76,9 +100,10 @@ export async function probeHistoryArchive(
 export async function loadHistoryManifest(
   url: string = historyManifestUrl(),
   fetchImpl: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<HistoricManifest | null> {
   try {
-    const response = await fetchImpl(url);
+    const response = await fetchImpl(url, { cache: "no-store", signal });
     if (!response.ok) return null;
     const manifest = (await response.json()) as HistoricManifest;
     if (
@@ -113,6 +138,7 @@ export interface HistoryProtocol {
     file: HistoricManifestFile,
     mode: Exclude<ArchiveMode, "missing">,
     blob?: Blob,
+    signal?: AbortSignal,
   ) => Promise<string>;
 }
 
@@ -129,7 +155,7 @@ export function createHistoryProtocol(
     protocols.set(maplibregl, protocol);
   }
 
-  const open: HistoryProtocol["open"] = async (file, mode, blob) => {
+  const open: HistoryProtocol["open"] = async (file, mode, blob, signal) => {
     const name = file.path.split("/").pop() ?? file.path;
     if (mode === "range") {
       const absoluteUrl = historyFileUrl(file.path, baseUrl);
@@ -139,13 +165,20 @@ export function createHistoryProtocol(
       return `pmtiles://${absoluteUrl}`;
     }
 
+    if (protocol.get(name)) return `pmtiles://${name}`;
+
     let body = blob;
     if (!body) {
-      const response = await fetch(historyFileUrl(file.path, baseUrl));
+      const response = await fetch(historyFileUrl(file.path, baseUrl), {
+        signal,
+      });
       if (!response.ok) {
         throw new Error(`cannot download ${file.path}: HTTP ${response.status}`);
       }
       body = await response.blob();
+    }
+    if (!(await verifyManifestFile(file, body))) {
+      throw new Error(`${file.path}: sha256 does not match the manifest`);
     }
     const archive = new PMTiles(new FileSource(new File([body], name)));
     protocol.add(archive);

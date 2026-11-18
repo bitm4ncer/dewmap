@@ -46,6 +46,7 @@ describe("parseYear", () => {
   it("parses CE, BCE and missing dates", () => {
     assert.equal(parseYear("1848-01-01T00:00:00Z"), 1848);
     assert.equal(parseYear("-0500-01-01T00:00:00Z"), -500);
+    assert.equal(parseYear("500-01-01T00:00:00Z"), 500);
     assert.equal(parseYear(""), undefined);
     assert.equal(parseYear("not-a-date"), undefined);
   });

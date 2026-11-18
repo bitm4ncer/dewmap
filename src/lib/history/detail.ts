@@ -17,7 +17,7 @@ export function escapeHistoryHtml(value: string): string {
 
 export function siteDetailHeader(
   site: HistoricSiteTile,
-  lang: "en" | "de" = "de",
+  lang: "en" | "de" = "en",
 ): string {
   const date =
     site.inception === undefined
@@ -39,7 +39,10 @@ export function siteDetailHeader(
   `;
 }
 
-export function siteDetailLinks(site: HistoricSiteTile): string {
+export function siteDetailLinks(
+  site: HistoricSiteTile,
+  coordinates?: [number, number],
+): string {
   const links: string[] = [];
   if (site.qid) {
     links.push(
@@ -47,7 +50,9 @@ export function siteDetailLinks(site: HistoricSiteTile): string {
     );
   }
   links.push(
-    `<a class="hud-popup-link" href="https://www.openstreetmap.org/search?query=${encodeURIComponent(site.name)}" target="_blank" rel="noopener noreferrer">OSM ↗</a>`,
+    `<a class="hud-popup-link" href="https://www.openstreetmap.org/search?query=${encodeURIComponent(
+      coordinates ? `${coordinates[1]},${coordinates[0]}` : site.name,
+    )}" target="_blank" rel="noopener noreferrer">OSM ↗</a>`,
   );
   links.push(
     `<a class="hud-popup-link" href="https://www.openhistoricalmap.org/" target="_blank" rel="noopener noreferrer">OHM ↗</a>`,

@@ -77,6 +77,12 @@ const SOURCES: Source[] = [
     href: "https://commons.wikimedia.org/",
   },
   {
+    name: "PMTiles · Tippecanoe",
+    detail:
+      "Static tile archive format and the build tool that packages the worldwide heritage layer.",
+    href: "https://docs.protomaps.com/pmtiles/",
+  },
+  {
     name: "OpenHistoricalMap",
     detail: "Historical basemap and time-filtered map data.",
     href: "https://www.openhistoricalmap.org/",

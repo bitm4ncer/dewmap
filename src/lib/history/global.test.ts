@@ -76,14 +76,36 @@ describe("probeHistoryArchive", () => {
 
   it("reuses a 200 body for the full fallback", async () => {
     const fetchImpl = async () =>
-      response(new Blob(["whole file"]), { status: 200 });
+      response(new Blob([MAGIC, "whole file"]), { status: 200 });
     const result = await probeHistoryArchive(
       "https://example.test/a.pmtiles",
       fetchImpl,
     );
     expect(result.mode).toBe("full");
     expect(result.blob).toBeInstanceOf(Blob);
-    expect(await result.blob?.text()).toBe("whole file");
+    expect(await result.blob?.text()).toContain("whole file");
+  });
+
+  it("rejects a 200 HTML fallback page", async () => {
+    const fetchImpl = async () =>
+      response(new Blob(["<html>not an archive</html>"]), { status: 200 });
+    await expect(
+      probeHistoryArchive("https://example.test/a.pmtiles", fetchImpl),
+    ).resolves.toEqual({ mode: "missing" });
+  });
+
+  it("rejects a content-range size mismatch", async () => {
+    const fetchImpl = async () =>
+      response(MAGIC, {
+        status: 206,
+        headers: {
+          "content-range": "bytes 0-7/999",
+          "content-length": "8",
+        },
+      });
+    await expect(
+      probeHistoryArchive("https://example.test/a.pmtiles", fetchImpl, 1000),
+    ).resolves.toEqual({ mode: "missing" });
   });
 
   it("reports a missing archive", async () => {
@@ -159,7 +181,7 @@ describe("createHistoryProtocol", () => {
       {
         path: "history-20261118-0400/history-sites.pmtiles",
         bytes: 20,
-        sha256: "b".repeat(64),
+        sha256: "",
       },
       "full",
       new Blob([MAGIC]),

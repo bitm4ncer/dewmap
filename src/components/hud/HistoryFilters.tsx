@@ -6,11 +6,13 @@ import type { HistoricCategory } from "@/lib/history/types";
 interface HistoryFiltersProps {
   categories: readonly HistoricCategory[];
   onCategoriesChange: (categories: HistoricCategory[]) => void;
+  disabled?: boolean;
 }
 
 export function HistoryFilters({
   categories,
   onCategoriesChange,
+  disabled = false,
 }: HistoryFiltersProps) {
   const active = new Set(categories);
   const toggle = (category: HistoricCategory) => {
@@ -36,10 +38,11 @@ export function HistoryFilters({
               type="button"
               aria-pressed={on}
               data-active={on}
+              disabled={disabled}
               className="hud-variant-chip"
               onClick={() => toggle(category)}
             >
-              {categoryLabel(category, "de")}
+              {categoryLabel(category, "en")}
             </button>
           );
         })}

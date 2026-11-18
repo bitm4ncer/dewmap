@@ -11,7 +11,9 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { CLUSTER_BANDS, clusterSites } from "./cluster.mjs";
 import {
+  categoryCoverage,
   validateBuiltArchives,
+  validateCategoryCoverage,
   validateManifest,
   validateSites,
 } from "./validate.mjs";
@@ -21,7 +23,7 @@ const HARD_BYTES = 40 * 1024 * 1024;
 
 export function buildId(date = new Date()) {
   const iso = date.toISOString();
-  return `history-${iso.slice(0, 10).replaceAll("-", "")}-${iso.slice(11, 16).replace(":", "")}`;
+  return `history-${iso.slice(0, 10).replaceAll("-", "")}-${iso.slice(11, 19).replaceAll(":", "")}`;
 }
 
 export function parseSitesGeoJsonl(text) {
@@ -44,15 +46,43 @@ function siteScore(site) {
   );
 }
 
-export function capSites(sites, maxSites) {
+export function capSites(sites, maxSites, { categoryQuota = 0.01 } = {}) {
   if (sites.length <= maxSites) return sites;
-  return [...sites]
+
+  const quota = Math.max(1, Math.ceil(maxSites * categoryQuota));
+  const groups = new Map();
+  for (const site of sites) {
+    const group = groups.get(site.category) ?? [];
+    group.push(site);
+    groups.set(site.category, group);
+  }
+
+  const chosen = [];
+  const chosenIds = new Set();
+  for (const group of groups.values()) {
+    const take = group
+      .sort(
+        (a, b) =>
+          siteScore(b) - siteScore(a) ||
+          String(a.name).localeCompare(String(b.name)),
+      )
+      .slice(0, quota);
+    for (const site of take) {
+      if (chosenIds.has(site.id)) continue;
+      chosenIds.add(site.id);
+      chosen.push(site);
+    }
+  }
+
+  const rest = sites
+    .filter((site) => !chosenIds.has(site.id))
     .sort(
       (a, b) =>
         siteScore(b) - siteScore(a) ||
         String(a.name).localeCompare(String(b.name)),
-    )
-    .slice(0, maxSites);
+    );
+  const remaining = Math.max(0, maxSites - chosen.length);
+  return [...chosen.slice(0, maxSites), ...rest.slice(0, remaining)];
 }
 
 export function clusterFeatures(sites, band) {
@@ -104,6 +134,10 @@ export async function buildArchives({
     throw new Error(`invalid sites:\n${siteValidation.errors.slice(0, 20).join("\n")}`);
   }
   const sites = capSites(parsed, maxSites);
+  const categoryValidation = validateCategoryCoverage(sites);
+  if (!categoryValidation.ok) {
+    throw new Error(`category coverage:\n${categoryValidation.errors.join("\n")}`);
+  }
   const clusterBands = CLUSTER_BANDS.map((band) => ({
     band,
     features: clusterFeatures(sites, band),
@@ -158,6 +192,7 @@ export async function buildArchives({
         `-Z${band.minzoom}`,
         `-z${band.maxzoom}`,
         "-r1",
+        "--drop-densest-as-needed",
         "--quiet",
         "--no-progress-indicator",
         "--force",
@@ -183,7 +218,7 @@ export async function buildArchives({
       "history_sites",
       "-Z8",
       "-z9",
-      "--drop-densest-as-needed",
+      "-r1",
       "--quiet",
       "--no-progress-indicator",
       "--force",
@@ -214,6 +249,7 @@ export async function buildArchives({
     buildId: id,
     builtAt: now.toISOString(),
     counts: { sites: sites.length, clusters: clusterCount },
+    categories: Object.fromEntries(categoryCoverage(sites)),
     files,
     attribution: [
       "Wikidata contributors (CC0)",
@@ -233,7 +269,7 @@ export async function buildArchives({
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
   if (!skipTiles) {
-    const archiveValidation = validateBuiltArchives({
+    const archiveValidation = await validateBuiltArchives({
       manifest,
       outDir,
       bin: process.env.TIPPECANOE_DECODE ?? "tippecanoe-decode",

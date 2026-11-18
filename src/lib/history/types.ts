@@ -47,6 +47,7 @@ export interface HistoricManifest {
   buildId: string;
   builtAt: string;
   counts: { sites: number; clusters: number };
+  categories?: Record<string, number>;
   files: {
     clusters: HistoricManifestFile[];
     sites: HistoricManifestFile;

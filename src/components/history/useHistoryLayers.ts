@@ -1,11 +1,12 @@
 "use client";
 /* eslint-disable react-hooks/set-state-in-effect -- manifest status is external async state */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl, { type Map as MLMap } from "maplibre-gl";
 import {
   createHistoryProtocol,
   historyFileUrl,
+  historyManifestUrl,
   loadHistoryManifest,
   probeHistoryArchive,
   type ArchiveMode,
@@ -40,7 +41,10 @@ export interface UseHistoryLayersResult {
   status: HistoricSourceStatus;
   count: number;
   total: number;
+  siteZoom: boolean;
   dataAsOf: string | null;
+  fullBlocked: boolean;
+  retryFullDownload: () => void;
 }
 
 function historyFont(map: MLMap): string {
@@ -79,7 +83,11 @@ export function useHistoryLayers(
   const [status, setStatus] = useState<HistoricSourceStatus>("idle");
   const [count, setCount] = useState(0);
   const [total, setTotal] = useState(0);
+  const [siteZoom, setSiteZoom] = useState(false);
   const [dataAsOf, setDataAsOf] = useState<string | null>(null);
+  const [fullBlocked, setFullBlocked] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
+  const forceFullRef = useRef(false);
 
   useEffect(() => {
     if (!map || !options.enabled) {
@@ -94,6 +102,9 @@ export function useHistoryLayers(
       sourceUrlsRef.current = { sites: "", clusters: new Map() };
       setStatus("idle");
       setCount(0);
+      setSiteZoom(false);
+      setFullBlocked(false);
+      forceFullRef.current = false;
       return;
     }
 
@@ -102,6 +113,8 @@ export function useHistoryLayers(
     sourceUrlsRef.current = { sites: "", clusters: new Map() };
     setStatus("loading");
     setCount(0);
+    setSiteZoom(map.getZoom() >= 8);
+    setFullBlocked(false);
 
     const applyCurrentFilters = () => {
       try {
@@ -119,6 +132,7 @@ export function useHistoryLayers(
     const updateCount = () => {
       if (cancelled) return;
       try {
+        setSiteZoom(map.getZoom() >= 8);
         setCount(countGlobalSites(map));
       } catch {
         // Style swap in progress; idle will fire again.
@@ -195,8 +209,15 @@ export function useHistoryLayers(
     map.on("mouseleave", hoverLayers, onLeave);
     map.on("style.load", onStyleLoad);
 
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 90_000);
+
     (async () => {
-      const manifest = await loadHistoryManifest();
+      const manifest = await loadHistoryManifest(
+        historyManifestUrl(),
+        fetch,
+        controller.signal,
+      );
       if (cancelled) return;
       if (!manifest) {
         setStatus("error");
@@ -208,7 +229,12 @@ export function useHistoryLayers(
 
       const protocol = createHistoryProtocol(maplibregl);
       const siteFile = manifest.files.sites;
-      const siteProbe = await probeHistoryArchive(historyFileUrl(siteFile.path));
+      const siteProbe = await probeHistoryArchive(
+        historyFileUrl(siteFile.path),
+        fetch,
+        siteFile.bytes,
+        controller.signal,
+      );
       if (cancelled) return;
       if (siteProbe.mode === "missing") {
         setStatus("error");
@@ -217,16 +243,35 @@ export function useHistoryLayers(
 
       const mode: Exclude<ArchiveMode, "missing"> =
         siteProbe.mode === "range" ? "range" : "full";
+      if (
+        mode === "full" &&
+        typeof navigator !== "undefined" &&
+        (navigator as Navigator & { connection?: { saveData?: boolean } })
+          .connection?.saveData &&
+        !forceFullRef.current
+      ) {
+        setFullBlocked(true);
+        setStatus("error");
+        return;
+      }
       sourceUrlsRef.current.sites = await protocol.open(
         siteFile,
         mode,
         siteProbe.blob,
+        controller.signal,
       );
+      if (cancelled) return;
 
       for (const file of manifest.files.clusters) {
         if (cancelled) return;
         if (mode === "range") {
-          const probe = await probeHistoryArchive(historyFileUrl(file.path));
+          const probe = await probeHistoryArchive(
+            historyFileUrl(file.path),
+            fetch,
+            file.bytes,
+            controller.signal,
+          );
+          if (cancelled) return;
           if (probe.mode === "missing") {
             setStatus("error");
             return;
@@ -236,13 +281,17 @@ export function useHistoryLayers(
             await protocol.open(
               file,
               probe.mode === "range" ? "range" : "full",
+              undefined,
+              controller.signal,
             ),
           );
+          if (cancelled) return;
         } else {
           sourceUrlsRef.current.clusters.set(
             file.path,
-            await protocol.open(file, "full"),
+            await protocol.open(file, "full", undefined, controller.signal),
           );
+          if (cancelled) return;
         }
       }
 
@@ -250,14 +299,18 @@ export function useHistoryLayers(
       applyLayers();
       setStatus("ready");
       window.setTimeout(updateCount, 0);
-    })().catch((error) => {
-      if (cancelled) return;
-      console.warn("[history-global]", error);
-      setStatus("error");
-    });
+    })()
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn("[history-global]", error);
+        setStatus("error");
+      })
+      .finally(() => window.clearTimeout(timeout));
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
       map.off("idle", updateCount);
       map.off("click", onClick);
       map.off("mouseenter", hoverLayers, onEnter);
@@ -282,6 +335,7 @@ export function useHistoryLayers(
     });
     const timer = window.setTimeout(() => {
       try {
+        setSiteZoom(map.getZoom() >= 8);
         setCount(countGlobalSites(map));
       } catch {
         // ignore
@@ -298,5 +352,18 @@ export function useHistoryLayers(
     status,
   ]);
 
-  return { status, count, total, dataAsOf };
+  const retryFullDownload = useCallback(() => {
+    forceFullRef.current = true;
+    setRetryToken((token) => token + 1);
+  }, []);
+
+  return {
+    status,
+    count,
+    total,
+    siteZoom,
+    dataAsOf,
+    fullBlocked,
+    retryFullDownload,
+  };
 }

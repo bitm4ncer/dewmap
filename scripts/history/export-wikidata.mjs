@@ -71,41 +71,47 @@ function qidFromItem(item) {
 
 async function fetchPage({
   endpoint,
+  fallbackEndpoint,
   query,
   fetchImpl,
   sleepImpl,
   attempts = 3,
 }) {
   let lastError;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const response = await fetchImpl(endpoint, {
-        method: "POST",
-        headers: {
-          Accept: "text/csv",
-          "Content-Type": "application/x-www-form-urlencoded",
-          "User-Agent": "kugelmaps-history-build/1.0",
-        },
-        body: `query=${encodeURIComponent(query)}`,
-      });
-      if (response.ok) return response.text();
-      lastError = new Error(`QLever returned ${response.status}`);
-      if (response.status < 500 && response.status !== 429) break;
-    } catch (error) {
-      lastError = error;
+  for (const target of [endpoint, fallbackEndpoint].filter(Boolean)) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const response = await fetchImpl(target, {
+          method: "POST",
+          headers: {
+            Accept: "text/csv",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "kugelmaps-history-build/1.0",
+          },
+          body: `query=${encodeURIComponent(query)}`,
+          signal: AbortSignal.timeout(90_000),
+        });
+        if (response.ok) return response.text();
+        lastError = new Error(`${target} returned ${response.status}`);
+        if (response.status < 500 && response.status !== 429) break;
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt < attempts - 1) await sleepImpl(500 * 2 ** attempt);
     }
-    if (attempt < attempts - 1) await sleepImpl(500 * 2 ** attempt);
   }
-  throw lastError ?? new Error("QLever request failed");
+  throw lastError ?? new Error("SPARQL request failed");
 }
 
 export async function exportPages({
   outDir,
   queryTemplate,
   endpoint = DEFAULT_ENDPOINT,
+  fallbackEndpoint = "https://query.wikidata.org/sparql",
   limit = Number.POSITIVE_INFINITY,
   pageSize = 10_000,
   cursor,
+  pageStart = 1,
   fetchImpl = fetch,
   sleepImpl = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
 }) {
@@ -114,6 +120,7 @@ export async function exportPages({
 
   let total = 0;
   let pages = 0;
+  let pageIndex = pageStart;
   let nextCursor = cursor;
 
   while (total < limit) {
@@ -122,6 +129,7 @@ export async function exportPages({
     const query = buildQuery(queryTemplate, pageLimit, nextCursor);
     const text = await fetchPage({
       endpoint,
+      fallbackEndpoint,
       query,
       fetchImpl,
       sleepImpl,
@@ -129,23 +137,24 @@ export async function exportPages({
     const rows = parseCsv(text);
     if (rows.length === 0) break;
 
+    const lastQid = qidFromItem(rows.at(-1)?.item);
+    if (!lastQid || lastQid === nextCursor) break;
+
     pages += 1;
     const pagePath = resolve(
       outDir,
-      `page-${String(pages).padStart(4, "0")}.csv`,
+      `page-${String(pageIndex).padStart(4, "0")}.csv`,
     );
+    pageIndex += 1;
     await mkdir(dirname(pagePath), { recursive: true });
     await writeFile(pagePath, text.endsWith("\n") ? text : `${text}\n`);
 
-    const lastQid = qidFromItem(rows.at(-1)?.item);
     total += rows.length;
-    if (!lastQid || lastQid === nextCursor) break;
     nextCursor = lastQid;
     await writeFile(
       resolve(outDir, "cursor.json"),
       `${JSON.stringify({ cursor: nextCursor, pages, rows: total }, null, 2)}\n`,
     );
-    if (rows.length < pageLimit) break;
   }
 
   return { rows: total, pages, cursor: nextCursor };
@@ -175,13 +184,16 @@ async function main() {
   const queryTemplate = await readFile(queryPath, "utf8");
   const limit = args.limit ? Number(args.limit) : Number.POSITIVE_INFINITY;
   const pageSize = args["page-size"] ? Number(args["page-size"]) : 10_000;
+  const pageStart = args["page-start"] ? Number(args["page-start"]) : 1;
   const result = await exportPages({
     outDir,
     queryTemplate,
     endpoint: args.endpoint ?? DEFAULT_ENDPOINT,
+    fallbackEndpoint: args["fallback-endpoint"] ?? "https://query.wikidata.org/sparql",
     limit,
     pageSize,
     cursor: args.cursor,
+    pageStart,
   });
   console.log(
     `history export: ${result.rows} rows in ${result.pages} pages (cursor ${result.cursor ?? "none"})`,

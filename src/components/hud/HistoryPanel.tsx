@@ -4,6 +4,7 @@ import { HudPanel } from "./HudPanel";
 import { HistoryFilters } from "./HistoryFilters";
 import { HistoryTimeline } from "./HistoryTimeline";
 import { panelSummary } from "@/lib/history/panel-state";
+import { Spinner } from "../ui/Spinner";
 import type { HistoricCategory } from "@/lib/history/types";
 
 interface HistoryPanelProps {
@@ -16,7 +17,10 @@ interface HistoryPanelProps {
   globalStatus: "idle" | "loading" | "ready" | "error";
   globalCount: number;
   globalTotal: number;
+  siteZoom: boolean;
   globalDataAsOf: string | null;
+  fullBlocked: boolean;
+  onLoadFull: () => void;
   categories: readonly HistoricCategory[];
   onCategoriesChange: (categories: HistoricCategory[]) => void;
   heritageOnly: boolean;
@@ -64,12 +68,11 @@ function Switch({
 export function HistoryPanel(props: HistoryPanelProps) {
   const globalReady = props.globalStatus === "ready";
   const showYearSlider = props.mapOn || props.landmarksOn || globalReady;
-  const shownCount =
-    globalReady && props.globalCount > 0
+  const shownCount = globalReady
+    ? props.siteZoom
       ? props.globalCount
-      : globalReady
-        ? props.globalTotal
-        : props.visibleCount;
+      : props.globalTotal
+    : props.visibleCount;
   const parsedDataAsOf = props.globalDataAsOf
     ? new Date(props.globalDataAsOf)
     : null;
@@ -127,24 +130,43 @@ export function HistoryPanel(props: HistoryPanelProps) {
                 Wikipedia/Commons detail on tap.
               </div>
             </div>
-            <span
-              className="hud-mono text-[11px] text-[color:var(--ink-dim)]"
-              data-state={props.globalStatus}
-            >
-              {props.globalStatus === "error"
-                ? "offline"
-                : panelSummary({
-                    status: props.globalStatus,
-                    count: props.globalCount,
-                    total: props.globalTotal,
-                    filters: {
-                      heritageOnly: props.heritageOnly,
-                      unescoOnly: props.unescoOnly,
-                      categories: props.categories,
-                    },
-                  })}
+            <span className="inline-flex items-center gap-2">
+              {props.globalStatus === "loading" && <Spinner size={12} />}
+              <span
+                className="hud-mono text-[11px] text-[color:var(--ink-dim)]"
+                data-state={props.globalStatus}
+                role={props.globalStatus === "loading" ? "status" : undefined}
+                aria-live={
+                  props.globalStatus === "loading" ? "polite" : undefined
+                }
+              >
+                {props.globalStatus === "error"
+                  ? props.fullBlocked
+                    ? "metered connection"
+                    : "offline"
+                  : panelSummary({
+                      status: props.globalStatus,
+                      count: props.globalCount,
+                      total: props.globalTotal,
+                      siteZoom: props.siteZoom,
+                      filters: {
+                        heritageOnly: props.heritageOnly,
+                        unescoOnly: props.unescoOnly,
+                        categories: props.categories,
+                      },
+                    })}
+              </span>
             </span>
           </div>
+          {props.fullBlocked ? (
+            <button
+              type="button"
+              className="hud-variant-chip"
+              onClick={props.onLoadFull}
+            >
+              Load global dataset
+            </button>
+          ) : null}
 
           {props.globalStatus === "error" && (
             <p className="text-[13px] leading-relaxed text-[color:var(--ink-dim)]">
@@ -183,6 +205,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
               <HistoryFilters
                 categories={props.categories}
                 onCategoriesChange={props.onCategoriesChange}
+                disabled={!props.siteZoom}
               />
               <p className="hud-mono text-[11px] text-[color:var(--ink-dim)]">
                 Year and category filters apply from city zoom (z8).
