@@ -1961,18 +1961,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
 
-  // Long-press anywhere on the map → drop a waypoint and place the
-  // deliberate inspection crosshair. A normal tap never sets it.
-  useLongPress(mapInstance, true, useCallback((lng: number, lat: number) => {
-    setCrosshair({ lon: lng, lat });
-    useHiking.getState().addWaypoint({
-      lat,
-      lon: lng,
-      label: `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
-      source: "longpress",
-    });
-  }, []));
-
   // Half is the default: map and panel are visible together so changes
   // land on the map immediately. Full is an explicit option; peek is the
   // collapsed state reached by the close button or a downward drag.
@@ -1991,8 +1979,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   /** Opening a place card clears the sheet out of the way, then restores
    *  the previous sheet size when the card is closed. */
   const openPoi = useCallback(
-    (selection: PoiSelection) => {
-      setCrosshair(null);
+    (selection: PoiSelection, options?: { keepCrosshair?: boolean }) => {
+      if (!options?.keepCrosshair) setCrosshair(null);
       if (
         isMobile
         && sheetBeforePoiRef.current == null
@@ -2004,6 +1992,29 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       setPoiSelection(selection);
     },
     [isMobile, sheetState, snapTo],
+  );
+
+  // Long press = inspect this point. A normal tap never sets the
+  // crosshair; the card opens with the crosshair kept in place. In the
+  // hiking pane the familiar waypoint drop still happens too.
+  useLongPress(
+    mapInstance,
+    true,
+    useCallback(
+      (lng: number, lat: number) => {
+        setCrosshair({ lon: lng, lat });
+        if (activePane === "hiking") {
+          useHiking.getState().addWaypoint({
+            lat,
+            lon: lng,
+            label: `${lat.toFixed(4)}°, ${lng.toFixed(4)}°`,
+            source: "longpress",
+          });
+        }
+        openPoi({ lon: lng, lat }, { keepCrosshair: true });
+      },
+      [activePane, openPoi],
+    ),
   );
 
   const closePoi = useCallback(() => {

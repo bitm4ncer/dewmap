@@ -529,23 +529,23 @@ function PoiDetailContent({
         </div>
       ) : (
         <div className="poi-scroll">
-          <div
-            className="poi-hero"
-            onPointerDown={(e) => {
-              if ((e.target as HTMLElement).closest("button, a")) return;
-              beginResize("expanded", e);
-            }}
-            onPointerMove={(e) => {
-              if (dragRef.current?.mode === "expanded") {
-                moveResize(e.clientY, e.timeStamp);
-              }
-            }}
-            onPointerUp={(e) => {
-              if (dragRef.current?.mode === "expanded") finishResize(e);
-            }}
-            onPointerCancel={clearResize}
-          >
-            {hasImage && current && (
+          {hasImage && current && (
+            <div
+              className="poi-hero"
+              onPointerDown={(e) => {
+                if ((e.target as HTMLElement).closest("button, a")) return;
+                beginResize("expanded", e);
+              }}
+              onPointerMove={(e) => {
+                if (dragRef.current?.mode === "expanded") {
+                  moveResize(e.clientY, e.timeStamp);
+                }
+              }}
+              onPointerUp={(e) => {
+                if (dragRef.current?.mode === "expanded") finishResize(e);
+              }}
+              onPointerCancel={clearResize}
+            >
               <img
                 key={current.url}
                 src={current.url}
@@ -558,26 +558,24 @@ function PoiDetailContent({
                 onLoad={() => setLoadedUrl(current.url)}
                 onError={() => onImageError(current.url)}
               />
-            )}
-            <div className="poi-hero-shade" />
-            <button
-              type="button"
-              onClick={collapse}
-              className="poi-close poi-collapse"
-              aria-label="Minimize place details"
-              aria-expanded
-            >
-              <ChevronDownIcon size={19} />
-            </button>
-            <button
-              type="button"
-              onClick={close}
-              className={`poi-close${hasImage ? "" : " poi-close--inline"}`}
-              aria-label="Close place details"
-            >
-              <CloseIcon size={19} />
-            </button>
-            {hasImage && current && (
+              <div className="poi-hero-shade" />
+              <button
+                type="button"
+                onClick={collapse}
+                className="poi-close poi-collapse"
+                aria-label="Minimize place details"
+                aria-expanded
+              >
+                <ChevronDownIcon size={19} />
+              </button>
+              <button
+                type="button"
+                onClick={close}
+                className="poi-close"
+                aria-label="Close place details"
+              >
+                <CloseIcon size={19} />
+              </button>
               <a
                 className="poi-credit"
                 href={current.href ?? current.url}
@@ -587,43 +585,87 @@ function PoiDetailContent({
               >
                 {current.credit}
               </a>
-            )}
-            {images.length > 1 && (
-              <div className="poi-thumbs" role="group" aria-label="Photos">
-                {images.slice(0, 4).map((image, i) => (
-                  <button
-                    key={image.url}
-                    type="button"
-                    onClick={() => {
-                      setActiveImage(i);
-                      setImageFailed(false);
-                      setLoadedUrl(null);
-                    }}
-                    className="poi-thumb"
-                    data-active={i === activeImage}
-                    aria-label={`Show photo ${i + 1}`}
-                  >
-                    <img
-                      src={image.url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.style.visibility = "hidden";
+              {images.length > 1 && (
+                <div className="poi-thumbs" role="group" aria-label="Photos">
+                  {images.slice(0, 4).map((image, i) => (
+                    <button
+                      key={image.url}
+                      type="button"
+                      onClick={() => {
+                        setActiveImage(i);
+                        setImageFailed(false);
+                        setLoadedUrl(null);
                       }}
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                      className="poi-thumb"
+                      data-active={i === activeImage}
+                      aria-label={`Show photo ${i + 1}`}
+                    >
+                      <img
+                        src={image.url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.style.visibility = "hidden";
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="poi-body">
-            <p className="ui-kicker">
-              {category}
-              {city ? ` · ${city}` : ""}
-            </p>
+            {!hasImage && (
+              <div
+                className="poi-head poi-head--actions"
+                onPointerDown={(e) => {
+                  if ((e.target as HTMLElement).closest("button, a")) return;
+                  beginResize("expanded", e);
+                }}
+                onPointerMove={(e) => {
+                  if (dragRef.current?.mode === "expanded") {
+                    moveResize(e.clientY, e.timeStamp);
+                  }
+                }}
+                onPointerUp={(e) => {
+                  if (dragRef.current?.mode === "expanded") finishResize(e);
+                }}
+                onPointerCancel={clearResize}
+              >
+                <p className="ui-kicker">
+                  {category}
+                  {city ? ` · ${city}` : ""}
+                </p>
+                <div className="poi-head-controls">
+                  <button
+                    type="button"
+                    onClick={collapse}
+                    className="poi-close poi-close--inline"
+                    aria-label="Minimize place details"
+                    aria-expanded
+                  >
+                    <ChevronDownIcon size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={close}
+                    className="poi-close poi-close--inline"
+                    aria-label="Close place details"
+                  >
+                    <CloseIcon size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+            {hasImage && (
+              <p className="ui-kicker">
+                {category}
+                {city ? ` · ${city}` : ""}
+              </p>
+            )}
             <h2 className="poi-title">{name}</h2>
             {details?.address && <p className="poi-address">{details.address}</p>}
 
