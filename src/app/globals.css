@@ -101,28 +101,7 @@ body {
   --z-sheet: 30;
   --z-modal: 50;
   --z-toast: 60;
-
-  /* Legacy aliases — existing components keep working until Task 7. */
-  --hud-surface:        var(--surf-1);
-  --hud-surface-solid:  var(--surf-1);
-  --hud-surface-opaque: var(--surf-0);
-  --hud-text:           var(--ink);
-  --hud-text-muted:     var(--ink-dim);
-  --hud-text-label:     var(--ink-mute);
-  --hud-accent:         var(--accent);
-  --hud-accent-soft:    var(--accent-soft);
-  --hud-accent-glow:    transparent;
-  --hud-border:         transparent;
-  --hud-border-strong:  transparent;
-  --hud-warn:           var(--warn);
-  --hud-danger:         var(--danger);
 }
-
-/* Per-pane signature swatch only. Actions stay accent on every pane. */
-[data-pane="map"]       { --pane-tint: var(--accent); }
-[data-pane="biosphere"] { --pane-tint: var(--accent); }
-[data-pane="history"]   { --pane-tint: var(--accent); }
-[data-pane="hiking"]    { --pane-tint: var(--accent); }
 
 /* Global focus language — visible on every control, incl. inside clips. */
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
@@ -342,7 +321,7 @@ body {
 .hud-bottom-nav-btn:active { transform: scale(0.96); }
 .hud-bottom-nav-btn[data-active="true"] {
   color: var(--accent-ink);
-  background: var(--pane-tint, var(--accent));
+  background: var(--accent);
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -383,8 +362,7 @@ body {
 
 /* ────────────────────────────────────────────────────────────────────────
    Mobile sheet tabs — pane switcher row inside the bottom sheet.
-   Each tab carries its pane's signature shade as a small dot;
-   active tab inflates a pill-shaped tint background using --pane-tint.
+   The active tab inflates a pill-shaped accent tint.
    ──────────────────────────────────────────────────────────────────── */
 .hud-sheet-tabs {
   display: none;

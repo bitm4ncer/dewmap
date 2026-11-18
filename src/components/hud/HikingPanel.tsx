@@ -269,7 +269,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
       <HudPanel label={`Waypoints · ${waypoints.length}`}>
         <div className="flex flex-col gap-2">
           {waypoints.length === 0 ? (
-            <p className="text-[12px] text-[color:var(--hud-text-muted)]">
+            <p className="text-[12px] text-[color:var(--ink-dim)]">
               Long-press the map to drop a waypoint, search by name, use GPS,
               or tap a station when Rail · Lines is active.
             </p>
@@ -311,12 +311,12 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
         <HudPanel label={finalized ? "Final route" : `Options · ${candidates.length}`}>
           <div className="flex flex-col gap-1.5">
             {phase.kind === "error" && (
-              <p className="break-words text-[12px] text-[color:var(--hud-danger)]">
+              <p className="break-words text-[12px] text-[color:var(--danger)]">
                 {phase.message}
               </p>
             )}
             {notice && phase.kind !== "error" && (
-              <p className="break-words text-[12px] text-[color:var(--hud-warn)]">
+              <p className="break-words text-[12px] text-[color:var(--warn)]">
                 {notice}
               </p>
             )}
@@ -355,7 +355,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
                         style={{ backgroundColor: routeColor }}
                       />
                       {finalized ? "Selected" : `Route ${i + 1}`}
-                      <span className="text-[11.5px] font-normal text-[color:var(--hud-text-muted)]">
+                      <span className="text-[11.5px] font-normal text-[color:var(--ink-dim)]">
                         · {c.profile}
                       </span>
                     </span>
@@ -363,7 +363,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
                       {c.distanceKm.toFixed(1)} km
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11.5px] text-[color:var(--hud-text-muted)]">
+                  <div className="flex items-center justify-between text-[11.5px] text-[color:var(--ink-dim)]">
                     <span>
                       {formatDuration(c.durationMin)} · +{Math.round(c.ascentM)} m
                     </span>
@@ -371,10 +371,10 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
                       <span
                         className={
                           greenPct >= 60
-                            ? "text-[color:var(--hud-accent)]"
+                            ? "text-[color:var(--accent)]"
                             : greenPct >= 30
-                              ? "text-[color:var(--hud-warn)]"
-                              : "text-[color:var(--hud-text-muted)]"
+                              ? "text-[color:var(--warn)]"
+                              : "text-[color:var(--ink-dim)]"
                         }
                       >
                         {greenPct}% green
@@ -394,7 +394,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
             })}
 
             {!finalized && altCount > 0 && (
-              <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+              <p className="text-[11.5px] text-[color:var(--ink-dim)]">
                 {altCount} alternative{altCount === 1 ? "" : "s"} drawn on map
                 — tap a dashed line or route above to switch.
               </p>
@@ -506,7 +506,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
         </button>
       )}
 
-      <div className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+      <div className="text-[11.5px] text-[color:var(--ink-dim)]">
         BRouter · Photon · Overpass · OSM contributors
       </div>
     </div>
@@ -526,7 +526,7 @@ function RouteSummary({
 }) {
   if (waypointCount < 2) {
     return (
-      <p className="text-[12px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[12px] text-[color:var(--ink-dim)]">
         Add at least two waypoints to compute a route.
       </p>
     );
@@ -542,26 +542,26 @@ function RouteSummary({
           ? `Refining route… (${received} done)`
           : "Computing route…";
     return (
-      <p className="text-[12px] text-[color:var(--hud-text-muted)]">{label}</p>
+      <p className="text-[12px] text-[color:var(--ink-dim)]">{label}</p>
     );
   }
   if (phase.kind === "scoring") {
     return (
-      <p className="text-[12px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[12px] text-[color:var(--ink-dim)]">
         Scoring greenery…
       </p>
     );
   }
   if (phase.kind === "error") {
     return (
-      <p className="break-words text-[12px] text-[color:var(--hud-danger)]">
+      <p className="break-words text-[12px] text-[color:var(--danger)]">
         {phase.message}
       </p>
     );
   }
   if (!candidate) {
     return (
-      <p className="text-[12px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[12px] text-[color:var(--ink-dim)]">
         Adjust waypoints to compute a route.
       </p>
     );
@@ -572,24 +572,24 @@ function RouteSummary({
   return (
     <div className="flex flex-col gap-0.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="hud-mono text-[14px] text-[color:var(--hud-accent)]">
+        <span className="hud-mono text-[14px] text-[color:var(--accent)]">
           {candidate.distanceKm.toFixed(1)} km
         </span>
-        <span className="hud-mono text-[12px] text-[color:var(--hud-text-muted)]">
+        <span className="hud-mono text-[12px] text-[color:var(--ink-dim)]">
           {formatDuration(candidate.durationMin)} · +
           {Math.round(candidate.ascentM)} m
         </span>
       </div>
-      <div className="flex items-center justify-between gap-2 text-[11.5px] text-[color:var(--hud-text-muted)]">
+      <div className="flex items-center justify-between gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
         <span>{finalized ? "Final · committed" : "Best of options · tap Confirm to lock"}</span>
         {greenPct != null && (
           <span
             className={
               greenPct >= 60
-                ? "text-[color:var(--hud-accent)]"
+                ? "text-[color:var(--accent)]"
                 : greenPct >= 30
-                  ? "text-[color:var(--hud-warn)]"
-                  : "text-[color:var(--hud-text-muted)]"
+                  ? "text-[color:var(--warn)]"
+                  : "text-[color:var(--ink-dim)]"
             }
           >
             {greenPct}% green
@@ -706,10 +706,10 @@ function WaypointRow({
         {index + 1}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[12px] text-[color:var(--hud-text)]">
+        <div className="truncate text-[12px] text-[color:var(--ink)]">
           {label}
         </div>
-        <div className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+        <div className="text-[11.5px] text-[color:var(--ink-dim)]">
           {role} · {source}
         </div>
       </div>
@@ -749,7 +749,7 @@ function IconBtn({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
-      className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--hud-text-muted)] transition-colors hover:bg-[var(--hud-accent-soft)] hover:text-[color:var(--hud-accent)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[color:var(--hud-text-muted)]"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--ink-dim)] transition-colors hover:bg-[var(--accent-soft)] hover:text-[color:var(--accent)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[color:var(--ink-dim)]"
     >
       {children}
     </button>
@@ -894,7 +894,7 @@ function SearchAdd({
         className="hud-search w-full h-10 md:h-7 px-3 text-[12px]"
       />
       {busy && (
-        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[color:var(--hud-text-muted)]">
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[color:var(--ink-dim)]">
           …
         </span>
       )}
@@ -919,11 +919,11 @@ function SearchAdd({
                     setResults([]);
                     setOpen(false);
                   }}
-                  className="flex w-full items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12px] text-[color:var(--hud-text)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--hud-accent)]"
+                  className="flex w-full items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12px] text-[color:var(--ink)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--accent)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{r.label || r.name}</span>
                   {prettyCategory(r.category) && (
-                    <span className="shrink-0 rounded-full bg-[color:var(--surf-3)] px-1.5 py-0.5 text-[11px] text-[color:var(--hud-text-muted)]">
+                    <span className="shrink-0 rounded-full bg-[color:var(--surf-3)] px-1.5 py-0.5 text-[11px] text-[color:var(--ink-dim)]">
                       {prettyCategory(r.category)}
                     </span>
                   )}

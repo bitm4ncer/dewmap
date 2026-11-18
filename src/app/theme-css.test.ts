@@ -48,6 +48,11 @@ describe("flat CSS invariants", () => {
     expect(css).not.toContain("--shadow-modal");
   });
 
+  it("has no legacy hud aliases or pane tints", () => {
+    expect(css).not.toMatch(/--hud-(surface|text|accent|border|warn|danger)/);
+    expect(css).not.toContain("[data-pane=");
+  });
+
   it("keeps the mobile sheet solid", () => {
     const sheet = blocks.filter((b) => b.selector.includes(".hud-bottom-sheet"));
     expect(sheet.some((b) => b.body.includes("var(--surf-0)"))).toBe(true);

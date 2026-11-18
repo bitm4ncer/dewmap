@@ -7,8 +7,6 @@ interface PaneToggleProps {
   /** Visual variant — `tab` is the large mobile sheet tab, `panel` is
    *  the desktop panel tab. `handle` remains for legacy callers. */
   variant: "handle" | "tab" | "panel";
-  /** Pane key — controls the signature colour dot via [data-pane]. */
-  pane: "map" | "biosphere" | "history" | "hiking";
   children: ReactNode;
 }
 
@@ -17,7 +15,6 @@ export function PaneToggle({
   label,
   onToggle,
   variant,
-  pane,
   children,
 }: PaneToggleProps) {
   const className =
@@ -33,7 +30,6 @@ export function PaneToggle({
       aria-label={label}
       aria-pressed={active}
       data-active={active}
-      data-pane={pane}
       className={`${className} pointer-events-auto`}
     >
       {children}

@@ -3301,12 +3301,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   }, [flyTarget]);
 
 
-  const activePaneTheme =
-    activePane === "control" ? "map" : activePane;
   return (
     <div
       className="relative h-full w-full"
-      data-active-pane={activePaneTheme}
       data-navigating={navActive}
     >
       <div ref={containerRef} className="h-full w-full" />
@@ -3331,7 +3328,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         && (railNetworkStatus.inFlight > 0
           || railNetworkStatus.cooldownUntil > Date.now()) && (
         <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-[color:var(--hud-text)]">
+          <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-[color:var(--ink)]">
             <span
               aria-hidden
               className="hud-loading-dot"
@@ -3363,10 +3360,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           edge free. */}
       {(geoStatus || geoHeading) && (
         <div className="pointer-events-auto absolute left-1/2 z-20 -translate-x-1/2 top-[calc(env(safe-area-inset-top,0px)+62px)] md:top-auto md:bottom-3">
-          <div className="hud-panel flex max-w-[calc(100vw-1.5rem)] items-center gap-2 px-3 py-2 text-[12px] text-[color:var(--hud-text)]">
+          <div className="hud-panel flex max-w-[calc(100vw-1.5rem)] items-center gap-2 px-3 py-2 text-[12px] text-[color:var(--ink)]">
             {geoStatus && <span className="hud-mono min-w-0 break-words">{geoStatus}</span>}
             {geoHeading && (
-              <span className="hud-mono shrink-0 text-[color:var(--hud-accent)]">
+              <span className="hud-mono shrink-0 text-[color:var(--accent)]">
                 · {geoHeading}
               </span>
             )}
@@ -3377,7 +3374,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 setGeoHeading(null);
               }}
               aria-label="Dismiss location status"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[color:var(--hud-text-muted)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--hud-accent)]"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--accent)]"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
                 <path d="M4 4l8 8M12 4l-8 8" />
@@ -3451,7 +3448,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               label={p.label}
               onToggle={() => selectPane(p.key)}
               variant="tab"
-              pane={p.key === "control" ? "map" : p.key}
             >
               {p.icon}
             </PaneToggle>
@@ -3494,8 +3490,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   label={p.label}
                   onToggle={() => selectPane(p.key)}
                   variant="panel"
-                  pane={p.key === "control" ? "map" : p.key}
-                >
+                    >
                   {p.icon}
                 </PaneToggle>
               ))}
@@ -3962,7 +3957,7 @@ function MapReadout({ map }: { map: MLMap | null }) {
 
   return (
     <HudPanel className="hud-mono">
-      <span className="text-[13px] text-[color:var(--hud-text)]">
+      <span className="text-[13px] text-[color:var(--ink)]">
         {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
         {view.zoom.toFixed(1)}
       </span>
@@ -4323,7 +4318,7 @@ function TimelineYearTab({
   const selectedId = isS2Active ? s2ActiveVariant : "";
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[11.5px] text-[color:var(--ink-dim)]">
         Sentinel-2 cloudless · 10 m · annual mosaic
       </p>
       <div
@@ -4352,7 +4347,7 @@ function TimelineYearTab({
         })}
       </div>
       {!isS2Active && (
-        <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+        <p className="text-[11.5px] text-[color:var(--ink-dim)]">
           Tap a year to switch the photo basemap to Sentinel-2.
         </p>
       )}
@@ -4395,7 +4390,7 @@ function TimelineLiveTab({
   };
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+      <p className="text-[11.5px] text-[color:var(--ink-dim)]">
         NOAA-20 VIIRS daily true-color · step through the past 14 days
       </p>
       <div className="flex items-center justify-between gap-2">
@@ -4411,10 +4406,10 @@ function TimelineLiveTab({
           </svg>
         </button>
         <div className="flex flex-1 flex-col items-center leading-tight">
-          <span className="hud-mono text-[14px] text-[color:var(--hud-text)]">
+          <span className="hud-mono text-[14px] text-[color:var(--ink)]">
             {niceDate}
           </span>
-          <span className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+          <span className="text-[11.5px] text-[color:var(--ink-dim)]">
             {relative}
           </span>
         </div>
@@ -4505,7 +4500,7 @@ function TimelineSnapshotsTab({
       <div className="flex items-center justify-between gap-2">
         {state.kind === "searching" || state.kind === "loading" ? (
           <span
-            className="inline-block h-2 w-2 animate-pulse rounded-full bg-[color:var(--hud-accent)] shadow-[0_0_6px_var(--hud-accent-glow)]"
+            className="inline-block h-2 w-2 animate-pulse rounded-full bg-[color:var(--accent)]"
             aria-label="Loading"
           />
         ) : (
@@ -4516,7 +4511,7 @@ function TimelineSnapshotsTab({
             <button
               type="button"
               onClick={onClear}
-              className="text-[11.5px] uppercase tracking-wider text-[color:var(--hud-text-muted)] hover:text-[color:var(--hud-accent)]"
+              className="text-[11.5px] uppercase tracking-wider text-[color:var(--ink-dim)] hover:text-[color:var(--accent)]"
             >
               clear
             </button>
@@ -4537,17 +4532,17 @@ function TimelineSnapshotsTab({
       )}
 
       {!credentials && (
-        <p className="max-w-[260px] text-[12px] text-[color:var(--hud-text-muted)]">
+        <p className="max-w-[260px] text-[12px] text-[color:var(--ink-dim)]">
           Tap the gear icon to add Copernicus credentials.
         </p>
       )}
       {credentials && !zoomOk && !active && (
-        <p className="max-w-[260px] text-[12px] text-[color:var(--hud-warn)]">
+        <p className="max-w-[260px] text-[12px] text-[color:var(--warn)]">
           Zoom in to z{minZoom} or closer first
         </p>
       )}
       {state.kind === "error" && (
-        <p className="max-w-[260px] break-words text-[12px] text-[color:var(--hud-danger)]">
+        <p className="max-w-[260px] break-words text-[12px] text-[color:var(--danger)]">
           {state.message}
         </p>
       )}
@@ -4565,14 +4560,14 @@ function TimelineSnapshotsTab({
               <ChevronLeftIcon size={18} />
             </button>
             <div className="flex-1 text-center">
-              <div className="hud-mono text-[12px] text-[color:var(--hud-text)]">
+              <div className="hud-mono text-[12px] text-[color:var(--ink)]">
                 {new Date(current.datetime).toLocaleDateString(undefined, {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
                 })}
               </div>
-              <div className="text-[11.5px] text-[color:var(--hud-text-muted)]">
+              <div className="text-[11.5px] text-[color:var(--ink-dim)]">
                 {current.cloudCover != null
                   ? `${current.cloudCover.toFixed(0)}% cloud`
                   : "cloud: —"}
@@ -4609,7 +4604,7 @@ function TimelineSnapshotsTab({
               className="hud-slider flex-1"
               style={{ ["--hud-fill" as string]: `${Math.round(opacity * 100)}%` }}
             />
-            <span className="hud-mono w-8 text-right text-[11.5px] text-[color:var(--hud-text-muted)]">
+            <span className="hud-mono w-8 text-right text-[11.5px] text-[color:var(--ink-dim)]">
               {Math.round(opacity * 100)}%
             </span>
           </div>
