@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
+const poi = readFileSync(
+  new URL("./poi/PoiDetail.tsx", import.meta.url),
+  "utf8",
+);
+
 const map = readFileSync(new URL("./Map.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
@@ -24,6 +29,13 @@ describe("shell", () => {
   it("retries overlay layers once the map becomes idle", () => {
     const retries = map.match(/map\.once\("idle", apply\)/g) ?? [];
     expect(retries.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("marks a selected place and offers route planning from its card", () => {
+    expect(map).toContain("poi-crosshair");
+    expect(map).toContain("planPoiRoute");
+    expect(map).toContain("onPlanRoute={planPoiRoute}");
+    expect(poi).toContain("Plan Route");
   });
 
   it("puts the desktop header above the pane tabs", () => {

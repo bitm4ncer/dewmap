@@ -14,12 +14,14 @@ import {
   MailIcon,
   MapPinIcon,
   PhoneIcon,
+  RouteIcon,
 } from "@/components/ui/icons";
 
 interface Props {
   selection: PoiSelection | null;
   onClose: () => void;
   onCenter?: (lon: number, lat: number) => void;
+  onPlanRoute?: (selection: PoiSelection) => void;
 }
 
 interface ContentProps extends Omit<Props, "selection"> {
@@ -43,6 +45,7 @@ function PoiDetailContent({
   selection,
   onClose,
   onCenter,
+  onPlanRoute,
 }: ContentProps) {
   const [details, setDetails] = useState<PoiDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -186,6 +189,25 @@ function PoiDetailContent({
         </div>
 
         <div className="poi-body">
+          {onPlanRoute && (
+            <button
+              type="button"
+              className="poi-plan-route"
+              onClick={() =>
+                onPlanRoute({
+                  ...selection,
+                  name: details?.name ?? selection.name,
+                  lon: details?.lon ?? selection.lon,
+                  lat: details?.lat ?? selection.lat,
+                  city: details?.city ?? selection.city,
+                  category: details?.category ?? selection.category,
+                })
+              }
+            >
+              <RouteIcon size={17} />
+              Plan Route
+            </button>
+          )}
           <p className="ui-kicker">
             {category}
             {city ? ` · ${city}` : ""}

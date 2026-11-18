@@ -194,6 +194,13 @@ describe("sheet chrome and compact date field", () => {
     expect(css).toContain(".hud-bottom-sheet .ui-panel-body { padding-top: 0; }");
   });
 
+  it("styles the selected-place crosshair and route CTA", () => {
+    expect(block(".poi-crosshair")?.body).toContain("color: var(--danger)");
+    expect(block(".poi-crosshair")?.body).toContain("width: 38px");
+    expect(block(".poi-plan-route")?.body).toContain("background: var(--accent)");
+    expect(block(".poi-plan-route")?.body).toContain("min-height: 48px");
+  });
+
   it("stacks active overlay badges above the locate control", () => {
     expect(block(".map-overlay-badges")?.body).toContain("display: none");
     expect(

@@ -1577,6 +1577,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const liveMarkerRef = useRef<maplibregl.Marker | null>(null);
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const poiMarkerRef = useRef<maplibregl.Marker | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
   const coneRef = useRef<HTMLDivElement | null>(null);
   const arrowRef = useRef<HTMLDivElement | null>(null);
@@ -1928,6 +1929,51 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const handleTransitSearchComplete = useCallback(() => {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
+
+  /** A POI detail becomes the destination in the expanded route planner. */
+  const planPoiRoute = useCallback(
+    (poi: PoiSelection) => {
+      setPoiSelection(null);
+      const center = mapRef.current?.getCenter();
+      const start: RoutePoint = livePos
+        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+        : center
+          ? { name: "Map center", lat: center.lat, lon: center.lng }
+          : { name: "Map center", lat: poi.lat, lon: poi.lon };
+      setPendingPin({
+        dest: {
+          name: poi.name || "Place",
+          lat: poi.lat,
+          lon: poi.lon,
+          city: poi.city,
+          kind: "address",
+        },
+        start,
+      });
+      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) =>
+            setPendingPin((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    start: {
+                      name: "My location",
+                      lat: pos.coords.latitude,
+                      lon: pos.coords.longitude,
+                    },
+                  }
+                : prev,
+            ),
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
+        );
+      }
+      if (activePane !== "hiking") setActivePane("hiking");
+      snapTo(isMobile ? "modes" : "half");
+    },
+    [activePane, isMobile, livePos, snapTo],
+  );
 
   /** A pinned search result becomes the destination for the next mode pick. */
   const handleSearchSelect = useCallback(
@@ -3546,6 +3592,32 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [mapInstance]);
 
+  // Mark the selected place with a warm red crosshair until the card closes.
+  useEffect(() => {
+    const map = mapInstance;
+    poiMarkerRef.current?.remove();
+    poiMarkerRef.current = null;
+    if (!map || !poiSelection) return;
+    const el = document.createElement("div");
+    el.className = "poi-crosshair";
+    el.setAttribute("aria-hidden", "true");
+    el.innerHTML = `
+      <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="19" cy="19" r="8" stroke="currentColor" stroke-width="2.4" />
+        <circle cx="19" cy="19" r="2.4" fill="currentColor" />
+        <path d="M19 1.5v8M19 28.5v8M1.5 19h8M28.5 19h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+      </svg>
+    `;
+    const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+      .setLngLat([poiSelection.lon, poiSelection.lat])
+      .addTo(map);
+    poiMarkerRef.current = marker;
+    return () => {
+      marker.remove();
+      if (poiMarkerRef.current === marker) poiMarkerRef.current = null;
+    };
+  }, [mapInstance, poiSelection]);
+
   const activeOverlays: { key: string; label: string; icon: ReactNode }[] = [
     landCoverOn && { key: "land-cover", label: "Land Cover", icon: <LandCoverIcon size={16} /> },
     ndviOn && { key: "ndvi", label: "NDVI", icon: <NdviIcon size={16} /> },
@@ -3946,6 +4018,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         selection={poiSelection}
         onClose={closePoi}
         onCenter={centerPoi}
+        onPlanRoute={planPoiRoute}
       />
 
       <NavigationOverlay
