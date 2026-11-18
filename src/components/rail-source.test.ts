@@ -27,4 +27,11 @@ describe("rail data path", () => {
     expect(mapSource).toContain("tiles.openfreemap.org");
     expect(mapSource).toContain('cache: "force-cache"');
   });
+
+  it("fades rail layers in around their minzoom", () => {
+    expect(mapSource).toContain("RAIL_LINE_FADE");
+    expect(mapSource).toContain("RAIL_STATION_FADE");
+    expect(mapSource).toContain("railFade(opacity, RAIL_LINE_FADE)");
+    expect(mapSource).not.toMatch(/"\*",\s*opacity,\s*\[\s*"interpolate"/);
+  });
 });
