@@ -26,4 +26,5 @@ jobs:
       - run: npm run lint
       - run: npm run check:no-emoji
       - run: npm test
+      - run: npm run test:scripts
       - run: npm run build
