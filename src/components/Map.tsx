@@ -40,9 +40,6 @@ import type { PoiSelection } from "@/lib/poi";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
 import {
-  RAILWAY_TILE_URLS,
-  RAILWAY_ATTRIBUTION,
-  RAILWAY_MAX_ZOOM,
   RAIL_VECTOR_ATTRIBUTION,
   RAIL_VECTOR_LINES_LAYER,
   RAIL_VECTOR_MAX_ZOOM,
@@ -139,8 +136,6 @@ const SECTOR_SOURCE_ID = "timeline-sector";
 const SECTOR_LAYER_ID = "timeline-sector-outline";
 const TIMELINE_DAYS_BACK = 365;
 const MIN_FETCH_ZOOM = 8;
-const RAILWAY_SOURCE_ID = "railway";
-const RAILWAY_LAYER_ID = "railway-layer";
 const NDVI_SOURCE_ID = "ndvi";
 const NDVI_LAYER_ID = "ndvi-layer";
 const SPECIES_SOURCE_ID = "biosphere-species";
@@ -356,41 +351,12 @@ function removeHybridOverlay(map: MLMap) {
   if (map.getSource(HYBRID_TRANSPORT_SOURCE_ID)) map.removeSource(HYBRID_TRANSPORT_SOURCE_ID);
 }
 
-function ensureRailwayLayer(map: MLMap, opacity: number) {
-  if (map.getLayer(RAILWAY_LAYER_ID)) return;
-  if (map.getSource(RAILWAY_SOURCE_ID)) map.removeSource(RAILWAY_SOURCE_ID);
-  map.addSource(RAILWAY_SOURCE_ID, {
-    type: "raster",
-    tiles: RAILWAY_TILE_URLS,
-    tileSize: 256,
-    maxzoom: RAILWAY_MAX_ZOOM,
-    attribution: RAILWAY_ATTRIBUTION,
-  });
-  map.addLayer({
-    id: RAILWAY_LAYER_ID,
-    type: "raster",
-    source: RAILWAY_SOURCE_ID,
-    paint: { "raster-opacity": opacity, "raster-fade-duration": 0 },
-  });
-}
-
-function updateRailwayOpacity(map: MLMap, opacity: number) {
-  if (map.getLayer(RAILWAY_LAYER_ID)) {
-    map.setPaintProperty(RAILWAY_LAYER_ID, "raster-opacity", opacity);
-  }
-}
-
-function removeRailwayLayer(map: MLMap) {
-  if (map.getLayer(RAILWAY_LAYER_ID)) map.removeLayer(RAILWAY_LAYER_ID);
-  if (map.getSource(RAILWAY_SOURCE_ID)) map.removeSource(RAILWAY_SOURCE_ID);
-}
-
 // ── Rail vector detail ───────────────────────────────────────────────
 // OpenFreeMap vector tiles carry the OSM rail network in `transportation`
 // (class=rail/transit) and stations in `poi` (class=railway). The tiles are
 // generalized per zoom, including low zoom, and MapLibre only fetches the
-// visible tiles. This replaces both the old Overpass batches and the coarse
-// ORM raster fallback.
+// visible tiles. This replaces the old Overpass batches and the removed
+// ORM raster path.
 const RAIL_VECTOR_SOURCE_ID = "rail-vector-src";
 const RAIL_VECTOR_CASING_LAYER_ID = "rail-vector-casing";
 const RAIL_VECTOR_MAIN_LAYER_ID = "rail-vector-main";
@@ -1566,7 +1532,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     orientationMode,
     railOn,
     railwayOpacity,
-    railStyle,
     poiOn,
     ndviOn,
     ndviOpacity,
@@ -1597,7 +1562,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setOrientationMode,
     setRailOn,
     setRailwayOpacity,
-    setRailStyle,
     setPoiOn,
     setNdviOn,
     setNdviOpacity,
@@ -2106,6 +2070,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       maxZoom: 22,
       attributionControl: { compact: true },
       hash: true,
+      transformRequest: (url) => {
+        // OpenFreeMap tile paths are versioned and immutable. Keep every
+        // loaded vector tile in the browser's persistent HTTP cache instead
+        // of re-fetching it on pan/zoom or app restart.
+        if (url.startsWith("https://tiles.openfreemap.org/planet/")) {
+          return { url, cache: "force-cache" };
+        }
+        return { url };
+      },
     });
     mapRef.current = map;
     setMapInstance(map);
@@ -2708,41 +2681,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [overlayOpacity]);
 
-  // Raster OpenRailwayMap overlay (rail + railStyle === "tiles")
+  // Vector rail detail. OpenFreeMap tiles stream only the visible,
+  // zoom-generalized features. There is no Overpass request, no raster
+  // fallback and no tile preload; MapLibre requests more detail as the map
+  // zooms in.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const tilesActive = railwayOn && railStyle === "tiles";
-    if (!tilesActive) {
-      removeRailwayLayer(map);
-      return;
-    }
-    const apply = () => ensureRailwayLayer(map, railwayOpacity);
-    if (map.isStyleLoaded()) apply();
-    map.on("style.load", apply);
-    // The initial `style.load` can fire before this effect registers;
-    // `idle` guarantees one more attempt once the map is usable.
-    map.once("idle", apply);
-    return () => {
-      map.off("style.load", apply);
-      map.off("idle", apply);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [railwayOn, railStyle, active]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !railwayOn || railStyle !== "tiles") return;
-    updateRailwayOpacity(map, railwayOpacity);
-  }, [railwayOn, railStyle, railwayOpacity]);
-
-  // Vector rail detail. CARTO/Protomaps tiles stream only the visible,
-  // zoom-generalized features. There is no Overpass request, no multi-MB
-  // z9 batch and no rate-limit cooldown.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const linesActive = railwayOn && railStyle === "lines";
+    const linesActive = railwayOn;
     if (!linesActive) {
       removeRailVectorLayers(map);
       return;
@@ -2800,13 +2746,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
       map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
     };
-  }, [railwayOn, railStyle, active, railwayOpacity]);
+  }, [railwayOn, active, railwayOpacity]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !railwayOn || railStyle !== "lines") return;
+    if (!map || !railwayOn) return;
     updateRailVectorOpacity(map, railwayOpacity);
-  }, [railwayOn, railStyle, railwayOpacity]);
+  }, [railwayOn, railwayOpacity]);
 
   // Google-Maps-style place dots. These ride on the same keyless
   // OpenFreeMap vector tiles as the rail detail, but in their own source
@@ -4137,8 +4083,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onChange={setRailOn}
                   opacity={railwayOpacity}
                   onOpacityChange={setRailwayOpacity}
-                  railStyle={railStyle}
-                  onRailStyleChange={setRailStyle}
                 />
 
 
@@ -4758,8 +4702,6 @@ interface RailsPanelProps {
   onChange: (on: boolean) => void;
   opacity: number;
   onOpacityChange: (o: number) => void;
-  railStyle: "tiles" | "lines";
-  onRailStyleChange: (s: "tiles" | "lines") => void;
 }
 
 function RailsPanel({
@@ -4767,13 +4709,8 @@ function RailsPanel({
   onChange,
   opacity,
   onOpacityChange,
-  railStyle,
-  onRailStyleChange,
 }: RailsPanelProps) {
-  const caption =
-    railStyle === "lines"
-      ? "Vector tiles · OpenFreeMap · OSM"
-      : "OpenRailwayMap raster · OSM";
+  const caption = "Vector tiles · OpenFreeMap · OSM";
 
   return (
     <HudPanel>
@@ -4794,33 +4731,6 @@ function RailsPanel({
             <span className="hud-switch-thumb" aria-hidden />
           </button>
         </div>
-
-        {on && (
-          <div className="flex items-center gap-2">
-            <span className="hud-label w-12 shrink-0">Style</span>
-            <div
-              className="hud-tab-row flex-1"
-              style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
-            >
-              <button
-                type="button"
-                className="hud-tab"
-                data-active={railStyle === "lines"}
-                onClick={() => onRailStyleChange("lines")}
-              >
-                Vector
-              </button>
-              <button
-                type="button"
-                className="hud-tab"
-                data-active={railStyle === "tiles"}
-                onClick={() => onRailStyleChange("tiles")}
-              >
-                ORM · tiles
-              </button>
-            </div>
-          </div>
-        )}
 
         {on && (
           <>

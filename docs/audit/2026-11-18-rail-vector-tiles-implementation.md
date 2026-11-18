@@ -17,9 +17,13 @@ Die erste Vector-Variante nutzte CARTO/Protomaps und darunter ORM-Raster. Das Ra
   Die TileJSON-URL liefert automatisch den aktuellen Planet-Build; es ist keine
   Tile-Version im App-Code gepinnt.
 - **Kein Overpass** mehr für Linien oder Stationen.
-- **Kein ORM-Raster-Fallback** mehr im Lines-Pfad. Die Vektor-Tiles enthalten
-  Bahnstrecken bereits bei niedrigen Zooms und werden von MapLibre pro Zoom
-  generalisiert.
+- **Kein ORM-Raster mehr.** Der Lines-Pfad ist die einzige Rail-Quelle; die
+  Vektor-Tiles enthalten Bahnstrecken bereits bei niedrigen Zooms und werden
+  von MapLibre pro Zoom generalisiert.
+- **Lazy + lokal gecacht:** MapLibre fordert nur sichtbare Tiles an. Über
+  `transformRequest` bekommen alle versionierten OpenFreeMap-`.pbf`-Tiles
+  `cache: "force-cache"`; sie bleiben im persistenten Browser-HTTP-Cache und
+  werden beim nächsten Besuch nicht neu geladen.
 - **Linien:** `transportation`-Layer, `class=rail` und `class=transit`.
   `transit` wird nach `subclass` eingefärbt (Tram, Narrow Gauge, Monorail,
   Light Rail); Tunnel (`brunnel=tunnel`) werden gestrichelt.
@@ -51,7 +55,7 @@ Headless Chromium mit echten OpenFreeMap-Tiles, App auf `localhost:3009`:
 - Toggle off → on: Layer und Source werden entfernt und wieder aufgebaut;
   danach wieder 38 Rails / 119 Stationen.
 - Screenshots: `app-z9.png`, `app-z12.png`, `app-z14.png` (lokal).
-- `npm test`: **238 Tests / 32 Dateien** grün.
+- `npm test`: **342 Tests / 48 Dateien** grün.
 - `npm run lint`, `npm run typecheck`, `npm run check:no-emoji`: clean.
 - `npm run build` mit `NEXT_PUBLIC_BASE_PATH`: erfolgreich.
 
@@ -60,8 +64,10 @@ Headless Chromium mit echten OpenFreeMap-Tiles, App auf `localhost:3009`:
 - OpenFreeMap liefert Infrastruktur, keine Live-Betriebsdaten.
 - Die Stationsabdeckung entspricht der OpenMapTiles-POI-Auswahl, nicht jedem
   OSM-Haltepunkt.
-- ORM-Raster bleibt als explizite Option `railStyle=tiles` erhalten, ist aber
-  nicht mehr der Standard und nicht mehr Teil des Vector-Pfads.
+- ORM-Raster und der Style-Umschalter sind entfernt; Rail ist immer Vektor.
+- OpenFreeMap liefert Tiles bis z14; darüber overzoomt MapLibre die z14-
+  Geometrie. Für mehr Detail jenseits z14 wäre ein anderer Vektor-Anbieter
+  nötig.
 - Bei einem Anbieterwechsel muss nur `RAIL_VECTOR_TILEJSON_URL` in
   `src/lib/railway.ts` angepasst werden.
 
