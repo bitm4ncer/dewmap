@@ -130,9 +130,28 @@ describe("labels and colours", () => {
   });
 
   it("prefers provider colours and picks readable text", () => {
-    expect(lineColor(leg({ routeColor: "ff0000" }))).toBe("#ff0000");
-    expect(lineTextColor(leg({ routeColor: "#ffffff" }))).toBe("#10120b");
-    expect(lineTextColor(leg({ routeColor: "#000000" }))).toBe("#ffffff");
+    expect(
+      lineColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "ff0000" })),
+    ).toBe("#ff0000");
+    expect(
+      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#ffffff" })),
+    ).toBe("#10120b");
+    expect(
+      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#000000" })),
+    ).toBe("#ffffff");
+  });
+
+  it("codes rail and tram types so transfers read at a glance", () => {
+    expect(lineColor(leg({ line: "S3", agency: "S-Bahn RheinNeckar" }))).toBe("#1E8A4C");
+    expect(lineColor(leg({ line: "ICE 576", agency: "DB Fernverkehr" }))).toBe("#F2F5F7");
+    expect(lineColor(leg({ line: "RE 10a", agency: "DB Regio" }))).toBe("#C7362F");
+    expect(lineColor(leg({ line: "26", rawMode: "TRAM", agency: "RNV" }))).toBe("#E8C547");
+    expect(lineColor(leg({ line: "FlixTrain 20", agency: "FlixTrain" }))).toBe("#A6F53C");
+    expect(lineColor(leg({ line: "FlixBus 091", agency: "FlixBus" }))).toBe("#A6F53C");
+    expect(lineTextColor(leg({ line: "S3" }))).toBe("#ffffff");
+    expect(lineTextColor(leg({ line: "ICE 576" }))).toBe("#10120b");
+    expect(lineTextColor(leg({ line: "RE 10a" }))).toBe("#ffffff");
+    expect(lineTextColor(leg({ line: "26", rawMode: "TRAM" }))).toBe("#10120b");
   });
 
   it("renders each stop in its own zone", () => {

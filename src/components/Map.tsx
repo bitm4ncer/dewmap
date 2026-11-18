@@ -1757,7 +1757,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [geoHeading, setGeoHeading] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
-  const { sheetRef, dragging, snapTo, handleProps, gestureProps } = useSheetGesture({
+  const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
     state: sheetState,
     onChange: setSheetState,
     enabled: isMobile,
@@ -3447,7 +3447,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             : "md:translate-x-[calc(100%+12px)]",
         ].join(" ")}
       >
-        <div className="hud-sheet-header" {...gestureProps}>
         {/* Drag handle — pointer-driven sheet resize with tap-to-toggle. */}
         <button
           type="button"
@@ -3491,7 +3490,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             <CloseIcon size={18} />
           </button>
         </nav>
-        </div>
 
         {/* Panel body — on desktop this is the full-height drawer. */}
         <div

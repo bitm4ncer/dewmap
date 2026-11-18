@@ -142,8 +142,10 @@ map controls, desktop drawer, navigation overlay, toasts, map popups.
 Static in-panel cards use solid `surf-1` — no blur inside blur. The
 mobile sheet is solid `surf-0`, because it is a full-height reading
 surface. Its peek/half/full states can be changed by a vertical swipe on
-the sheet header (grabber and tab row): at least 10 px of clearly vertical
-movement drags the sheet; horizontal movement remains a tab tap.
+the sheet header (grabber and tab row), or by pulling down from the top of
+the panel body: at least 10 px of clearly vertical movement drags the
+sheet; horizontal movement remains a tab tap. A completed drag never falls
+through as a click on the tab underneath.
 surface, not a floating control.
 
 **Text over glass.** The values above are the worst case: glass at `.84`
