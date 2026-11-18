@@ -29,6 +29,10 @@ Die erste Vector-Variante nutzte CARTO/Protomaps und darunter ORM-Raster. Das Ra
   Light Rail); Tunnel (`brunnel=tunnel`) werden gestrichelt.
 - **Stationen:** `poi`-Layer, `class=railway`, `subclass=station|halt`.
   Namen und `rank` kommen direkt aus den Tiles; Klick setzt einen Waypoint.
+  Der 18-px-Tap-Target ist mit `circle-opacity: 0` unsichtbar; `transparent`
+  als Farbe fiel in MapLibre teilweise als weiße Vollfläche aus und verdeckte
+  beim Neustart die Rail-Linien. Sichtbare Stationspunkte sind kleiner
+  (z10 2.2 → z14 3.2 → z17 4.5).
 - **Eigene Layer:**
   - `rail-vector-casing`
   - `rail-vector-main`
@@ -64,7 +68,7 @@ Headless Chromium mit echten OpenFreeMap-Tiles, App auf `localhost:3009`:
   z4 → 0, z5 → 0.2975, z6 → 0.595, z7 → 0.85 (bei Nutzer-Opacity 0.85);
   keine MapLibre-Expression-Fehler.
 - Screenshots: `app-z9.png`, `app-z12.png`, `app-z14.png` (lokal).
-- `npm test`: **343 Tests / 48 Dateien** grün.
+- `npm test`: **344 Tests / 48 Dateien** grün.
 - `npm run lint`, `npm run typecheck`, `npm run check:no-emoji`: clean.
 - `npm run build` mit `NEXT_PUBLIC_BASE_PATH`: erfolgreich.
 

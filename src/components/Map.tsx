@@ -490,8 +490,12 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
         ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
       ],
       paint: {
+        // Large invisible tap target. `transparent` is not reliable across
+        // MapLibre/style-spec versions and can fall back to a visible fill,
+        // which hides the rail lines behind big station circles.
         "circle-radius": 18,
-        "circle-color": "transparent",
+        "circle-color": THEME.casing,
+        "circle-opacity": 0,
         "circle-stroke-width": 0,
       },
     });
@@ -512,13 +516,13 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       paint: {
         "circle-radius": [
           "interpolate", ["linear"], ["zoom"],
-          10, 3,
-          14, 4.5,
-          17, 6,
+          10, 2.2,
+          14, 3.2,
+          17, 4.5,
         ],
         "circle-color": THEME.accent,
         "circle-stroke-color": THEME.casing,
-        "circle-stroke-width": 1.5,
+        "circle-stroke-width": 1.2,
         "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
       },
     });
