@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type SheetState = "peek" | "half" | "full";
+export type SheetState = "peek" | "modes" | "half" | "full";
 
-const ORDER: SheetState[] = ["peek", "half", "full"];
+const ORDER: SheetState[] = ["peek", "modes", "half", "full"];
 
 const GESTURE_AXIS_PX = 10;
 
@@ -27,7 +27,7 @@ export function pickSnap(
   state: SheetState,
   height: number,
   velocity: number,
-  snap: { peek: number; half: number; full: number },
+  snap: { peek: number; modes: number; half: number; full: number },
 ): SheetState {
   const idx = ORDER.indexOf(state);
   const current = snap[state];
@@ -96,6 +96,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     const peek = 56;
     return {
       peek,
+      modes: peek + 60,
       half: Math.round(vh * 0.48),
       full: Math.max(peek + 80, Math.round(vh - topbar)),
       min: 48,
@@ -106,7 +107,13 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
   const heightFor = useCallback(
     (s: SheetState) => {
       const h = heights();
-      return s === "peek" ? h.peek : s === "half" ? h.half : h.full;
+      return s === "peek"
+        ? h.peek
+        : s === "modes"
+          ? h.modes
+          : s === "half"
+            ? h.half
+            : h.full;
     },
     [heights],
   );

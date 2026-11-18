@@ -40,6 +40,7 @@ import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
+import type { RoutePoint } from "@/lib/routing/routeInput";
 import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
@@ -1561,6 +1562,10 @@ function buildLiveLocationEl(): {
 
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
+  const [pendingPin, setPendingPin] = useState<{
+    dest: RoutePoint;
+    start: RoutePoint;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
@@ -1575,6 +1580,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // effect so it doesn't fight finger-driven panning.
   const interactingRef = useRef(false);
   const [livePos, setLivePos] = useState<[number, number] | null>(null);
+
+  // Prefer the latest live fix over the fallback captured when pinning.
+  const pinStart: RoutePoint | null = pendingPin
+    ? livePos
+      ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+      : pendingPin.start
+    : null;
   const edgeRef = useRef<HTMLButtonElement | null>(null);
   const fromMarkerRef = useRef<maplibregl.Marker | null>(null);
   const toMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -1898,6 +1910,58 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const handleTransitSearchComplete = useCallback(() => {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
+
+  /** A pinned search result becomes the destination for the next mode pick. */
+  const handleSearchSelect = useCallback(
+    (result: GeocodeResult) => {
+      setFlyTarget(result);
+      const center = mapRef.current?.getCenter();
+      const start: RoutePoint = livePos
+        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+        : center
+          ? { name: "Map center", lat: center.lat, lon: center.lng }
+          : {
+              name: "Map center",
+              lat: result.coordinates[1],
+              lon: result.coordinates[0],
+            };
+      setPendingPin({
+        dest: {
+          name: result.name || result.label,
+          lat: result.coordinates[1],
+          lon: result.coordinates[0],
+          city: result.city,
+          kind: "address",
+        },
+        start,
+      });
+      // Without a live fix the map centre is only a fallback; ask for the
+      // real position so the route starts where the user is.
+      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) =>
+            setPendingPin((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    start: {
+                      name: "My location",
+                      lat: pos.coords.latitude,
+                      lon: pos.coords.longitude,
+                    },
+                  }
+                : prev,
+            ),
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
+        );
+      }
+      snapTo(isMobile ? "modes" : "half");
+    },
+    [isMobile, livePos, snapTo],
+  );
+
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -3418,7 +3482,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         className={["ui-topbar", sidebarOpen ? "ui-topbar--with-panel" : ""].join(" ")}
       >
         <div className="ui-search-wrap">
-          <SearchBox onSelect={setFlyTarget} getNearby={() => { const m = mapRef.current; if (!m) return undefined; const c = m.getCenter(); return [c.lng, c.lat]; }} />
+          <SearchBox onSelect={handleSearchSelect} getNearby={() => { const m = mapRef.current; if (!m) return undefined; const c = m.getCenter(); return [c.lng, c.lat]; }} />
         </div>
         <div className="pointer-events-auto hidden shrink-0 md:block">
           <BasemapSwitch mode={basemapMode} onModeChange={setBasemapMode} />
@@ -3611,6 +3675,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 mode={routesMode}
                 onModeChange={setRoutesMode}
                 onSearchComplete={handleTransitSearchComplete}
+                pendingPin={pendingPin?.dest ?? null}
+                pinStart={pinStart}
+                onPinConsumed={() => setPendingPin(null)}
+                onRouteStarted={() => snapTo("half")}
               />
             ) : activePane === "history" ? (
               <HistoryPanel

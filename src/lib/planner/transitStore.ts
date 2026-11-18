@@ -54,9 +54,17 @@ interface TransitState {
   previousCursor: string | null;
   favorites: TransitPlace[];
   recents: TransitPlace[];
+  /** Bumped when another mode hands over a ready-to-run transit search. */
+  searchToken: number;
 
   setFrom: (p: TransitPlace | null) => void;
   setTo: (p: TransitPlace | null) => void;
+  setRouteInput: (
+    from: TransitPlace | null,
+    to: TransitPlace | null,
+    via: TransitPlace[],
+  ) => void;
+  requestSearch: () => void;
   addVia: (p: TransitPlace) => void;
   setVia: (places: TransitPlace[]) => void;
   setViaAt: (index: number, p: TransitPlace | null) => void;
@@ -166,6 +174,7 @@ const initialState = {
   previousCursor: null,
   favorites: [] as TransitPlace[],
   recents: [] as TransitPlace[],
+  searchToken: 0,
 };
 
 function invalidate(
@@ -208,6 +217,22 @@ export const useTransit = create<TransitState>()(
           nextCursor: null,
           previousCursor: null,
         }),
+      setRouteInput: (from, to, via) =>
+        set({
+          from,
+          to,
+          via: via.slice(0, 2),
+          journeys: [],
+          selectedId: null,
+          phase: { kind: "idle" },
+          notice: null,
+          stale: false,
+          lastSearchedAt: null,
+          nextCursor: null,
+          previousCursor: null,
+        }),
+      requestSearch: () =>
+        set((s) => ({ searchToken: s.searchToken + 1 })),
       addVia: (place) =>
         set((s) => {
           if (s.via.some((entry) => entry && placeKey(entry) === placeKey(place))) {

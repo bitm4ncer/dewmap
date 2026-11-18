@@ -94,6 +94,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const lastSearchedAt = useTransit((s) => s.lastSearchedAt);
   const nextCursor = useTransit((s) => s.nextCursor);
   const previousCursor = useTransit((s) => s.previousCursor);
+  const searchToken = useTransit((s) => s.searchToken);
   const favorites = useTransit((s) => s.favorites);
   const recents = useTransit((s) => s.recents);
 
@@ -398,6 +399,14 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   useEffect(() => {
     searchRef.current = search;
   }, [search]);
+
+  // Another travel mode handed over a ready-to-run transit search.
+  const lastSearchToken = useRef(0);
+  useEffect(() => {
+    if (searchToken === lastSearchToken.current) return;
+    lastSearchToken.current = searchToken;
+    if (from && to) void searchRef.current();
+  }, [searchToken, from, to]);
   useEffect(() => {
     if (swapTick === 0) return;
     void searchRef.current();

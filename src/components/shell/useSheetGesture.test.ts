@@ -19,12 +19,14 @@ describe("sheet gesture", () => {
   });
 
   it("snaps one step in the drag direction", () => {
-    const snap = { peek: 56, half: 405, full: 844 };
+    const snap = { peek: 56, modes: 116, half: 405, full: 844 };
     expect(pickSnap("half", 665, -0.5, snap)).toBe("full");
     expect(pickSnap("full", 624, 0.5, snap)).toBe("half");
     expect(pickSnap("half", 405, -0.9, snap)).toBe("full"); // flick wins
-    expect(pickSnap("peek", 110, 0, snap)).toBe("peek"); // short drag returns
+    expect(pickSnap("peek", 70, 0, snap)).toBe("peek"); // short drag returns
     expect(pickSnap("peek", 300, 0.9, snap)).toBe("peek"); // no lower state
+    expect(pickSnap("modes", 160, 0, snap)).toBe("modes"); // small drag returns
+    expect(pickSnap("modes", 260, -0.9, snap)).toBe("half"); // flick up
   });
 
   it("keeps panel-body scrolling native until the top", () => {

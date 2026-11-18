@@ -399,6 +399,9 @@ body {
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] { --sheet-base: var(--hud-peek-h); }
+  .hud-bottom-sheet[data-sheet-state="modes"] {
+    --sheet-base: calc(var(--hud-peek-h) + 60px);
+  }
   .hud-bottom-sheet[data-sheet-state="half"] { --sheet-base: 48dvh; }
   .hud-bottom-sheet[data-sheet-state="full"] {
     --sheet-base: 100dvh;
@@ -620,8 +623,10 @@ body {
   .maplibregl-ctrl-projection,
   .maplibregl-ctrl-orientation { display: none !important; }
 
+  body:has(.hud-bottom-sheet[data-sheet-state="modes"]) .maplibregl-ctrl-bottom-left,
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-left,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-left,
+  body:has(.hud-bottom-sheet[data-sheet-state="modes"]) .maplibregl-ctrl-bottom-right,
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-right,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-right {
     opacity: 0;
