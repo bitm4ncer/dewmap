@@ -87,6 +87,75 @@ const SOURCES: Source[] = [
     detail: "Historical basemap and time-filtered map data.",
     href: "https://www.openhistoricalmap.org/",
   },
+  {
+    name: "OpenFreeMap · VersaTiles",
+    detail:
+      "Keyless OpenStreetMap vector basemaps and styles, used as independent fallbacks.",
+    href: "https://openfreemap.org/",
+  },
+  {
+    name: "basemap.de · BKG",
+    detail:
+      "Official German web map, topographic map and vector tiles (DL-DE-BY 2.0).",
+    href: "https://basemap.de/",
+  },
+  {
+    name: "basemap.at",
+    detail:
+      "Official Austrian base map and orthophoto, including Vienna's historical aerial series (CC BY 4.0).",
+    href: "https://basemap.at/",
+  },
+  {
+    name: "swisstopo",
+    detail:
+      "Swiss national maps, SWISSIMAGE orthophotos and the Siegfried, Dufour and Zeitreihen historical series.",
+    href: "https://www.swisstopo.admin.ch/",
+  },
+  {
+    name: "IGN Géoplateforme",
+    detail:
+      "French national maps, orthophotos, État-Major, Scan50, Cassini and post-war aerial series (Licence Ouverte 2.0).",
+    href: "https://geoservices.ign.fr/",
+  },
+  {
+    name: "PDOK · Kadaster",
+    detail: "Dutch BRT background map and aerial orthophotos.",
+    href: "https://www.pdok.nl/",
+  },
+  {
+    name: "Kartverket · Geonorge",
+    detail: "Norwegian topographic, sea and historical maps (CC BY 4.0).",
+    href: "https://www.geonorge.no/",
+  },
+  {
+    name: "ČÚZK · GUGiK · IGN España",
+    detail:
+      "Czech, Polish and Spanish national orthophotos and topographic maps.",
+    href: "https://www.cuzk.cz/",
+  },
+  {
+    name: "Stadt Wien · GIS-ZH",
+    detail:
+      "Vienna's 1938/1956/1976/1992 aerial plans and Zurich's Wildkarte (~1850).",
+    href: "https://www.wien.gv.at/stadtplanung/karten",
+  },
+  {
+    name: "National Library of Scotland",
+    detail:
+      "Georeferenced OS 6-inch maps of the UK, first and second editions (CC BY-NC 4.0).",
+    href: "https://maps.nls.uk/",
+  },
+  {
+    name: "USGS · GSI Japan",
+    detail:
+      "US National Map imagery/topo and Japan's GSI current and 1961–69 aerial imagery.",
+    href: "https://basemap.nationalmap.gov/",
+  },
+  {
+    name: "EMODnet",
+    detail: "European sea-floor bathymetry basemap.",
+    href: "https://emodnet.ec.europa.eu/en/bathymetry",
+  },
 ];
 
 export function DataSourcesPanel() {

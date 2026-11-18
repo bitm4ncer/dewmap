@@ -7,12 +7,15 @@ import { THEME } from "@/lib/theme";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   BASEMAPS,
-  DEFAULT_IMAGE_BASEMAP_ID,
+  BASEMAP_GROUP_LABELS,
+  BASEMAP_GROUP_ORDER,
   DEFAULT_VECTOR_BASEMAP_ID,
+  basemapsInGroup,
   getActiveVariant,
   resolveBasemapSubtitle,
   resolveBasemapUrl,
   type Basemap,
+  type BasemapGroup,
 } from "@/lib/basemaps";
 import {
   useSettings,
@@ -25,7 +28,9 @@ import { searchCatalog, type Snapshot } from "@/lib/sentinel/catalog";
 import type { Bbox, Credentials } from "@/types/sentinel";
 import { SettingsGear } from "./SettingsGear";
 import { SearchBox } from "./SearchBox";
+import { Spinner } from "./ui/Spinner";
 import { PoiDetail } from "./poi/PoiDetail";
+import { prefersReducedMotion } from "@/lib/motion";
 import type { PoiSelection } from "@/lib/poi";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
@@ -264,6 +269,7 @@ function rasterStyle(basemap: Basemap, variantId?: string, dayOffset?: number) {
         tiles: [resolveBasemapUrl(basemap, variantId, dayOffset)],
         tileSize: basemap.tileSize ?? 256,
         attribution: basemap.attribution,
+        bounds: basemap.bounds,
         maxzoom: basemap.maxzoom ?? 18,
       },
     },
@@ -1198,7 +1204,8 @@ async function findLatestNo2Source(): Promise<No2Source | null> {
     for (const candidate of NO2_LAYER_CANDIDATES) {
       // The daily OMI product lags by up to ~3 weeks. Probe a month in
       // parallel; the first hit wins.
-      const dates = Array.from({ length: 30 }, (_, i) => gibsDateNDaysAgo(i + 1));
+      // Two-day lag: yesterday's high-zoom VIIRS tiles are often still blank.
+      const dates = Array.from({ length: 30 }, (_, i) => gibsDateNDaysAgo(i + 2));
       const hits = await Promise.all(
         dates.map(async (date) => {
           const url = no2ProbeUrl(candidate.layer, candidate.matrix, date);
@@ -2410,6 +2417,33 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     lastAppliedBasemapKeyRef.current = key;
     applyBasemap(map, basemap, activeVariantId, effectiveOffset);
 
+    // Remote vector styles (OpenFreeMap, VersaTiles, basemap.de, …) can
+    // fail to load without throwing. A stalled CDN would otherwise leave
+    // a blank map with no feedback. Revert to the default vector style
+    // after 12 s, but only if the user has not picked another basemap.
+    let styleWatchdog: ReturnType<typeof setTimeout> | undefined;
+    let clearStyleWatchdog: (() => void) | undefined;
+    if (basemap.kind === "style") {
+      clearStyleWatchdog = () => {
+        if (styleWatchdog) clearTimeout(styleWatchdog);
+        styleWatchdog = undefined;
+      };
+      if (map.isStyleLoaded()) {
+        clearStyleWatchdog();
+      } else {
+        map.once("style.load", clearStyleWatchdog);
+        styleWatchdog = setTimeout(() => {
+          if (lastAppliedBasemapKeyRef.current !== key) return;
+          console.warn(
+            `[basemap] ${basemap.id} style did not load within 12 s; falling back`,
+          );
+          lastAppliedBasemapKeyRef.current = null;
+          setVectorBasemapId(DEFAULT_VECTOR_BASEMAP_ID);
+          setBasemapMode("vector");
+        }, 12_000);
+      }
+    }
+
     const reapply = () => {
       map.setProjection({ type: projection });
       if (sector) setSectorOutline(map, sector);
@@ -2425,6 +2459,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     } else {
       map.once("style.load", reapply);
     }
+    return () => {
+      clearStyleWatchdog?.();
+      if (clearStyleWatchdog) map.off("style.load", clearStyleWatchdog);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, activeVariantId, liveBasemapDayOffset]);
 
@@ -2551,7 +2589,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         map.flyTo({
           center: [e.coords.longitude, e.coords.latitude],
           zoom: Math.max(map.getZoom(), 14),
-          duration: 900,
+          duration: prefersReducedMotion() ? 0 : 700,
         });
       }
     };
@@ -2671,7 +2709,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const bearing = ((map.getBearing() % 360) + 360) % 360;
       if (bearing > 0.5 && bearing < 359.5) {
         try {
-          map.easeTo({ bearing: 0, duration: 300 });
+          map.easeTo({ bearing: 0, duration: prefersReducedMotion() ? 0 : 300 });
         } catch {
           /* style not yet loaded */
         }
@@ -2700,7 +2738,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (Math.abs(delta) < 2) return;
 
     try {
-      map.easeTo({ bearing: target, duration: 180, easing: (s) => s });
+      map.easeTo({
+        bearing: target,
+        duration: prefersReducedMotion() ? 0 : 180,
+        easing: (s) => s,
+      });
     } catch {
       /* style not yet loaded */
     }
@@ -3670,7 +3712,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           [west, south],
           [east, north],
         ],
-        { padding: 60, duration: 900, maxZoom: 15 },
+        { padding: 60, duration: prefersReducedMotion() ? 0 : 700, maxZoom: 15 },
       );
     } else {
       const cat = flyTarget.category;
@@ -3680,7 +3722,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       else if (cat === "country") zoom = 5;
       else if (cat === "state" || cat === "region") zoom = 7;
       else if (cat === "house" || cat === "building") zoom = 17;
-      map.flyTo({ center: flyTarget.coordinates, zoom, duration: 900 });
+      map.flyTo({
+        center: flyTarget.coordinates,
+        zoom,
+        duration: prefersReducedMotion() ? 0 : 700,
+      });
     }
   }, [flyTarget]);
 
@@ -3729,7 +3775,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           mapInstance.flyTo({
             center: livePos,
             zoom: Math.max(mapInstance.getZoom(), 14),
-            duration: 700,
+            duration: prefersReducedMotion() ? 0 : 600,
           });
         }}
       >
@@ -3756,16 +3802,26 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         && (railNetworkStatus.inFlight > 0
           || railNetworkStatus.cooldownUntil > Date.now()) && (
         <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div className="hud-panel hud-mono flex items-center gap-2 px-4 py-2 text-[11.5px] text-[color:var(--ink)]">
-            <span
-              aria-hidden
-              className="hud-loading-dot"
-              data-state={
-                railNetworkStatus.cooldownUntil > Date.now()
-                  ? "throttled"
-                  : "loading"
-              }
-            />
+          <div
+            className="hud-panel hud-mono flex items-center gap-2 px-4 py-2 text-[11.5px] text-[color:var(--ink)]"
+            role={
+              railNetworkStatus.cooldownUntil > Date.now()
+                ? undefined
+                : "status"
+            }
+            aria-live={
+              railNetworkStatus.cooldownUntil > Date.now() ? "off" : "polite"
+            }
+          >
+            {railNetworkStatus.cooldownUntil > Date.now() ? (
+              <span
+                aria-hidden
+                className="hud-loading-dot"
+                data-state="throttled"
+              />
+            ) : (
+              <Spinner size={13} />
+            )}
             <span>
               {railNetworkStatus.cooldownUntil > Date.now()
                 ? `Overpass throttled · ${Math.max(
@@ -4027,6 +4083,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   mode={basemapMode}
                   variants={basemapVariants}
                   liveBasemapDayOffset={liveBasemapDayOffset}
+                  map={mapInstance}
                   onSelectImage={(id) => {
                     setImageBasemapId(id);
                     if (basemapMode === "vector") setBasemapMode("photo");
@@ -4035,6 +4092,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     setVectorBasemapId(id);
                     if (basemapMode !== "vector") setBasemapMode("vector");
                   }}
+                  onSelectVariant={(id, variantId) =>
+                    setBasemapVariant(id, variantId)
+                  }
                 />
 
                 <TimelinePanel
@@ -4111,7 +4171,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           const map = mapRef.current;
           const pos = navigation.position;
           if (map && pos) {
-            map.easeTo({ center: [pos.lon, pos.lat], zoom: 16, duration: 600 });
+            map.easeTo({
+            center: [pos.lon, pos.lat],
+            zoom: 16,
+            duration: prefersReducedMotion() ? 0 : 450,
+          });
           }
         }}
       />
@@ -4153,9 +4217,76 @@ interface BasemapPanelProps {
   mode: BasemapMode;
   variants: Record<string, string>;
   liveBasemapDayOffset: number;
+  map: MLMap | null;
   onSelectImage: (id: string) => void;
   onSelectVector: (id: string) => void;
+  onSelectVariant: (id: string, variantId: string) => void;
 }
+
+/**
+ * Variant chips for short series (years, editions), a native select for
+ * long series (Zeitreise, Swiss history). Rendered only for the selected
+ * basemap, directly below it.
+ */
+function BasemapVariantControl({
+  basemap,
+  value,
+  onChange,
+}: {
+  basemap: Basemap;
+  value: string | undefined;
+  onChange: (variantId: string) => void;
+}) {
+  const spec = basemap.variants;
+  if (!spec || spec.options.length === 0) return null;
+  const active = getActiveVariant(basemap, value) ?? spec.options[0];
+  if (spec.options.length > 8) {
+    const isYear = spec.options.every((o) => /^\d{4}$/.test(o.id));
+    return (
+      <label className="flex items-center gap-2 px-1 pb-1">
+        <span className="hud-label shrink-0 text-[10px]">
+          {isYear ? "Year" : "Edition"}
+        </span>
+        <select
+          value={active.id}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={`${basemap.label} ${isYear ? "year" : "edition"}`}
+          className="hud-mono h-8 min-w-0 flex-1 rounded-lg bg-[color:var(--surf-2)] px-2 text-[12px] text-[color:var(--ink)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]"
+        >
+          {spec.options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  return (
+    <div
+      className="hud-variant-chips no-scrollbar"
+      role="radiogroup"
+      aria-label={`${basemap.label} variant`}
+    >
+      {spec.options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          role="radio"
+          aria-checked={option.id === active.id}
+          data-active={option.id === active.id}
+          onClick={() => onChange(option.id)}
+          className="hud-variant-chip hud-mono"
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Remember the picker filter for the session, even if the panel unmounts. */
+let lastBasemapGroup: BasemapGroup | "all" = "all";
 
 function BasemapPanel({
   imageId,
@@ -4163,28 +4294,64 @@ function BasemapPanel({
   mode,
   variants,
   liveBasemapDayOffset,
+  map,
   onSelectImage,
   onSelectVector,
+  onSelectVariant,
 }: BasemapPanelProps) {
-  const imageMaps = BASEMAPS.filter((b) => b.category === "photo");
-  const vectorMaps = BASEMAPS.filter((b) => b.category === "vector");
+  const [group, setGroup] = useState<BasemapGroup | "all">(lastBasemapGroup);
+  const [center, setCenter] = useState<[number, number] | null>(null);
+
+  useEffect(() => {
+    if (!map) return;
+    const sync = () => {
+      const c = map.getCenter();
+      setCenter([c.lng, c.lat]);
+    };
+    sync();
+    map.on("moveend", sync);
+    map.on("zoomend", sync);
+    return () => {
+      map.off("moveend", sync);
+      map.off("zoomend", sync);
+    };
+  }, [map]);
+
+  const outsideCoverage = (basemap: Basemap) => {
+    if (!basemap.bounds || !center) return false;
+    const [west, south, east, north] = basemap.bounds;
+    return (
+      center[0] < west ||
+      center[0] > east ||
+      center[1] < south ||
+      center[1] > north
+    );
+  };
+  const filtered = basemapsInGroup(group);
+  const imageMaps = filtered.filter((b) => b.category === "photo");
+  const vectorMaps = filtered.filter((b) => b.category === "vector");
 
   const renderGroup = (
     label: string,
     items: Basemap[],
     selectedId: string,
-    isLive: boolean,
+    isActive: boolean,
     onSelect: (id: string) => void,
-    fallbackId: string,
   ) => {
+    if (items.length === 0) return null;
+    // If the active map is outside the current filter, do not fake a
+    // selection on a different row.
     const effectiveId = items.some((b) => b.id === selectedId)
       ? selectedId
-      : fallbackId;
+      : "";
+    const showActive = isActive && effectiveId !== "";
     return (
       <div className="flex flex-col gap-1">
         <div className="hud-section-heading">
-          <span className="hud-label text-[11px]">{label}</span>
-          {isLive && (
+          <span className="hud-label text-[11px]">
+            {label} · {items.length}
+          </span>
+          {showActive && (
             <span
               className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[color:var(--accent)]"
               aria-label="currently displayed"
@@ -4193,7 +4360,7 @@ function BasemapPanel({
                 className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--accent)]"
                 aria-hidden
               />
-              Live
+              Active
             </span>
           )}
           <span className="line" aria-hidden />
@@ -4207,23 +4374,43 @@ function BasemapPanel({
               variants[b.id],
               b.id === "gibs-today" ? liveBasemapDayOffset : undefined,
             );
+            const meta = [subtitle, b.coverage].filter(Boolean).join(" · ");
             return (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => onSelect(b.id)}
-                data-active={selected}
-                data-live={selected && isLive}
-                className="hud-basemap-btn flex flex-col items-stretch"
-                aria-pressed={selected}
-              >
-                <span className="leading-tight">
-                  {variant ? `${b.label} · ${variant.label}` : b.label}
-                </span>
-                {subtitle && (
-                  <span className="hud-basemap-btn-subtitle">{subtitle}</span>
+              <div key={b.id} className="flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => onSelect(b.id)}
+                  data-active={selected}
+                  data-live={selected && isActive}
+                  className="hud-basemap-btn flex flex-col items-stretch"
+                  aria-pressed={selected}
+                  title={[b.provider, b.license].filter(Boolean).join(" · ")}
+                >
+                  <span className="leading-tight">
+                    {variant ? `${b.label} · ${variant.label}` : b.label}
+                  </span>
+                  {meta && (
+                    <span className="hud-basemap-btn-subtitle">{meta}</span>
+                  )}
+                </button>
+                {selected && b.variants && (
+                  <BasemapVariantControl
+                    basemap={b}
+                    value={variants[b.id]}
+                    onChange={(variantId) => onSelectVariant(b.id, variantId)}
+                  />
                 )}
-              </button>
+                {selected && (b.provider || b.license) && (
+                  <span className="px-1 pb-1 text-[10.5px] text-[color:var(--ink-mute)]">
+                    {[b.provider, b.license].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+                {selected && outsideCoverage(b) && (
+                  <span className="px-1 pb-1 text-[10.5px] text-[color:var(--warn)]">
+                    Outside coverage ({b.coverage})
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
@@ -4234,13 +4421,34 @@ function BasemapPanel({
   return (
     <HudPanel label="Basemap">
       <div className="flex flex-col gap-3">
+        <div
+          className="hud-variant-chips no-scrollbar"
+          role="tablist"
+          aria-label="Basemap collection"
+        >
+          {BASEMAP_GROUP_ORDER.map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={group === key}
+              data-active={group === key}
+              onClick={() => {
+                lastBasemapGroup = key;
+                setGroup(key);
+              }}
+              className="hud-variant-chip"
+            >
+              {BASEMAP_GROUP_LABELS[key]}
+            </button>
+          ))}
+        </div>
         {renderGroup(
           "Vector Maps",
           vectorMaps,
           vectorId,
           mode === "vector",
           onSelectVector,
-          DEFAULT_VECTOR_BASEMAP_ID,
         )}
         {renderGroup(
           "Image Maps",
@@ -4248,7 +4456,6 @@ function BasemapPanel({
           imageId,
           mode === "photo" || mode === "hybrid",
           onSelectImage,
-          DEFAULT_IMAGE_BASEMAP_ID,
         )}
       </div>
     </HudPanel>
@@ -4805,13 +5012,13 @@ function TimelineLiveTab({
     return () => window.clearInterval(id);
   }, [playing, offset, onChange]);
   const date = new Date();
-  date.setUTCDate(date.getUTCDate() - (offset + 1));
+  date.setUTCDate(date.getUTCDate() - (offset + 2));
   const niceDate = date.toLocaleDateString(undefined, {
     weekday: "short",
     day: "numeric",
     month: "short",
   });
-  const relative = offset === 0 ? "yesterday" : `${offset + 1} days ago`;
+  const relative = `${offset + 2} days ago`;
   const setOffset = (next: number) => {
     if (!isActive) onActivate();
     setPlaying(false);
@@ -4820,7 +5027,7 @@ function TimelineLiveTab({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-[11.5px] text-[color:var(--ink-dim)]">
-        NOAA-20 VIIRS daily true-color · step through the past 14 days
+        NOAA-20 VIIRS daily true-color · past 14 days · 2-day lag
       </p>
       <div className="flex items-center justify-between gap-2">
         <button
@@ -4928,10 +5135,10 @@ function TimelineSnapshotsTab({
     <div className="flex flex-col items-stretch gap-2">
       <div className="flex items-center justify-between gap-2">
         {state.kind === "searching" || state.kind === "loading" ? (
-          <span
-            className="inline-block h-2 w-2 animate-pulse rounded-full bg-[color:var(--accent)]"
-            aria-label="Loading"
-          />
+          <span className="ui-loading-inline" role="status" aria-live="polite">
+            <Spinner size={13} />
+            <span className="sr-only">Loading timeline data</span>
+          </span>
         ) : (
           <span />
         )}

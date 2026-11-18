@@ -40,7 +40,7 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 | Feature | What it does |
 |---|---|
 | **Search** | Places, streets and stations via Photon, with detail cards for OSM places: photos, opening hours, contact, website and Wikipedia/Wikidata. |
-| **Basemaps** | Esri satellite, Sentinel-2 cloudless (2024/2023), NASA Black Marble night lights, EOX Terrain and CARTO Streets dark/light. The dark vector style is re-tinted to the Graphite palette and is the default. |
+| **Basemaps** | Global imagery (Esri, Sentinel-2, NASA GIBS) and keyless vector styles (CARTO, OpenFreeMap, VersaTiles); official DACH maps (basemap.de, basemap.at, swisstopo, Bayern); European national maps (IGN, PDOK, Kartverket, ČÚZK, GUGiK, IGN España); and historical layers (Siegfried, Dufour, Zeitreihen, IGN État-Major/Scan50/Cassini, Vienna 1938–1992, Zurich ~1850, NLS, Kartverket). Group filters and year variants keep the collection navigable. The Graphite-tinted CARTO dark style is the default. |
 | **Modes** | Image, Hybrid (satellite plus transport) and Vector. |
 | **Projection** | Flat Mercator or a 3D globe. |
 | **Orientation** | North-up, route-up or compass heading. |
@@ -90,6 +90,13 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 |---|---|
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) | Basemap data, POIs, hiking and cycling infrastructure |
 | [Esri / Maxar](https://www.esri.com/) | Satellite and hybrid reference imagery |
+| [OpenFreeMap](https://openfreemap.org/) · [VersaTiles](https://versatiles.org/) | Keyless OpenStreetMap vector basemaps and styles |
+| [basemap.de / BKG](https://basemap.de/) | Official German web map, topo and vector tiles |
+| [basemap.at](https://basemap.at/) | Official Austrian map and orthophoto |
+| [swisstopo](https://www.swisstopo.admin.ch/) | Swiss national maps, orthophotos and historical series |
+| [IGN Géoplateforme](https://geoservices.ign.fr/) | French maps, orthophotos and historical series |
+| [PDOK](https://www.pdok.nl/) · [Kartverket](https://www.geonorge.no/) | Dutch and Norwegian national maps |
+| [National Library of Scotland](https://maps.nls.uk/) | Georeferenced historical OS maps (CC BY-NC) |
 | [Sentinel-2 · Copernicus](https://dataspace.copernicus.eu/) | Cloudless annual mosaics and daily true-colour scenes |
 | [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | Near-real-time imagery and atmospheric layers |
 | [OpenRailwayMap](https://www.openrailwaymap.org/) | Rail infrastructure overlay |
