@@ -1,4 +1,5 @@
 import { FileSource, PMTiles, Protocol } from "pmtiles";
+import type { AddProtocolAction } from "maplibre-gl";
 import type { HistoricManifest, HistoricManifestFile } from "./types";
 
 export type ArchiveMode = "range" | "full" | "missing";
@@ -9,7 +10,7 @@ export interface ProbeResult {
 }
 
 interface MapLibreLike {
-  addProtocol: (name: string, handler: unknown) => void;
+  addProtocol: (name: string, handler: AddProtocolAction) => void;
 }
 
 const PMTILES_MAGIC = "PMTiles";

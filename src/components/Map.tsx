@@ -66,6 +66,17 @@ import {
 } from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
+import { useHistoryLayers } from "./history/useHistoryLayers";
+import {
+  escapeHistoryHtml,
+  fetchSiteDetail,
+  siteDetailHeader,
+  siteDetailLinks,
+} from "@/lib/history/detail";
+import type {
+  HistoricCategory,
+  HistoricSiteTile,
+} from "@/lib/history/types";
 import {
   HISTORY_UNDATED_VISIBLE_FROM,
   fetchLandmarksForBounds,
@@ -1646,6 +1657,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     landCoverOpacity,
     historyLandmarksOn,
     historyLandmarksOpacity,
+    historyHeritageOnly,
+    historyUnescoOnly,
     historyMapOn,
     historyYear,
     setImageBasemapId,
@@ -1673,6 +1686,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setLandCoverOpacity,
     setHistoryLandmarksOn,
     setHistoryLandmarksOpacity,
+    setHistoryHeritageOnly,
+    setHistoryUnescoOnly,
     setHistoryMapOn,
     setHistoryYear,
   } = useSettings();
@@ -1800,6 +1815,58 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
+  const [historyCategories] = useState<HistoricCategory[]>([]);
+  const historyGlobalActive = activePane === "history" && sidebarOpen;
+  const historyGlobal = useHistoryLayers(mapInstance, {
+    enabled: historyGlobalActive,
+    year: historyYear,
+    categories: historyCategories,
+    heritageOnly: historyHeritageOnly,
+    unescoOnly: historyUnescoOnly,
+    onSiteClick: (site: HistoricSiteTile, coordinates: [number, number]) => {
+      const map = mapInstance;
+      if (!map) return;
+      historyPopupRef.current?.remove();
+      const popup = new maplibregl.Popup({
+        className: "hud-popup",
+        closeButton: true,
+        closeOnClick: true,
+        maxWidth: "300px",
+        offset: 12,
+      })
+        .setLngLat(coordinates)
+        .setHTML(
+          `${siteDetailHeader(site)}<div class="hud-popup-body" data-state="loading">Loading summary…</div>`,
+        )
+        .addTo(map);
+      historyPopupRef.current = popup;
+      fetchSiteDetail(site)
+        .then((detail) => {
+          if (popup !== historyPopupRef.current) return;
+          const summary = detail.summary
+            ? `<div class="hud-popup-body"><p>${escapeHistoryHtml(
+                detail.summary.extract,
+              )}</p><a class="hud-popup-link" href="${escapeHistoryHtml(
+                detail.summary.url,
+              )}" target="_blank" rel="noopener noreferrer">Wikipedia ↗</a></div>`
+            : '<div class="hud-popup-body">No Wikipedia article linked.</div>';
+          const image = detail.image
+            ? `<img class="hud-popup-thumb" src="${escapeHistoryHtml(
+                detail.image,
+              )}" alt="" loading="lazy" />`
+            : "";
+          popup.setHTML(
+            `${siteDetailHeader(site)}${summary}${image}${siteDetailLinks(site)}`,
+          );
+        })
+        .catch(() => {
+          // Keep the header visible; enrichment is best-effort.
+        });
+    },
+  });
+
+  const liveHistoryLandmarksOn =
+    historyLandmarksOn && historyGlobal.status !== "ready";
 
   const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
     state: sheetState,
@@ -2959,7 +3026,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // ── History · landmarks ──────────────────────────────────────────
   // Toggle off → wipe everything: layer + cached visible state + popup.
   useEffect(() => {
-    if (!historyLandmarksOn) {
+    if (!liveHistoryLandmarksOn) {
       const map = mapRef.current;
       if (map) removeHistoryLandmarksLayer(map);
       historyPopupRef.current?.remove();
@@ -2970,14 +3037,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       setHistoryEarliestYear(null);
       /* eslint-enable react-hooks/set-state-in-effect */
     }
-  }, [historyLandmarksOn]);
+  }, [liveHistoryLandmarksOn]);
 
   // Toggle on / pan / zoom → ensure layer, render cached features
   // immediately, fetch missing tiles in the background, click handler
   // for the Wikipedia popup.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !historyLandmarksOn) return;
+    if (!map || !liveHistoryLandmarksOn) return;
     let cancelled = false;
     let pendingFetch: AbortController | null = null;
     let requestId = 0;
@@ -3190,12 +3257,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("mouseleave", HISTORY_LANDMARKS_HIT_LAYER_ID, onLeave);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyLandmarksOn, active]);
+  }, [liveHistoryLandmarksOn, active]);
 
   // Slider drag → no refetch, just `setFilter` + recount. Cheap.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !historyLandmarksOn) return;
+    if (!map || !liveHistoryLandmarksOn) return;
     applyHistoryLandmarksFilter(map, historyYear);
     const data = historyDataRef.current;
     if (data) {
@@ -3205,13 +3272,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         ).length,
       );
     }
-  }, [historyLandmarksOn, historyYear]);
+  }, [liveHistoryLandmarksOn, historyYear]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !historyLandmarksOn) return;
+    if (!map || !liveHistoryLandmarksOn) return;
     applyHistoryLandmarksOpacity(map, historyLandmarksOpacity);
-  }, [historyLandmarksOn, historyLandmarksOpacity]);
+  }, [liveHistoryLandmarksOn, historyLandmarksOpacity]);
 
   // ── History · OHM date filter ────────────────────────────────────
   // The basemap swap to OHM is handled by the main basemap-apply
@@ -3866,9 +3933,17 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 earliestVisibleYear={historyEarliestYear}
                 visibleCount={historyVisibleCount}
                 loading={historyLoading}
+                globalStatus={historyGlobal.status}
+                globalCount={historyGlobal.count}
+                globalTotal={historyGlobal.total}
+                globalDataAsOf={historyGlobal.dataAsOf}
+                heritageOnly={historyHeritageOnly}
+                onHeritageOnlyChange={setHistoryHeritageOnly}
+                unescoOnly={historyUnescoOnly}
+                onUnescoOnlyChange={setHistoryUnescoOnly}
                 mapOn={historyMapOn}
                 onMapOnChange={setHistoryMapOn}
-                landmarksOn={historyLandmarksOn}
+                landmarksOn={liveHistoryLandmarksOn}
                 landmarksOpacity={historyLandmarksOpacity}
                 onLandmarksOnChange={setHistoryLandmarksOn}
                 onLandmarksOpacityChange={setHistoryLandmarksOpacity}

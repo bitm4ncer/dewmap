@@ -1,3 +1,5 @@
+import type { WikipediaSummary } from "./wikipedia";
+
 export const HISTORIC_CATEGORIES = [
   "castle",
   "religious",
@@ -25,7 +27,7 @@ export interface HistoricSiteTile {
 
 /** A site plus its click-time enrichment; never stored in the tiles. */
 export interface HistoricSiteDetail {
-  summary: string | null;
+  summary: WikipediaSummary | null;
   image: string | null;
   kind?: string;
   wikipedia?: string;

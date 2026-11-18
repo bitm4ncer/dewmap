@@ -68,6 +68,9 @@ export interface Settings {
    * up to today are shown. */
   historyLandmarksOn: boolean;
   historyLandmarksOpacity: number;
+  /** Global heritage layer — heritage-only and UNESCO-only filters. */
+  historyHeritageOnly: boolean;
+  historyUnescoOnly: boolean;
   /** Currently selected year on the History timeline (1500..currentYear). */
   historyYear: number;
   setImageBasemapId: (id: string) => void;
@@ -95,6 +98,8 @@ export interface Settings {
   setLandCoverOpacity: (o: number) => void;
   setHistoryLandmarksOn: (on: boolean) => void;
   setHistoryLandmarksOpacity: (o: number) => void;
+  setHistoryHeritageOnly: (on: boolean) => void;
+  setHistoryUnescoOnly: (on: boolean) => void;
   setHistoryMapOn: (on: boolean) => void;
   setHistoryYear: (year: number) => void;
 }
@@ -134,6 +139,8 @@ export const useSettings = create<Settings>()(
       historyMapOn: false,
       historyLandmarksOn: false,
       historyLandmarksOpacity: 0.9,
+      historyHeritageOnly: false,
+      historyUnescoOnly: false,
       historyYear: HISTORY_YEAR_MAX,
       setImageBasemapId: (id) => set({ imageBasemapId: id }),
       setVectorBasemapId: (id) => set({ vectorBasemapId: id }),
@@ -169,6 +176,9 @@ export const useSettings = create<Settings>()(
       setHistoryLandmarksOn: (on) => set({ historyLandmarksOn: on }),
       setHistoryLandmarksOpacity: (o) =>
         set({ historyLandmarksOpacity: clamp01(o) }),
+      setHistoryHeritageOnly: (on: boolean) =>
+        set({ historyHeritageOnly: on }),
+      setHistoryUnescoOnly: (on: boolean) => set({ historyUnescoOnly: on }),
       setHistoryMapOn: (on) => set({ historyMapOn: on }),
       setHistoryYear: (year) =>
         set({
@@ -182,7 +192,7 @@ export const useSettings = create<Settings>()(
     }),
     {
       name: "kugelmaps:settings",
-      version: 20,
+      version: 21,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         imageBasemapId: state.imageBasemapId,
@@ -211,11 +221,20 @@ export const useSettings = create<Settings>()(
         historyMapOn: state.historyMapOn,
         historyLandmarksOn: state.historyLandmarksOn,
         historyLandmarksOpacity: state.historyLandmarksOpacity,
+        historyHeritageOnly: state.historyHeritageOnly,
+        historyUnescoOnly: state.historyUnescoOnly,
         historyYear: state.historyYear,
       }),
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
         const p = persisted as Record<string, unknown>;
+        // v20 → v21: global heritage filter toggles.
+        if (version < 21) {
+          if (typeof p.historyHeritageOnly !== "boolean")
+            p.historyHeritageOnly = false;
+          if (typeof p.historyUnescoOnly !== "boolean")
+            p.historyUnescoOnly = false;
+        }
         // v19 → v20: land new and returning users on the dark vector
         // basemap; the previous choice is superseded once.
         if (version < 20) {
