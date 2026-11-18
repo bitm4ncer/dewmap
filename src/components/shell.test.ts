@@ -21,6 +21,16 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("keeps sheet actions out of the tab row and orders the map panel", () => {
+    const tabsStart = map.indexOf('className="hud-sheet-tabs"');
+    const tabsEnd = map.indexOf("</nav>", tabsStart);
+    const tabRow = map.slice(tabsStart, tabsEnd);
+    expect(tabRow).not.toContain("sheet-close");
+    expect(tabRow).not.toContain("sheet-expand");
+    expect(map.indexOf('"Vector Maps"')).toBeLessThan(map.indexOf('"Image Maps"'));
+    expect(map.indexOf("<TimelinePanel")).toBeLessThan(map.indexOf("<RailsPanel"));
+  });
+
   it("keeps the search action in the location card", () => {
     const panel = readFileSync(
       new URL("./planner/TransitPanel.tsx", import.meta.url),

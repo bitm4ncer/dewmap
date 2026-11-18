@@ -222,3 +222,81 @@ export function CarIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function ImageIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="3" y="5" width="18" height="14" rx="1.5" />
+      <circle cx="8.5" cy="10" r="1.4" />
+      <path d="M3 17 L9 12 L13 16 L17 12 L21 17" />
+    </svg>
+  );
+}
+
+export function HybridIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 3 L21 8 L12 13 L3 8 Z" />
+      <path d="M3 14 L12 19 L21 14" />
+    </svg>
+  );
+}
+
+export function VectorIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M9 4 L3 6 V20 L9 18 L15 20 L21 18 V4 L15 6 Z" />
+      <line x1="9" y1="4" x2="9" y2="18" />
+      <line x1="15" y1="6" x2="15" y2="20" />
+    </svg>
+  );
+}
+
+export function FlatIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="3" y="4" width="18" height="16" rx="1.5" />
+      <path d="M3 12h18M12 4v16" />
+    </svg>
+  );
+}
+
+export function GlobeIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="12" cy="12" r="9" />
+      <ellipse cx="12" cy="12" rx="4" ry="9" />
+      <path d="M3 12h18M4.5 7h15M4.5 17h15" />
+    </svg>
+  );
+}
+
+export function CompassIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 6.5 15 12l-3 5.5L9 12Z" />
+      <path d="M12 4v1.5" />
+    </svg>
+  );
+}
+
+export function RouteIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="6" cy="6" r="2.2" />
+      <circle cx="18" cy="18" r="2.2" />
+      <path d="M8.2 6H14a4 4 0 0 1 0 8H9a3 3 0 0 0 0 6h6.8" />
+    </svg>
+  );
+}
+
+export function HeadingIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5 V6M12 18v2.5M3.5 12H6M18 12h2.5" />
+      <path d="M12 7.5 15 15l-3-2-3 2Z" />
+    </svg>
+  );
+}

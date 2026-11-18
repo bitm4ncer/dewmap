@@ -91,7 +91,7 @@ body {
   --topbar-h:     calc(56px + var(--safe-top));
   --hud-topbar-h: var(--topbar-h);
   --hud-nav-h:    calc(56px + var(--safe-bottom));
-  --hud-peek-h:   calc(56px + var(--safe-bottom));
+  --hud-peek-h:   calc(76px + var(--safe-bottom));
   --panel-w:      380px;
 
   /* Z scale */
@@ -390,7 +390,7 @@ body {
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     contain: layout paint;
     transition: height var(--dur-slow) var(--ease);
-    --hud-peek-h: calc(56px + var(--safe-bottom));
+    --hud-peek-h: calc(76px + var(--safe-bottom));
   }
 
   .hud-bottom-sheet[data-dragging="true"] {
@@ -522,8 +522,26 @@ body {
 .hud-panel-tab:hover { color: var(--ink); background: var(--surf-2); }
 .hud-panel-tab[data-active="true"]:hover { color: var(--accent); background: var(--accent-soft); }
 
+.hud-sheet-top {
+  display: none;
+  position: relative;
+  flex-shrink: 0;
+  height: 36px;
+}
+.hud-sheet-actions {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+}
+.hud-sheet-actions .hud-icon-btn {
+  width: 32px;
+  height: 32px;
+}
 .hud-bottom-sheet-grabber {
   display: none;
+  width: 100%;
   align-items: center;
   justify-content: center;
   height: 14px;
@@ -571,7 +589,8 @@ body {
    ──────────────────────────────────────────────────────────────────── */
 @media (max-width: 767px) {
   .hud-side-handles { display: none !important; }
-  .hud-bottom-sheet-grabber { display: flex; }
+  .hud-sheet-top { display: block; }
+  .hud-bottom-sheet-grabber { display: flex; height: 36px; }
   /* Compact sheet chrome: no extra title row or tape on phones.
      The active tab already names the pane. */
   .hud-bottom-sheet .pane-tape { display: none; }

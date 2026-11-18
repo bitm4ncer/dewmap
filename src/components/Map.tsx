@@ -47,7 +47,21 @@ import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon } from "./ui/icons";
+import {
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  CloseIcon,
+  CompassIcon,
+  FlatIcon,
+  GlobeIcon,
+  HeadingIcon,
+  HybridIcon,
+  ImageIcon,
+  RouteIcon,
+  VectorIcon,
+} from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
@@ -3563,18 +3577,37 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             : "md:translate-x-[calc(100%+12px)]",
         ].join(" ")}
       >
-        {/* Drag handle — pointer-driven sheet resize with tap-to-toggle. */}
-        <button
-          type="button"
-          {...handleProps}
-          aria-label={
-            sheetState === "peek" ? "Open panel" : "Resize panel"
-          }
-          aria-expanded={sidebarOpen}
-          className="hud-bottom-sheet-grabber"
-        >
-          <span className="sr-only">Drag to resize panel</span>
-        </button>
+        {/* Mobile sheet header — drag row with its own action cluster so
+            the pane tabs always keep equal widths. */}
+        <div className="hud-sheet-top">
+          <button
+            type="button"
+            {...handleProps}
+            aria-label={sheetState === "peek" ? "Open panel" : "Resize panel"}
+            aria-expanded={sidebarOpen}
+            className="hud-bottom-sheet-grabber"
+          >
+            <span className="sr-only">Drag to resize panel</span>
+          </button>
+          <div className="hud-sheet-actions">
+            <button
+              type="button"
+              onClick={toggleFull}
+              aria-label={sheetState === "full" ? "Shrink panel" : "Expand panel"}
+              className="sheet-expand hud-icon-btn"
+            >
+              {sheetState === "full" ? <ChevronDownIcon size={17} /> : <ChevronUpIcon size={17} />}
+            </button>
+            <button
+              type="button"
+              onClick={collapseToPeek}
+              aria-label="Close panel"
+              className="sheet-close hud-icon-btn"
+            >
+              <CloseIcon size={17} />
+            </button>
+          </div>
+        </div>
 
         {/* In-sheet tabs — mobile only (CSS gates visibility). */}
         <nav className="hud-sheet-tabs" aria-label="Panel switcher">
@@ -3589,22 +3622,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               {p.icon}
             </PaneToggle>
           ))}
-          <button
-            type="button"
-            onClick={toggleFull}
-            aria-label={sheetState === "full" ? "Shrink panel" : "Expand panel"}
-            className="sheet-expand hud-icon-btn"
-          >
-            {sheetState === "full" ? <ChevronDownIcon size={18} /> : <ChevronUpIcon size={18} />}
-          </button>
-          <button
-            type="button"
-            onClick={collapseToPeek}
-            aria-label="Close panel"
-            className="sheet-close hud-icon-btn"
-          >
-            <CloseIcon size={18} />
-          </button>
         </nav>
 
         {/* Panel body — on desktop this is the full-height drawer. */}
@@ -3760,16 +3777,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   }}
                 />
 
-                <RailsPanel
-                  on={railOn}
-                  onChange={setRailOn}
-                  opacity={railwayOpacity}
-                  onOpacityChange={setRailwayOpacity}
-                  railStyle={railStyle}
-                  onRailStyleChange={setRailStyle}
-                  railNetworkStatus={railNetworkStatus}
-                />
-
                 <TimelinePanel
                   s2ActiveVariant={
                     basemapVariants["s2cloudless"] ?? "2024"
@@ -3811,6 +3818,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   opacity={overlayOpacity}
                   onOpacityChange={setOverlayOpacity}
                 />
+                <RailsPanel
+                  on={railOn}
+                  onChange={setRailOn}
+                  opacity={railwayOpacity}
+                  onOpacityChange={setRailwayOpacity}
+                  railStyle={railStyle}
+                  onRailStyleChange={setRailStyle}
+                  railNetworkStatus={railNetworkStatus}
+                />
+
 
                 <DataSourcesPanel />
               </>
@@ -3952,20 +3969,20 @@ function BasemapPanel({
     <HudPanel label="Basemap">
       <div className="flex flex-col gap-2.5">
         {renderGroup(
-          "Image Maps",
-          imageMaps,
-          imageId,
-          mode === "photo" || mode === "hybrid",
-          onSelectImage,
-          DEFAULT_IMAGE_BASEMAP_ID,
-        )}
-        {renderGroup(
           "Vector Maps",
           vectorMaps,
           vectorId,
           mode === "vector",
           onSelectVector,
           DEFAULT_VECTOR_BASEMAP_ID,
+        )}
+        {renderGroup(
+          "Image Maps",
+          imageMaps,
+          imageId,
+          mode === "photo" || mode === "hybrid",
+          onSelectImage,
+          DEFAULT_IMAGE_BASEMAP_ID,
         )}
       </div>
     </HudPanel>
@@ -4140,23 +4157,25 @@ function ViewPanel({
 
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Mode</span>
-          <div className="ui-segmented w-[190px]" role="group" aria-label="Basemap mode">
+          <div className="ui-segmented w-[156px]" role="group" aria-label="Basemap mode">
             {(
               [
-                ["photo", "Image"],
-                ["hybrid", "Hybrid"],
-                ["vector", "Vector"],
+                ["photo", "Image", ImageIcon],
+                ["hybrid", "Hybrid", HybridIcon],
+                ["vector", "Vector", VectorIcon],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
                 className="ui-seg"
                 data-active={basemapMode === key}
                 aria-pressed={basemapMode === key}
+                aria-label={label}
+                title={label}
                 onClick={() => onBasemapModeChange(key)}
               >
-                {label}
+                <Icon size={18} />
               </button>
             ))}
           </div>
@@ -4164,22 +4183,24 @@ function ViewPanel({
 
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Projection</span>
-          <div className="ui-segmented w-[190px]" role="group" aria-label="Projection">
+          <div className="ui-segmented w-[108px]" role="group" aria-label="Projection">
             {(
               [
-                ["mercator", "Flat"],
-                ["globe", "Globe"],
+                ["mercator", "Flat", FlatIcon],
+                ["globe", "Globe", GlobeIcon],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
                 className="ui-seg"
                 data-active={projection === key}
                 aria-pressed={projection === key}
+                aria-label={label}
+                title={label}
                 onClick={() => onProjectionChange(key)}
               >
-                {label}
+                <Icon size={18} />
               </button>
             ))}
           </div>
@@ -4187,23 +4208,25 @@ function ViewPanel({
 
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Orientation</span>
-          <div className="ui-segmented w-[230px]" role="group" aria-label="Map orientation">
+          <div className="ui-segmented w-[156px]" role="group" aria-label="Map orientation">
             {(
               [
-                ["north", "North"],
-                ["route", "Route"],
-                ["heading", "Heading"],
+                ["north", "North", CompassIcon],
+                ["route", "Route", RouteIcon],
+                ["heading", "Heading", HeadingIcon],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
                 className="ui-seg"
                 data-active={orientationMode === key}
                 aria-pressed={orientationMode === key}
+                aria-label={label}
+                title={label}
                 onClick={() => onOrientationChange(key)}
               >
-                {label}
+                <Icon size={18} />
               </button>
             ))}
           </div>
