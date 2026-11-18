@@ -10,6 +10,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { CLUSTER_BANDS, clusterSites } from "./cluster.mjs";
+import {
+  validateBuiltArchives,
+  validateManifest,
+  validateSites,
+} from "./validate.mjs";
 
 const TARGET_BYTES = 25 * 1024 * 1024;
 const HARD_BYTES = 40 * 1024 * 1024;
@@ -50,25 +55,17 @@ export function capSites(sites, maxSites) {
     .slice(0, maxSites);
 }
 
-export function clusterFeatures(sites) {
-  const features = [];
-  for (const band of CLUSTER_BANDS) {
-    const clusters = clusterSites(sites, { resolution: band.resolution });
-    for (const cluster of clusters) {
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: cluster.coordinates },
-        properties: {
-          id: cluster.id,
-          count: cluster.count,
-          heritageCount: cluster.heritageCount,
-          unescoCount: cluster.unescoCount,
-        },
-        tippecanoe: { minzoom: band.minzoom, maxzoom: band.maxzoom },
-      });
-    }
-  }
-  return features;
+export function clusterFeatures(sites, band) {
+  return clusterSites(sites, { resolution: band.resolution }).map((cluster) => ({
+    type: "Feature",
+    geometry: { type: "Point", coordinates: cluster.coordinates },
+    properties: {
+      id: cluster.id,
+      count: cluster.count,
+      heritageCount: cluster.heritageCount,
+      unescoCount: cluster.unescoCount,
+    },
+  }));
 }
 
 function runTippecanoe(bin, args) {
@@ -102,11 +99,21 @@ export async function buildArchives({
   await mkdir(workDir, { recursive: true });
 
   const parsed = parseSitesGeoJsonl(await readFile(inputGeoJsonl, "utf8"));
+  const siteValidation = validateSites(parsed);
+  if (!siteValidation.ok) {
+    throw new Error(`invalid sites:\n${siteValidation.errors.slice(0, 20).join("\n")}`);
+  }
   const sites = capSites(parsed, maxSites);
-  const clusters = clusterFeatures(sites);
+  const clusterBands = CLUSTER_BANDS.map((band) => ({
+    band,
+    features: clusterFeatures(sites, band),
+  }));
+  const clusterCount = clusterBands.reduce(
+    (total, entry) => total + entry.features.length,
+    0,
+  );
 
   const sitesPath = resolve(workDir, "history-sites.geojsonl");
-  const clustersPath = resolve(workDir, "history-clusters.geojsonl");
   await writeFile(
     sitesPath,
     sites
@@ -132,30 +139,43 @@ export async function buildArchives({
       )
       .join("\n") + "\n",
   );
-  await writeFile(
-    clustersPath,
-    clusters.map((feature) => JSON.stringify(feature)).join("\n") + "\n",
-  );
 
-  const clusterFile = `${id}/history-clusters.pmtiles`;
+  const clusterFiles = [];
+  for (const { band, features } of clusterBands) {
+    const name = `history-clusters-${band.minzoom}-${band.maxzoom}`;
+    const sourcePath = resolve(workDir, `${name}.geojsonl`);
+    const targetPath = resolve(outDir, id, `${name}.pmtiles`);
+    await writeFile(
+      sourcePath,
+      features.map((feature) => JSON.stringify(feature)).join("\n") + "\n",
+    );
+    if (!skipTiles) {
+      runTippecanoe(bin, [
+        "-o",
+        targetPath,
+        "-l",
+        "history_clusters",
+        `-Z${band.minzoom}`,
+        `-z${band.maxzoom}`,
+        "-r1",
+        "--quiet",
+        "--no-progress-indicator",
+        "--force",
+        sourcePath,
+      ]);
+    }
+    clusterFiles.push({
+      path: `${id}/${name}.pmtiles`,
+      bytes: skipTiles ? 0 : (await stat(targetPath)).size,
+      sha256: skipTiles ? "" : await sha256(targetPath),
+      minzoom: band.minzoom,
+      maxzoom: band.maxzoom,
+    });
+  }
+
   const siteFile = `${id}/history-sites.pmtiles`;
-  const clusterPath = resolve(outDir, clusterFile);
   const sitePath = resolve(outDir, siteFile);
-
   if (!skipTiles) {
-    runTippecanoe(bin, [
-      "-o",
-      clusterPath,
-      "-l",
-      "history_clusters",
-      "-Z0",
-      "-z7",
-      "--drop-densest-as-needed",
-      "--quiet",
-      "--no-progress-indicator",
-      "--force",
-      clustersPath,
-    ]);
     runTippecanoe(bin, [
       "-o",
       sitePath,
@@ -172,11 +192,7 @@ export async function buildArchives({
   }
 
   const files = {
-    clusters: {
-      path: clusterFile,
-      bytes: skipTiles ? 0 : (await stat(clusterPath)).size,
-      sha256: skipTiles ? "" : await sha256(clusterPath),
-    },
+    clusters: clusterFiles,
     sites: {
       path: siteFile,
       bytes: skipTiles ? 0 : (await stat(sitePath)).size,
@@ -184,7 +200,9 @@ export async function buildArchives({
     },
   };
 
-  const total = files.clusters.bytes + files.sites.bytes;
+  const total =
+    files.clusters.reduce((sum, file) => sum + file.bytes, 0) +
+    files.sites.bytes;
   if (!skipTiles && total > HARD_BYTES) {
     throw new Error(
       `history archive is ${(total / 1024 / 1024).toFixed(1)} MB, over the 40 MB hard limit`,
@@ -195,7 +213,7 @@ export async function buildArchives({
     schema: 1,
     buildId: id,
     builtAt: now.toISOString(),
-    counts: { sites: sites.length, clusters: clusters.length },
+    counts: { sites: sites.length, clusters: clusterCount },
     files,
     attribution: [
       "Wikidata contributors (CC0)",
@@ -203,10 +221,30 @@ export async function buildArchives({
       "PMTiles, MapLibre, Tippecanoe",
     ],
   };
+  const manifestValidation = validateManifest(manifest, {
+    maxBytes: HARD_BYTES,
+    allowEmpty: skipTiles,
+  });
+  if (!manifestValidation.ok) {
+    throw new Error(`invalid manifest:\n${manifestValidation.errors.join("\n")}`);
+  }
   await writeFile(
     resolve(outDir, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
+  if (!skipTiles) {
+    const archiveValidation = validateBuiltArchives({
+      manifest,
+      outDir,
+      bin: process.env.TIPPECANOE_DECODE ?? "tippecanoe-decode",
+      sampleSite: sites[0],
+    });
+    if (!archiveValidation.ok) {
+      throw new Error(
+        `invalid archive:\n${archiveValidation.errors.join("\n")}`,
+      );
+    }
+  }
   await rm(workDir, { recursive: true, force: true });
 
   return {

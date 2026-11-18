@@ -36,6 +36,8 @@ export interface HistoricManifestFile {
   path: string;
   bytes: number;
   sha256: string;
+  minzoom?: number;
+  maxzoom?: number;
 }
 
 export interface HistoricManifest {
@@ -44,7 +46,7 @@ export interface HistoricManifest {
   builtAt: string;
   counts: { sites: number; clusters: number };
   files: {
-    clusters: HistoricManifestFile;
+    clusters: HistoricManifestFile[];
     sites: HistoricManifestFile;
   };
   attribution: string[];
