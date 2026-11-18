@@ -40,6 +40,12 @@ Die erste Vector-Variante nutzte CARTO/Protomaps und darunter ORM-Raster. Das Ra
   dieser Wert bei streamenden Basemap-Tiles lange false bleiben kann. Zusätzlich
   wird bei `style.load` und `idle` erneut angewendet.
 - **Opacity** wirkt auf Linien, Stationen und Labels.
+- **Sanfter Zoom-Übergang:** Die Layer starten nicht abrupt bei ihrer
+  `minzoom`, sondern blenden über die folgenden drei Zoomstufen ein. Linien:
+  z4 0 → z5 0.35 → z6 0.7 → z7 1; Stationen: z10 0 → z11 0.35 → z12 0.8 →
+  z13 1; Labels: z11 0 → z12 0.5 → z13 1. Der Nutzer-Opacity-Wert wird in die
+  Stop-Ausgaben multipliziert, nicht als verschachtelte `zoom`-Expression
+  (die MapLibre ablehnt).
 - Entfernt: `fetchRailNetwork`, `railTileStore`, `railTileGet/Set/Purge`,
   `railTileCache`, `tilesForBounds`, `railTileBbox`, `useRailNetworkStatus`,
   Lade-Pille, Overpass-Captions und der Raster-Fallback im Lines-Pfad.
@@ -54,8 +60,11 @@ Headless Chromium mit echten OpenFreeMap-Tiles, App auf `localhost:3009`:
 - z14 (Köln): **68 Rail-Features**, **6 Stationen**, inklusive Köln Hbf.
 - Toggle off → on: Layer und Source werden entfernt und wieder aufgebaut;
   danach wieder 38 Rails / 119 Stationen.
+- Zoom-Fade: `line-opacity` ist eine top-level-Interpolation mit
+  z4 → 0, z5 → 0.2975, z6 → 0.595, z7 → 0.85 (bei Nutzer-Opacity 0.85);
+  keine MapLibre-Expression-Fehler.
 - Screenshots: `app-z9.png`, `app-z12.png`, `app-z14.png` (lokal).
-- `npm test`: **342 Tests / 48 Dateien** grün.
+- `npm test`: **343 Tests / 48 Dateien** grün.
 - `npm run lint`, `npm run typecheck`, `npm run check:no-emoji`: clean.
 - `npm run build` mit `NEXT_PUBLIC_BASE_PATH`: erfolgreich.
 
