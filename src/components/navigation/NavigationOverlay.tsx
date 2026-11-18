@@ -94,7 +94,7 @@ export function NavigationOverlay({
   return (
     <>
       <div className="pointer-events-none fixed inset-x-0 top-0 z-[45] flex justify-center px-3 pt-[calc(var(--safe-top)+10px)]">
-        <div className="pointer-events-auto flex w-full max-w-[520px] items-center gap-3 rounded-[16px] border border-[color:var(--hairline)] bg-[color:var(--surf-1)] p-3 shadow-[var(--shadow-modal)]">
+        <div className="pointer-events-auto flex w-full max-w-[520px] items-center gap-3 rounded-[16px] bg-[color:var(--glass-strong)] p-3 backdrop-blur-[22px]">
           <span
             aria-hidden
             className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-[color:var(--accent)] text-[24px] font-bold text-[color:var(--accent-ink)]"
@@ -125,7 +125,7 @@ export function NavigationOverlay({
       </div>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[45] flex justify-center px-3 pb-[calc(var(--safe-bottom)+10px)]">
-        <div className="pointer-events-auto w-full max-w-[520px] rounded-[18px] border border-[color:var(--hairline)] bg-[color:var(--surf-1)] p-3 shadow-[var(--shadow-modal)]">
+        <div className="pointer-events-auto w-full max-w-[520px] rounded-[18px] bg-[color:var(--glass-strong)] p-3 backdrop-blur-[22px]">
           <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--surf-3)]">
             <div
               className="h-full rounded-full bg-[color:var(--accent)] transition-[width] duration-500"
@@ -137,7 +137,7 @@ export function NavigationOverlay({
               <div className="text-[14px] font-semibold text-[color:var(--ink)]">
                 {isTransit ? remaining : `${eta} · ${remaining}`}
               </div>
-              <div className="text-[11px] text-[color:var(--ink-mute)]">
+              <div className="text-[11px] text-[color:var(--ink-dim)]">
                 {error
                   ? error
                   : position
@@ -152,7 +152,7 @@ export function NavigationOverlay({
                 type="button"
                 onClick={() => setMuted(!muted)}
                 aria-label={muted ? "Unmute voice guidance" : "Mute voice guidance"}
-                className="hud-icon-btn border border-[color:var(--hairline)]"
+                className="hud-icon-btn"
               >
                 <SpeakerIcon muted={muted} size={19} />
               </button>
@@ -163,7 +163,7 @@ export function NavigationOverlay({
                   onRecenter();
                 }}
                 aria-label="Recenter map"
-                className="hud-icon-btn border border-[color:var(--hairline)]"
+                className="hud-icon-btn"
               >
                 {follow === "course" ? <RecenterIcon size={19} /> : "N"}
               </button>

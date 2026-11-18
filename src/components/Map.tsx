@@ -3331,8 +3331,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           || railNetworkStatus.cooldownUntil > Date.now()) && (
         <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
           <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-[color:var(--hud-text)]">
-            <span className="hud-corner-tr" aria-hidden />
-            <span className="hud-corner-br" aria-hidden />
             <span
               aria-hidden
               className="hud-loading-dot"
@@ -3483,7 +3481,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         >
           {/* Pane signature tape — desktop only; phones use the tab tint. */}
           <div className="hidden px-4 pt-3 md:block">
-            <div className="pane-tape" aria-hidden />
           </div>
 
           {/* Desktop pane switcher lives inside the panel. */}
@@ -4077,7 +4074,7 @@ function ViewPanel({
         <button
           type="button"
           onClick={fullscreen}
-          className="mt-1 inline-flex min-h-10 items-center justify-center gap-2 rounded-[12px] border border-[color:var(--hairline)] px-3 text-[12.5px] font-semibold text-[color:var(--ink-dim)] transition-colors hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
+          className="mt-1 inline-flex min-h-10 items-center justify-center gap-2 rounded-[12px] bg-[color:var(--surf-2)] px-3 text-[12.5px] font-semibold text-[color:var(--ink-dim)] transition-colors hover:bg-[color:var(--surf-3)] hover:text-[color:var(--ink)]"
         >
           Toggle fullscreen
         </button>
@@ -4660,10 +4657,10 @@ function SnapshotCalendar({ snapshots, activeIndex, onSelect }: SnapshotCalendar
                 s.cloudCover != null ? ` · ${s.cloudCover.toFixed(0)}% cloud` : ""
               }`}
               className={[
-                "flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition-colors",
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-full px-3 text-[12px] font-semibold transition-colors",
                 active
-                  ? "border-transparent bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
-                  : "border-[color:var(--hairline)] bg-[color:var(--surf-0)] text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)]",
+                  ? "bg-[color:var(--accent)] text-[color:var(--accent-ink)]"
+                  : "bg-[color:var(--surf-2)] text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-3)]",
               ].join(" ")}
             >
               <span className={`h-2 w-2 rounded-full ${dotColor(s.cloudCover)}`} aria-hidden />
@@ -4763,9 +4760,9 @@ function DebugHud({
   }
   return (
     <div
-      className="pointer-events-auto fixed left-1 right-1 top-[max(64px,env(safe-area-inset-top,0px))] z-[9999] max-h-[55vh] overflow-auto rounded border-2 border-red-500 bg-black/95 p-2 font-mono text-[11.5px] leading-tight text-amber-100 shadow-2xl"
+      className="pointer-events-auto fixed left-1 right-1 top-[max(64px,env(safe-area-inset-top,0px))] z-[9999] max-h-[55vh] overflow-auto rounded-xl bg-[color:var(--surf-2)] p-2 font-mono text-[11.5px] leading-tight text-[color:var(--warn)]"
     >
-      <div className="mb-1 font-semibold text-amber-300">DEBUG HUD · ?debug=0 to hide</div>
+      <div className="mb-1 font-semibold text-[color:var(--warn)]">DEBUG HUD · ?debug=0 to hide</div>
       <div>active basemap: {activeBasemapId} (mode={basemapMode}, image={imageBasemapId})</div>
       <div>style.loaded: {String(styleLoaded)} · z={zoom}</div>
       <div>

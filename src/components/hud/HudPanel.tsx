@@ -22,8 +22,6 @@ export function HudPanel({
     <div
       className={`hud-panel ${pointerEvents ? "pointer-events-auto" : "pointer-events-none"} p-2 text-xs ${className}`}
     >
-      <span className="hud-corner-tr" aria-hidden />
-      <span className="hud-corner-br" aria-hidden />
       {label && (
         <div className="mb-1.5 flex items-center gap-2 px-1">
           <span className="hud-label">{label}</span>

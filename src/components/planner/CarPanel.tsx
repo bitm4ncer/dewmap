@@ -337,10 +337,10 @@ function RouteCard({
       onClick={onSelect}
       data-active={active}
       className={[
-        "flex w-full flex-col gap-2 rounded-[12px] border p-3 text-left transition-colors",
+        "flex w-full flex-col gap-2 rounded-[12px] p-3 text-left transition-colors",
         active
-          ? "border-[color:var(--accent)] bg-[color:var(--accent-soft)]"
-          : "border-[color:var(--hairline)] bg-[color:var(--surf-0)] hover:bg-[color:var(--surf-2)]",
+          ? "bg-[color:var(--accent-soft)]"
+          : "bg-[color:var(--surf-0)] hover:bg-[color:var(--surf-2)]",
       ].join(" ")}
     >
       <div className="flex items-baseline justify-between gap-2">

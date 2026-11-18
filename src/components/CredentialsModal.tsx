@@ -63,11 +63,10 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-[color:var(--surf-1)] p-6 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:p-7"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-[color:var(--surf-1)] p-6 sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="pane-tape mb-3 w-12" aria-hidden />
             <h2
               id={titleId}
               className="text-[18px] font-semibold tracking-tight text-[color:var(--ink)]"
@@ -84,7 +83,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
                 href="https://dataspace.copernicus.eu/"
                 target="_blank"
                 rel="noreferrer"
-                className="text-[color:var(--accent)] underline underline-offset-2 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)] rounded"
+                className="rounded text-[color:var(--accent)] hover:opacity-80"
               >
                 Copernicus Data Space
               </a>{" "}
@@ -131,7 +130,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
               type="text"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              className="w-full rounded-2xl bg-[color:var(--surf-0)] px-4 py-2.5 font-mono text-[14px] text-[color:var(--ink)] placeholder:text-[color:var(--ink-mute)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+              className="ui-input font-mono text-[14px]"
               placeholder="sh-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               autoComplete="off"
               spellCheck={false}
@@ -148,14 +147,14 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
                 type={showSecret ? "text" : "password"}
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                className="w-full rounded-2xl bg-[color:var(--surf-0)] px-4 py-2.5 pr-20 font-mono text-[14px] text-[color:var(--ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--accent)]"
+                className="ui-input pr-20 font-mono text-[14px]"
                 autoComplete="off"
                 spellCheck={false}
               />
               <button
                 type="button"
                 onClick={() => setShowSecret((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[12px] text-[color:var(--ink-dim)] hover:bg-[rgba(241,240,232,0.06)] hover:text-[color:var(--ink)]"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[12px] text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
                 aria-label={showSecret ? "Hide secret" : "Show secret"}
               >
                 {showSecret ? "hide" : "show"}

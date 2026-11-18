@@ -700,11 +700,11 @@ function WaypointRow({
         ? COLOR_END
         : pastelForWaypoint(id, index);
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-[color:var(--hud-border)] bg-[rgba(255,255,255,0.02)] px-2 py-1">
+    <div className="flex items-center gap-1.5 rounded-full bg-[color:var(--surf-3)] px-2 py-1">
       <span
         aria-hidden
         className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold text-[color:var(--accent-ink)]"
-        style={{ background: dotColor, boxShadow: `0 0 6px ${dotColor}80` }}
+        style={{ background: dotColor }}
       >
         {index + 1}
       </span>
@@ -905,7 +905,7 @@ function SearchAdd({
         ? createPortal(
             <div
               data-search-dropdown="true"
-              className="hud-scrollbar fixed z-[1000] max-h-64 overflow-y-auto rounded-2xl border border-[color:var(--hud-border)] bg-[color:var(--hud-surface-solid)] shadow-lg backdrop-blur"
+              className="hud-scrollbar fixed z-[1000] max-h-64 overflow-y-auto rounded-2xl bg-[color:var(--glass-strong)] backdrop-blur-xl"
               style={{
                 left: anchor.left,
                 top: anchor.top,
@@ -922,11 +922,11 @@ function SearchAdd({
                     setResults([]);
                     setOpen(false);
                   }}
-                  className="flex w-full items-start gap-1.5 border-b border-[color:var(--hud-border)] px-2 py-1.5 text-left text-[12px] text-[color:var(--hud-text)] last:border-b-0 hover:bg-[var(--hud-accent-soft)] hover:text-[color:var(--hud-accent)]"
+                  className="flex w-full items-start gap-1.5 rounded-lg px-2 py-1.5 text-left text-[12px] text-[color:var(--hud-text)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--hud-accent)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{r.label || r.name}</span>
                   {prettyCategory(r.category) && (
-                    <span className="shrink-0 rounded-full border border-[color:var(--hud-border)] px-1.5 py-0.5 text-[11px] text-[color:var(--hud-text-muted)]">
+                    <span className="shrink-0 rounded-full bg-[color:var(--surf-3)] px-1.5 py-0.5 text-[11px] text-[color:var(--hud-text-muted)]">
                       {prettyCategory(r.category)}
                     </span>
                   )}
