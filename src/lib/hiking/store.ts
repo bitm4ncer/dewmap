@@ -29,6 +29,7 @@ interface HikingState {
   setEnabled: (on: boolean) => void;
 
   addWaypoint: (w: Omit<Waypoint, "id">) => void;
+  setWaypoints: (waypoints: Omit<Waypoint, "id">[]) => void;
   removeWaypoint: (id: string) => void;
   moveWaypoint: (id: string, dir: -1 | 1) => void;
   reverseWaypoints: () => void;
@@ -80,6 +81,16 @@ export const useHiking = create<HikingState>()(
           // added it from the rail overlay without opening the hiking panel
           enabled: true,
         })),
+      setWaypoints: (waypoints) =>
+        set({
+          waypoints: waypoints.map((w) => ({ ...w, id: newWaypointId() })),
+          enabled: true,
+          candidates: [],
+          selectedCandidateId: null,
+          finalized: false,
+          phase: { kind: "idle" },
+          notice: null,
+        }),
       removeWaypoint: (id) =>
         set((s) => ({
           waypoints: s.waypoints.filter((w) => w.id !== id),

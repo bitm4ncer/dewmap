@@ -2,6 +2,7 @@
 
 import { formatDuration } from "@/lib/routing";
 import type { RoutePlan } from "@/lib/routing";
+import { WalkIcon } from "@/components/ui/icons";
 import {
   allowsBikes,
   isAccessibleJourney,
@@ -80,8 +81,12 @@ export function JourneyCard({ journey, best, active, onSelect }: Props) {
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           {legs.map((leg, i) =>
             leg.mode === "walk" ? (
-              <span key={i} className="text-[11px] text-[color:var(--ink-mute)]">
-                walk {formatDuration(legDurationMin(leg))}
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 text-[11px] text-[color:var(--ink-mute)]"
+              >
+                <WalkIcon size={14} />
+                {formatDuration(legDurationMin(leg))}
               </span>
             ) : (
               <span
@@ -106,7 +111,7 @@ export function JourneyCard({ journey, best, active, onSelect }: Props) {
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {best && <span className="ui-badge" data-tone="accent">Best</span>}
         {delay > 0 && (
           <span className="ui-badge" data-tone="warn">+{delay} min</span>

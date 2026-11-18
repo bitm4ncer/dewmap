@@ -19,6 +19,8 @@ import {
   sortJourneys,
   stopClock,
   stopDayOffset,
+  minTransferMinutes,
+  transferMinutes,
   transferWarnings,
   walkTotals,
 } from "./transitFormat";
@@ -130,9 +132,57 @@ describe("labels and colours", () => {
   });
 
   it("prefers provider colours and picks readable text", () => {
-    expect(lineColor(leg({ routeColor: "ff0000" }))).toBe("#ff0000");
-    expect(lineTextColor(leg({ routeColor: "#ffffff" }))).toBe("#10120b");
-    expect(lineTextColor(leg({ routeColor: "#000000" }))).toBe("#ffffff");
+    expect(
+      lineColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "ff0000" })),
+    ).toBe("#ff0000");
+    expect(
+      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#ffffff" })),
+    ).toBe("#10120b");
+    expect(
+      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#000000" })),
+    ).toBe("#ffffff");
+  });
+
+  it("measures the layover between two legs", () => {
+    const a = leg({ arrival: "2026-11-18T09:25:00+01:00" });
+    const b = leg({ departure: "2026-11-18T09:33:00+01:00" });
+    expect(transferMinutes(a, b)).toBe(8);
+    expect(
+      transferMinutes(
+        leg({ arrival: "2026-11-18T09:33:00+01:00" }),
+        leg({ departure: "2026-11-18T09:25:00+01:00" }),
+      ),
+    ).toBeNull();
+  });
+
+  it("finds the shortest transfer in a journey", () => {
+    const first = leg({
+      departure: "2026-11-18T09:00:00+01:00",
+      arrival: "2026-11-18T09:20:00+01:00",
+    });
+    const second = leg({
+      departure: "2026-11-18T09:27:00+01:00",
+      arrival: "2026-11-18T09:50:00+01:00",
+    });
+    const third = leg({
+      departure: "2026-11-18T09:56:00+01:00",
+      arrival: "2026-11-18T10:10:00+01:00",
+    });
+    expect(minTransferMinutes(plan({}, [first, second, third]))).toBe(6);
+    expect(minTransferMinutes(plan({}, [first]))).toBeNull();
+  });
+
+  it("codes rail and tram types so transfers read at a glance", () => {
+    expect(lineColor(leg({ line: "S3", agency: "S-Bahn RheinNeckar" }))).toBe("#1E8A4C");
+    expect(lineColor(leg({ line: "ICE 576", agency: "DB Fernverkehr" }))).toBe("#F2F5F7");
+    expect(lineColor(leg({ line: "RE 10a", agency: "DB Regio" }))).toBe("#C7362F");
+    expect(lineColor(leg({ line: "26", rawMode: "TRAM", agency: "RNV" }))).toBe("#E8C547");
+    expect(lineColor(leg({ line: "FlixTrain 20", agency: "FlixTrain" }))).toBe("#A6F53C");
+    expect(lineColor(leg({ line: "FlixBus 091", agency: "FlixBus" }))).toBe("#A6F53C");
+    expect(lineTextColor(leg({ line: "S3" }))).toBe("#ffffff");
+    expect(lineTextColor(leg({ line: "ICE 576" }))).toBe("#10120b");
+    expect(lineTextColor(leg({ line: "RE 10a" }))).toBe("#ffffff");
+    expect(lineTextColor(leg({ line: "26", rawMode: "TRAM" }))).toBe("#10120b");
   });
 
   it("renders each stop in its own zone", () => {

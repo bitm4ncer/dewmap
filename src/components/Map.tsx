@@ -40,12 +40,30 @@ import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
+import { edgeIndicator } from "@/lib/map/edgeIndicator";
+import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
+import type { RoutePoint } from "@/lib/routing/routeInput";
+import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CloseIcon } from "./ui/icons";
+import {
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronUpIcon,
+  CloseIcon,
+  CompassIcon,
+  FlatIcon,
+  GlobeIcon,
+  HeadingIcon,
+  HybridIcon,
+  ImageIcon,
+  RouteIcon,
+  VectorIcon,
+} from "./ui/icons";
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import {
@@ -925,7 +943,6 @@ async function probeUrl(url: string, timeoutMs = 5000): Promise<boolean> {
     const res = await fetch(url, {
       method: "GET",
       signal: ctrl.signal,
-      headers: { Range: "bytes=0-0" },
     });
     if (probeCache.size > 200) probeCache.clear();
     probeCache.set(url, res.ok);
@@ -1114,33 +1131,16 @@ interface No2Source {
   label: string;
 }
 const NO2_LAYER_CANDIDATES = [
-  // OMI / Aura — long-running NO₂ product, daily, global. Various
-  // historical slug forms documented in the GIBS catalog.
-  { layer: "OMI_NO2_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level6", label: "NASA OMI" },
-  { layer: "OMI_NO2_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level5", label: "NASA OMI" },
-  { layer: "OMI_Aura_NO2_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level6", label: "NASA OMI" },
-  { layer: "OMI_Aura_Nitrogen_Dioxide_Tropospheric_Column", matrix: "GoogleMapsCompatible_Level6", label: "NASA OMI" },
-  // Sentinel-5P / TROPOMI — newer high-res product (~3.5 km).
+  // OMI / Aura — long-running daily NO₂ product, global.
   {
-    layer: "Sentinel-5P_NO2_Tropospheric_Column_Daily",
-    matrix: "GoogleMapsCompatible_Level7",
-    label: "Sentinel-5P TROPOMI",
+    layer: "OMI_Nitrogen_Dioxide_Tropo_Column",
+    matrix: "GoogleMapsCompatible_Level6",
+    label: "NASA OMI",
   },
+  // Fallback — MODIS Aerosol Optical Depth. Not strictly NO₂ but a
+  // closely related "polluted air" indicator that is widely available.
   {
-    layer: "Sentinel-5P_TROPOMI_NO2_Tropospheric_Column_Daily",
-    matrix: "GoogleMapsCompatible_Level7",
-    label: "Sentinel-5P TROPOMI",
-  },
-  {
-    layer: "S5P_TROPOMI_NO2_Tropospheric_Column_Daily",
-    matrix: "GoogleMapsCompatible_Level7",
-    label: "Sentinel-5P TROPOMI",
-  },
-  // Final fallback — MODIS Aerosol Optical Depth. Not strictly NO₂ but
-  // a closely related "polluted air" indicator that's universally
-  // available daily.
-  {
-    layer: "MODIS_Combined_Value_Added_AOD",
+    layer: "MODIS_Terra_Aerosol_Optical_Depth_3km",
     matrix: "GoogleMapsCompatible_Level6",
     label: "MODIS aerosol (fallback)",
   },
@@ -1166,9 +1166,9 @@ async function findLatestNo2Source(): Promise<No2Source | null> {
   if (no2ProbeInFlight) return no2ProbeInFlight;
   no2ProbeInFlight = (async () => {
     for (const candidate of NO2_LAYER_CANDIDATES) {
-      // Probe the last 5 days in parallel; a serial 8×7 walk could take
-      // minutes on a cold cache. The first hit wins.
-      const dates = [1, 2, 3, 4, 5].map((n) => gibsDateNDaysAgo(n));
+      // The daily OMI product lags by up to ~3 weeks. Probe a month in
+      // parallel; the first hit wins.
+      const dates = Array.from({ length: 30 }, (_, i) => gibsDateNDaysAgo(i + 1));
       const hits = await Promise.all(
         dates.map(async (date) => {
           const url = no2ProbeUrl(candidate.layer, candidate.matrix, date);
@@ -1371,23 +1371,24 @@ function removeNaturaLayer(map: MLMap) {
 const LAND_COVER_ATTRIBUTION =
   '<a href="https://esa-worldcover.org" target="_blank" rel="noreferrer">ESA WorldCover 2021</a> · 10 m global land cover';
 
-const LAND_COVER_WMTS_URL = "https://services.terrascope.be/wmts/v2";
-const LAND_COVER_LAYER_NAME = "WORLDCOVER_2021_MAP";
+const LAND_COVER_WMS_URL = "https://mapproxy.terrascope.be/mapproxy/service";
+const LAND_COVER_LAYER_NAME = "esa-worldcover-map-10m-2021-v2_map";
 
 function landCoverTileUrl(): string {
   const params = new URLSearchParams({
-    SERVICE: "WMTS",
-    REQUEST: "GetTile",
-    VERSION: "1.0.0",
-    LAYER: LAND_COVER_LAYER_NAME,
-    STYLE: "",
+    SERVICE: "WMS",
+    REQUEST: "GetMap",
+    VERSION: "1.3.0",
+    LAYERS: LAND_COVER_LAYER_NAME,
+    STYLES: "",
+    CRS: "EPSG:3857",
     FORMAT: "image/png",
-    TILEMATRIXSET: "EPSG:3857",
+    WIDTH: "256",
+    HEIGHT: "256",
   });
-  return (
-    `${LAND_COVER_WMTS_URL}?${params.toString()}` +
-    `&TILEMATRIX=EPSG:3857:{z}&TILECOL={x}&TILEROW={y}`
-  );
+  // MapLibre expands {bbox-epsg-3857} per raster tile, so the WMS proxy
+  // behaves like a slippy tile source.
+  return `${LAND_COVER_WMS_URL}?${params.toString()}&BBOX={bbox-epsg-3857}`;
 }
 
 function ensureLandCoverLayer(
@@ -1561,6 +1562,10 @@ function buildLiveLocationEl(): {
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
   const [poiSelection, setPoiSelection] = useState<PoiSelection | null>(null);
+  const [pendingPin, setPendingPin] = useState<{
+    dest: RoutePoint;
+    start: RoutePoint;
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
@@ -1575,6 +1580,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // effect so it doesn't fight finger-driven panning.
   const interactingRef = useRef(false);
   const [livePos, setLivePos] = useState<[number, number] | null>(null);
+
+  // Prefer the latest live fix over the fallback captured when pinning.
+  const pinStart: RoutePoint | null = pendingPin
+    ? livePos
+      ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+      : pendingPin.start
+    : null;
+  const edgeRef = useRef<HTMLButtonElement | null>(null);
+  const fromMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const toMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const transitFrom = useTransit((s) => s.from);
+  const transitTo = useTransit((s) => s.to);
   const [liveHeadingDeg, setLiveHeadingDeg] = useState<number | null>(null);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(0);
   const [historyEarliestYear, setHistoryEarliestYear] = useState<number | null>(
@@ -1705,7 +1722,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     return () => window.clearInterval(id);
   }, [debugOn]);
   // Active pane is always defined: in peek state the tabs still highlight one.
-  const [activePane, setActivePane] = useState<SidebarPane>("control");
+  const [activePane, setActivePane] = useState<SidebarPane>("hiking");
   const [routesMode, setRoutesMode] = useState<RoutesMode>(() => {
     if (typeof window === "undefined") return "transit";
     const stored = window.localStorage.getItem("kugelmaps.routesMode");
@@ -1721,8 +1738,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [routesMode]);
   const [sheetState, setSheetState] = useState<SheetState>(() => {
-    if (typeof window === "undefined") return "half";
-    return "half";
+    if (typeof window === "undefined") return "peek";
+    return "peek";
   });
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1756,15 +1773,99 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setSheetState("half");
   }, [isMobile]);
   const sidebarOpen = sheetState !== "peek";
-  const [geoStatus, setGeoStatus] = useState<string | null>(null);
-  const [geoHeading, setGeoHeading] = useState<string | null>(null);
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
-  const { sheetRef, dragging, snapTo, handleProps, gestureProps } = useSheetGesture({
+  const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
     state: sheetState,
     onChange: setSheetState,
     enabled: isMobile,
   });
+
+  // A/B markers for points chosen with the "Map" button.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    const sync = (
+      place: typeof transitFrom,
+      label: string,
+      ref: React.MutableRefObject<maplibregl.Marker | null>,
+    ) => {
+      if (!place || place.name !== "Map point") {
+        ref.current?.remove();
+        ref.current = null;
+        return;
+      }
+      if (!ref.current) {
+        const el = document.createElement("div");
+        el.className = "transit-endpoint-marker";
+        el.textContent = label;
+        ref.current = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat([place.lon, place.lat])
+          .addTo(map);
+      } else {
+        ref.current.setLngLat([place.lon, place.lat]);
+      }
+    };
+    sync(transitFrom, "A", fromMarkerRef);
+    sync(transitTo, "B", toMarkerRef);
+  }, [mapInstance, transitFrom, transitTo]);
+
+  useEffect(
+    () => () => {
+      fromMarkerRef.current?.remove();
+      toMarkerRef.current?.remove();
+    },
+    [],
+  );
+
+  // Edge arrow pointing at the live position while it is off the map area.
+  useEffect(() => {
+    const map = mapInstance;
+    const el = edgeRef.current;
+    if (!map || !el) return;
+    const update = () => {
+      if (!livePos || (isMobile && sheetState === "full")) {
+        el.dataset.visible = "false";
+        return;
+      }
+      const rect = map.getContainer().getBoundingClientRect();
+      const sheet = isMobile
+        ? document.querySelector<HTMLElement>(".hud-bottom-sheet")
+        : null;
+      const sheetTop = sheet
+        ? sheet.getBoundingClientRect().top
+        : rect.bottom;
+      const insets = {
+        top: 72,
+        right: isMobile ? 14 : sidebarOpen ? 392 : 14,
+        bottom: Math.max(14, rect.bottom - sheetTop + 10),
+        left: 14,
+      };
+      const projected = map.project(livePos);
+      const hint = edgeIndicator(
+        projected,
+        { width: rect.width, height: rect.height },
+        insets,
+      );
+      if (!hint) {
+        el.dataset.visible = "false";
+        return;
+      }
+      el.dataset.visible = "true";
+      el.style.left = `${hint.x}px`;
+      el.style.top = `${hint.y}px`;
+      el.style.transform = `translate(-50%, -50%) rotate(${hint.angle}deg)`;
+    };
+    update();
+    for (const event of ["move", "zoom", "rotate", "pitch", "resize"]) {
+      map.on(event as "move", update);
+    }
+    return () => {
+      for (const event of ["move", "zoom", "rotate", "pitch", "resize"]) {
+        map.off(event as "move", update);
+      }
+    };
+  }, [mapInstance, livePos, isMobile, sidebarOpen, sheetState]);
 
   useHikingLayers(mapInstance, routesMode === "walk" || routesMode === "bike");
   usePlannerLayers(
@@ -1818,25 +1919,61 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
   }, []);
 
-  const handleSearchSelect = useCallback(
-    (result: GeocodeResult) => {
-      setFlyTarget(result);
-      setPoiSelection({
-        ...(result.osmType && result.osmId
-          ? { osmType: result.osmType, osmId: result.osmId }
-          : {}),
-        lon: result.coordinates[0],
-        lat: result.coordinates[1],
-        ...(result.name ? { name: result.name } : {}),
-        ...(result.city ? { city: result.city } : {}),
-        ...(result.category ? { category: result.category } : {}),
-      });
-    },
-    [],
-  );
   const handleTransitSearchComplete = useCallback(() => {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
+
+  /** A pinned search result becomes the destination for the next mode pick. */
+  const handleSearchSelect = useCallback(
+    (result: GeocodeResult) => {
+      setFlyTarget(result);
+      const center = mapRef.current?.getCenter();
+      const start: RoutePoint = livePos
+        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+        : center
+          ? { name: "Map center", lat: center.lat, lon: center.lng }
+          : {
+              name: "Map center",
+              lat: result.coordinates[1],
+              lon: result.coordinates[0],
+            };
+      setPendingPin({
+        dest: {
+          name: result.name || result.label,
+          lat: result.coordinates[1],
+          lon: result.coordinates[0],
+          city: result.city,
+          kind: "address",
+        },
+        start,
+      });
+      // Without a live fix the map centre is only a fallback; ask for the
+      // real position so the route starts where the user is.
+      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) =>
+            setPendingPin((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    start: {
+                      name: "My location",
+                      lat: pos.coords.latitude,
+                      lon: pos.coords.longitude,
+                    },
+                  }
+                : prev,
+            ),
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
+        );
+      }
+      snapTo(isMobile ? "modes" : "half");
+    },
+    [isMobile, livePos, snapTo],
+  );
+
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -1992,7 +2129,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
 
     if (process.env.NODE_ENV !== "production") {
-      (window as unknown as { __map: MLMap }).__map = map;
     }
 
     // MapLibre sometimes leaves stale tile-load promises behind after a
@@ -2130,6 +2266,24 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     else map.once("idle", apply);
   }, [basemapMode]);
 
+  // Re-tint the CARTO Dark Matter vector style after every style load.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || active !== "streets-dark") return;
+    const apply = () => {
+      try {
+        applyDarkMatterTint(map);
+      } catch (err) {
+        console.warn("[dark-matter] tint failed", err);
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("style.load", apply);
+    return () => {
+      map.off("style.load", apply);
+    };
+  }, [active, mapInstance]);
+
   useEffect(() => {
     const map = mapRef.current;
     const geo = geolocateRef.current;
@@ -2189,7 +2343,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       // the marker rotation perceptibly smooth (DOM rotation is
       // applied on every tick, only state updates throttle).
       let lastRoundedState = -999;
-      const unsub = subscribeCompass((heading, accuracy) => {
+      const unsub = subscribeCompass((heading) => {
         const m = liveMarkerRef.current;
         const c = coneRef.current;
         if (!m || !c) return;
@@ -2201,13 +2355,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         if (Math.abs(rounded - lastRoundedState) < 2) return;
         lastRoundedState = rounded;
         setLiveHeadingDeg(rounded);
-        const accStr =
-          accuracy === -1
-            ? " (uncal)"
-            : typeof accuracy === "number" && accuracy >= 0
-              ? ` ±${Math.round(accuracy)}°`
-              : "";
-        setGeoHeading(`${rounded}°${accStr}`);
       });
       compassUnsubRef.current = unsub;
     };
@@ -2220,7 +2367,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const onGeolocate = (e: { coords: GeolocationCoordinates }) => {
       showMarkerAt(e.coords.longitude, e.coords.latitude);
       setLivePos([e.coords.longitude, e.coords.latitude]);
-      setGeoStatus(`Located · ±${Math.round(e.coords.accuracy)}m`);
       // Kick off compass on the FIRST position lock even if the user
       // didn't click the geolocate button (auto-trigger on app launch).
       // On iOS the permission request will silently fail outside of a
@@ -2236,56 +2382,25 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
     };
 
-    const onTrackStart = () => {
-      setGeoStatus("Requesting location…");
-    };
-
-    const onGeoError = (e: {
-      error?: { message?: string; code?: number };
-      message?: string;
-    }) => {
-      const code = e.error?.code;
-      if (code === 1) {
-        setGeoStatus(
-          "Location denied. Allow in browser/iOS settings, then reload.",
-        );
-      } else if (code === 2) {
-        setGeoStatus("Location unavailable. Check signal or try again.");
-      } else if (code === 3) {
-        setGeoStatus("Location timed out. Tap the button again.");
-      } else {
-        const msg = e.error?.message ?? e.message ?? "unknown";
-        setGeoStatus(`Location error: ${msg}`);
-      }
-    };
-
     const onTrackEnd = () => {
-      // Hide the marker but keep the DOM around so re-tracking is
-      // instant — the marker just reappears at the next geolocate
-      // event without a fresh create/attach cycle.
-      root.style.visibility = "hidden";
-      if (cone) cone.hidden = true;
+      // The camera moved while tracking: MapLibre switches to background
+      // mode. The dot and livePos keep updating; only compass following
+      // ends. Clearing livePos here would hide the edge arrow exactly
+      // when the user pans away from their position.
       if (compassUnsubRef.current) {
         compassUnsubRef.current();
         compassUnsubRef.current = null;
       }
       compassStarted = false;
-      setGeoStatus(null);
-      setGeoHeading(null);
-      setLivePos(null);
-      setLiveHeadingDeg(null);
     };
 
     geo.on("geolocate", onGeolocate);
-    geo.on("trackuserlocationstart", onTrackStart);
     geo.on("trackuserlocationend", onTrackEnd);
-    geo.on("error", onGeoError);
 
     const btn = document.querySelector<HTMLButtonElement>(
       ".maplibregl-ctrl-geolocate",
     );
     const onBtnClick = () => {
-      setGeoStatus("Requesting location…");
       void startCompassSubscription();
       panToNextFix = true;
     };
@@ -2293,9 +2408,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     return () => {
       geo.off("geolocate", onGeolocate);
-      geo.off("trackuserlocationstart", onTrackStart);
       geo.off("trackuserlocationend", onTrackEnd);
-      geo.off("error", onGeoError);
       map.off("zoom", applyScale);
       btn?.removeEventListener("click", onBtnClick);
       if (compassUnsubRef.current) {
@@ -2311,8 +2424,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       scalerRef.current = null;
       setLivePos(null);
       setLiveHeadingDeg(null);
-      setGeoStatus(null);
-      setGeoHeading(null);
     };
   }, []);
 
@@ -3384,6 +3495,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       data-navigating={navActive}
     >
       <div ref={containerRef} className="h-full w-full" />
+      <button
+        ref={edgeRef}
+        type="button"
+        className="map-edge-hint"
+        aria-label="Show my location"
+        onClick={() => {
+          if (!mapInstance || !livePos) return;
+          mapInstance.flyTo({
+            center: livePos,
+            zoom: Math.max(mapInstance.getZoom(), 14),
+            duration: 700,
+          });
+        }}
+      >
+        <ChevronRightIcon size={18} />
+      </button>
 
       {/* Floating top bar — search, and (desktop only) the basemap-mode
           switch. On phones the Map tab owns basemap chrome, so the search
@@ -3405,7 +3532,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         && (railNetworkStatus.inFlight > 0
           || railNetworkStatus.cooldownUntil > Date.now()) && (
         <div className="pointer-events-none absolute right-3 top-[calc(env(safe-area-inset-top,0px)+62px)] z-20">
-          <div className="hud-panel hud-mono flex items-center gap-2 px-3 py-1.5 text-[11.5px] text-[color:var(--ink)]">
+          <div className="hud-panel hud-mono flex items-center gap-2 px-4 py-2 text-[11.5px] text-[color:var(--ink)]">
             <span
               aria-hidden
               className="hud-loading-dot"
@@ -3427,36 +3554,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     railNetworkStatus.inFlight === 1 ? "" : "s"
                   }`}
             </span>
-          </div>
-        </div>
-      )}
-
-      {/* geolocate status banner — top-centre on mobile (clear of the
-          attribution / scale / zoom controls at the bottom), bottom-
-          centre on desktop where the side-drawer leaves the bottom
-          edge free. */}
-      {(geoStatus || geoHeading) && (
-        <div className="pointer-events-auto absolute left-1/2 z-20 -translate-x-1/2 top-[calc(env(safe-area-inset-top,0px)+62px)] md:top-auto md:bottom-3">
-          <div className="hud-panel flex max-w-[calc(100vw-1.5rem)] items-center gap-2 px-3 py-2 text-[12px] text-[color:var(--ink)]">
-            {geoStatus && <span className="hud-mono min-w-0 break-words">{geoStatus}</span>}
-            {geoHeading && (
-              <span className="hud-mono shrink-0 text-[color:var(--accent)]">
-                · {geoHeading}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setGeoStatus(null);
-                setGeoHeading(null);
-              }}
-              aria-label="Dismiss location status"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--accent)]"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
           </div>
         </div>
       )}
@@ -3503,19 +3600,37 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             : "md:translate-x-[calc(100%+12px)]",
         ].join(" ")}
       >
-        <div className="hud-sheet-header" {...gestureProps}>
-        {/* Drag handle — pointer-driven sheet resize with tap-to-toggle. */}
-        <button
-          type="button"
-          {...handleProps}
-          aria-label={
-            sheetState === "peek" ? "Open panel" : "Resize panel"
-          }
-          aria-expanded={sidebarOpen}
-          className="hud-bottom-sheet-grabber"
-        >
-          <span className="sr-only">Drag to resize panel</span>
-        </button>
+        {/* Mobile sheet header — drag row with its own action cluster so
+            the pane tabs always keep equal widths. */}
+        <div className="hud-sheet-top">
+          <button
+            type="button"
+            {...handleProps}
+            aria-label={sheetState === "peek" ? "Open panel" : "Resize panel"}
+            aria-expanded={sidebarOpen}
+            className="hud-bottom-sheet-grabber"
+          >
+            <span className="sr-only">Drag to resize panel</span>
+          </button>
+          <div className="hud-sheet-actions">
+            <button
+              type="button"
+              onClick={toggleFull}
+              aria-label={sheetState === "full" ? "Shrink panel" : "Expand panel"}
+              className="sheet-expand hud-icon-btn"
+            >
+              {sheetState === "full" ? <ChevronDownIcon size={17} /> : <ChevronUpIcon size={17} />}
+            </button>
+            <button
+              type="button"
+              onClick={collapseToPeek}
+              aria-label="Close panel"
+              className="sheet-close hud-icon-btn"
+            >
+              <CloseIcon size={17} />
+            </button>
+          </div>
+        </div>
 
         {/* In-sheet tabs — mobile only (CSS gates visibility). */}
         <nav className="hud-sheet-tabs" aria-label="Panel switcher">
@@ -3530,24 +3645,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               {p.icon}
             </PaneToggle>
           ))}
-          <button
-            type="button"
-            onClick={toggleFull}
-            aria-label={sheetState === "full" ? "Shrink panel" : "Expand panel"}
-            className="sheet-expand hud-icon-btn"
-          >
-            {sheetState === "full" ? <ChevronDownIcon size={18} /> : <ChevronUpIcon size={18} />}
-          </button>
-          <button
-            type="button"
-            onClick={collapseToPeek}
-            aria-label="Close panel"
-            className="sheet-close hud-icon-btn"
-          >
-            <CloseIcon size={18} />
-          </button>
         </nav>
-        </div>
 
         {/* Panel body — on desktop this is the full-height drawer. */}
         <div
@@ -3556,7 +3654,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           aria-hidden={!sidebarOpen}
         >
           {/* Desktop pane switcher lives inside the panel. */}
-          <div className="hidden px-4 pb-3 md:block">
+          <div className="hidden px-4 md:block">
             <nav className="hud-panel-tabs" aria-label="Panel switcher">
               {SIDEBAR_PANES.map((p) => (
                 <PaneToggle
@@ -3617,6 +3715,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 mode={routesMode}
                 onModeChange={setRoutesMode}
                 onSearchComplete={handleTransitSearchComplete}
+                pendingPin={pendingPin?.dest ?? null}
+                pinStart={pinStart}
+                onPinConsumed={() => setPendingPin(null)}
+                onRouteStarted={() => snapTo("half")}
               />
             ) : activePane === "history" ? (
               <HistoryPanel
@@ -3698,16 +3800,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   }}
                 />
 
-                <RailsPanel
-                  on={railOn}
-                  onChange={setRailOn}
-                  opacity={railwayOpacity}
-                  onOpacityChange={setRailwayOpacity}
-                  railStyle={railStyle}
-                  onRailStyleChange={setRailStyle}
-                  railNetworkStatus={railNetworkStatus}
-                />
-
                 <TimelinePanel
                   s2ActiveVariant={
                     basemapVariants["s2cloudless"] ?? "2024"
@@ -3749,6 +3841,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   opacity={overlayOpacity}
                   onOpacityChange={setOverlayOpacity}
                 />
+                <RailsPanel
+                  on={railOn}
+                  onChange={setRailOn}
+                  opacity={railwayOpacity}
+                  onOpacityChange={setRailwayOpacity}
+                  railStyle={railStyle}
+                  onRailStyleChange={setRailStyle}
+                  railNetworkStatus={railNetworkStatus}
+                />
+
 
                 <DataSourcesPanel />
               </>
@@ -3859,7 +3961,7 @@ function BasemapPanel({
           )}
           <span className="line" aria-hidden />
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {items.map((b) => {
             const selected = effectiveId === b.id;
             const variant = getActiveVariant(b, variants[b.id]);
@@ -3894,15 +3996,7 @@ function BasemapPanel({
 
   return (
     <HudPanel label="Basemap">
-      <div className="flex flex-col gap-2.5">
-        {renderGroup(
-          "Image Maps",
-          imageMaps,
-          imageId,
-          mode === "photo" || mode === "hybrid",
-          onSelectImage,
-          DEFAULT_IMAGE_BASEMAP_ID,
-        )}
+      <div className="flex flex-col gap-3">
         {renderGroup(
           "Vector Maps",
           vectorMaps,
@@ -3910,6 +4004,14 @@ function BasemapPanel({
           mode === "vector",
           onSelectVector,
           DEFAULT_VECTOR_BASEMAP_ID,
+        )}
+        {renderGroup(
+          "Image Maps",
+          imageMaps,
+          imageId,
+          mode === "photo" || mode === "hybrid",
+          onSelectImage,
+          DEFAULT_IMAGE_BASEMAP_ID,
         )}
       </div>
     </HudPanel>
@@ -4078,29 +4180,29 @@ function ViewPanel({
   };
 
   return (
-    <HudPanel>
+    <HudPanel label="View">
       <div className="ui-section">
-        <span className="ui-kicker">View</span>
-
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Mode</span>
-          <div className="ui-segmented w-[190px]" role="group" aria-label="Basemap mode">
+          <div className="ui-segmented w-[156px]" role="group" aria-label="Basemap mode">
             {(
               [
-                ["photo", "Image"],
-                ["hybrid", "Hybrid"],
-                ["vector", "Vector"],
+                ["photo", "Image", ImageIcon],
+                ["hybrid", "Hybrid", HybridIcon],
+                ["vector", "Vector", VectorIcon],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
                 className="ui-seg"
                 data-active={basemapMode === key}
                 aria-pressed={basemapMode === key}
+                aria-label={label}
+                title={label}
                 onClick={() => onBasemapModeChange(key)}
               >
-                {label}
+                <Icon size={18} />
               </button>
             ))}
           </div>
@@ -4108,22 +4210,24 @@ function ViewPanel({
 
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Projection</span>
-          <div className="ui-segmented w-[190px]" role="group" aria-label="Projection">
+          <div className="ui-segmented w-[108px]" role="group" aria-label="Projection">
             {(
               [
-                ["mercator", "Flat"],
-                ["globe", "Globe"],
+                ["mercator", "Flat", FlatIcon],
+                ["globe", "Globe", GlobeIcon],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
                 className="ui-seg"
                 data-active={projection === key}
                 aria-pressed={projection === key}
+                aria-label={label}
+                title={label}
                 onClick={() => onProjectionChange(key)}
               >
-                {label}
+                <Icon size={18} />
               </button>
             ))}
           </div>
@@ -4131,23 +4235,25 @@ function ViewPanel({
 
         <div className="flex items-center justify-between gap-3">
           <span className="ui-row-title">Orientation</span>
-          <div className="ui-segmented w-[230px]" role="group" aria-label="Map orientation">
+          <div className="ui-segmented w-[156px]" role="group" aria-label="Map orientation">
             {(
               [
-                ["north", "North"],
-                ["route", "Route"],
-                ["heading", "Heading"],
+                ["north", "North", CompassIcon],
+                ["route", "Route", RouteIcon],
+                ["heading", "Heading", HeadingIcon],
               ] as const
-            ).map(([key, label]) => (
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
                 className="ui-seg"
                 data-active={orientationMode === key}
                 aria-pressed={orientationMode === key}
+                aria-label={label}
+                title={label}
                 onClick={() => onOrientationChange(key)}
               >
-                {label}
+                <Icon size={18} />
               </button>
             ))}
           </div>
@@ -4156,7 +4262,7 @@ function ViewPanel({
         <button
           type="button"
           onClick={fullscreen}
-          className="mt-1 inline-flex min-h-10 items-center justify-center gap-2 rounded-[12px] bg-[color:var(--surf-2)] px-3 text-[12.5px] font-semibold text-[color:var(--ink-dim)] transition-colors hover:bg-[color:var(--surf-3)] hover:text-[color:var(--ink)]"
+          className="ui-btn w-full"
         >
           Toggle fullscreen
         </button>
@@ -4264,7 +4370,7 @@ function RailsPanel({
                 {Math.round(opacity * 100)}%
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11.5px] text-[color:var(--ink-dim)]">
+            <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
               {railStyle === "lines"
                         && (railNetworkStatus.inFlight > 0
                   || railNetworkStatus.cooldownUntil > Date.now()) && (
@@ -4718,7 +4824,7 @@ function SnapshotCalendar({ snapshots, activeIndex, onSelect }: SnapshotCalendar
   return (
     <div className="flex flex-col gap-2 pt-1">
       <div
-        className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1"
+        className="no-scrollbar flex gap-2 overflow-x-auto pb-1"
         role="listbox"
         aria-label="Available snapshots"
       >

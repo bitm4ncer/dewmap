@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type SheetState = "peek" | "half" | "full";
+export type SheetState = "peek" | "modes" | "half" | "full";
 
-const ORDER: SheetState[] = ["peek", "half", "full"];
+const ORDER: SheetState[] = ["peek", "modes", "half", "full"];
 
 const GESTURE_AXIS_PX = 10;
 
@@ -20,6 +20,38 @@ export function canDrag(state: SheetState, direction: "up" | "down" | "none"): b
   if (direction === "up") return state !== "full";
   if (direction === "down") return state !== "peek";
   return false;
+}
+
+/** Direction- and velocity-aware snap target for a released drag. */
+export function pickSnap(
+  state: SheetState,
+  height: number,
+  velocity: number,
+  snap: { peek: number; modes: number; half: number; full: number },
+): SheetState {
+  const idx = ORDER.indexOf(state);
+  const current = snap[state];
+  const flick = velocity > 0.65 ? -1 : velocity < -0.65 ? 1 : 0;
+  const direction = flick !== 0 ? flick : height > current ? 1 : -1;
+  const next = Math.max(0, Math.min(ORDER.length - 1, idx + direction));
+  if (next === idx) return state;
+  const nextHeight = snap[ORDER[next]];
+  const travelled = Math.abs(height - current);
+  const passed = travelled >= Math.max(24, Math.abs(nextHeight - current) * 0.25);
+  return flick !== 0 || passed ? ORDER[next] : state;
+}
+
+/** Header swipes resize; body swipes stay native scrolling except down at top. */
+export function canStartDrag(
+  state: SheetState,
+  direction: "up" | "down" | "none",
+  fromBody: boolean,
+  scrollTop: number,
+): boolean {
+  if (!canDrag(state, direction)) return false;
+  if (!fromBody) return true;
+  if (direction === "up") return false;
+  return scrollTop <= 0;
 }
 
 interface Options {
@@ -52,12 +84,6 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     velocity: number;
   } | null>(null);
   const rafRef = useRef<number | null>(null);
-  const pendingRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    startHeight: number;
-  } | null>(null);
 
   const clearInlineHeight = useCallback(() => {
     sheetRef.current?.style.removeProperty("--sheet-h");
@@ -67,9 +93,10 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     const vh = window.visualViewport?.height ?? window.innerHeight;
     const topbar =
       document.querySelector<HTMLElement>(".ui-topbar")?.offsetHeight ?? 56;
-    const peek = 56;
+    const peek = 76;
     return {
       peek,
+      modes: peek + 60,
       half: Math.round(vh * 0.48),
       full: Math.max(peek + 80, Math.round(vh - topbar)),
       min: 48,
@@ -80,7 +107,13 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
   const heightFor = useCallback(
     (s: SheetState) => {
       const h = heights();
-      return s === "peek" ? h.peek : s === "half" ? h.half : h.full;
+      return s === "peek"
+        ? h.peek
+        : s === "modes"
+          ? h.modes
+          : s === "half"
+            ? h.half
+            : h.full;
     },
     [heights],
   );
@@ -94,31 +127,14 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
   );
 
   const nearest = useCallback(
-    (height: number, velocity: number) => {
-      const h = heights();
-      // A decisive flick wins over proximity.
-      if (velocity > 0.65) {
-        if (height < h.half * 0.75 || state === "full") return "peek" as const;
-        return "half" as const;
-      }
-      if (velocity < -0.65) {
-        if (height > h.half * 1.15 || state === "peek") return "full" as const;
-        return "half" as const;
-      }
-      const options: Array<[SheetState, number]> = [
-        ["peek", Math.abs(height - h.peek)],
-        ["half", Math.abs(height - h.half)],
-        ["full", Math.abs(height - h.full)],
-      ];
-      options.sort((a, b) => a[1] - b[1]);
-      return options[0][0];
-    },
+    (height: number, velocity: number) => pickSnap(state, height, velocity, heights()),
     [heights, state],
   );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (!enabled) return;
+      if (e.pointerType === "touch") return; // native touch path owns gestures
       if (e.pointerType === "mouse" && e.button !== 0) return;
       const el = sheetRef.current;
       if (!el) return;
@@ -203,74 +219,6 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     [clearInlineHeight],
   );
 
-  const onGestureDown = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      if (!enabled) return;
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      // The grabber keeps its own immediate drag + tap-to-toggle.
-      if ((e.target as HTMLElement).closest(".hud-bottom-sheet-grabber")) return;
-      const el = sheetRef.current;
-      if (!el) return;
-      pendingRef.current = {
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-        startHeight: el.getBoundingClientRect().height,
-      };
-    },
-    [enabled],
-  );
-
-  const onGestureMove = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      const pending = pendingRef.current;
-      if (pending && pending.pointerId === e.pointerId && !dragRef.current) {
-        const direction = gestureDirection(
-          e.clientX - pending.startX,
-          e.clientY - pending.startY,
-        );
-        if (direction === "none") return;
-        if (!canDrag(state, direction)) {
-          pendingRef.current = null;
-          return;
-        }
-        try {
-          e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-          // Synthetic pointers may not be capturable.
-        }
-        dragRef.current = {
-          pointerId: e.pointerId,
-          startY: pending.startY,
-          startHeight: pending.startHeight,
-          lastY: pending.startY,
-          lastT: e.timeStamp,
-          velocity: 0,
-        };
-        pendingRef.current = null;
-        setDragging(true);
-      }
-      if (dragRef.current) onPointerMove(e);
-    },
-    [onPointerMove, state],
-  );
-
-  const onGestureUp = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      pendingRef.current = null;
-      if (dragRef.current) finishDrag(e);
-    },
-    [finishDrag],
-  );
-
-  const onGestureCancel = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      pendingRef.current = null;
-      onPointerCancel(e);
-    },
-    [onPointerCancel],
-  );
-
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
       if (!enabled) return;
@@ -286,6 +234,121 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
     },
     [enabled, snapTo, state],
   );
+
+  useEffect(() => {
+    if (!enabled) return;
+    const el = sheetRef.current;
+    if (!el) return;
+
+    let suppressClickUntil = 0;
+    let touch: {
+      startX: number;
+      startY: number;
+      startHeight: number;
+      lastY: number;
+      lastT: number;
+      velocity: number;
+      started: boolean;
+      inBody: boolean;
+      onGrabber: boolean;
+    } | null = null;
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        touch = null;
+        return;
+      }
+      const target = e.target as HTMLElement;
+      const t = e.touches[0];
+      touch = {
+        startX: t.clientX,
+        startY: t.clientY,
+        startHeight: el.getBoundingClientRect().height,
+        lastY: t.clientY,
+        lastT: e.timeStamp,
+        velocity: 0,
+        started: false,
+        inBody: Boolean(target.closest(".ui-panel-body")),
+        onGrabber: Boolean(target.closest(".hud-bottom-sheet-grabber")),
+      };
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!touch) return;
+      const t = e.touches[0];
+      if (!t) return;
+      if (!touch.started) {
+        const direction = gestureDirection(
+          t.clientX - touch.startX,
+          t.clientY - touch.startY,
+        );
+        if (direction === "none") return;
+        const scroller = el.querySelector<HTMLElement>(".ui-panel-body");
+        if (
+          !canStartDrag(
+            state,
+            direction,
+            touch.inBody,
+            scroller?.scrollTop ?? 0,
+          )
+        ) {
+          touch = null;
+          return;
+        }
+        touch.started = true;
+        setDragging(true);
+        touch.lastY = touch.startY;
+        touch.lastT = e.timeStamp;
+      }
+      if (e.cancelable) e.preventDefault();
+      const h = heights();
+      const next = Math.max(
+        h.min,
+        Math.min(h.full, touch.startHeight + (touch.startY - t.clientY)),
+      );
+      el.style.setProperty("--sheet-h", `${next}px`);
+      const dt = Math.max(1, e.timeStamp - touch.lastT);
+      touch.velocity = (t.clientY - touch.lastY) / dt;
+      touch.lastY = t.clientY;
+      touch.lastT = e.timeStamp;
+    };
+
+    const onEnd = (e: TouchEvent) => {
+      if (!touch) return;
+      if (!touch.started) {
+        if (touch.onGrabber) snapTo(state === "peek" ? "half" : "peek");
+        touch = null;
+        return;
+      }
+      // A drag must not fall through as a click on the tab underneath.
+      if (e.cancelable) e.preventDefault();
+      suppressClickUntil = performance.now() + 500;
+      const height = el.getBoundingClientRect().height;
+      setDragging(false);
+      snapTo(nearest(height, touch.velocity));
+      touch = null;
+    };
+
+    const onClickCapture = (e: MouseEvent) => {
+      if (performance.now() < suppressClickUntil) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    el.addEventListener("click", onClickCapture, true);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+      el.removeEventListener("click", onClickCapture, true);
+    };
+  }, [enabled, heights, nearest, snapTo, state]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -311,12 +374,6 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       onPointerUp: finishDrag,
       onPointerCancel,
       onKeyDown,
-    },
-    gestureProps: {
-      onPointerDown: onGestureDown,
-      onPointerMove: onGestureMove,
-      onPointerUp: onGestureUp,
-      onPointerCancel: onGestureCancel,
     },
   };
 }

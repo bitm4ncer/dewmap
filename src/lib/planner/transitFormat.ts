@@ -191,6 +191,27 @@ export function journeyDayOffset(
 }
 
 /** START/END are coordinate origins from MOTIS, not station names. */
+/** Minutes between one leg's arrival and the next leg's departure. */
+export function transferMinutes(from: TransitLeg, to: TransitLeg): number | null {
+  const arrival = Date.parse(from.arrival);
+  const departure = Date.parse(to.departure);
+  if (!Number.isFinite(arrival) || !Number.isFinite(departure)) return null;
+  const minutes = Math.round((departure - arrival) / 60_000);
+  return minutes >= 0 ? minutes : null;
+}
+
+/** Shortest layover in a journey, or null when there is no transfer. */
+export function minTransferMinutes(journey: RoutePlan): number | null {
+  const legs = journey.transit?.legs ?? [];
+  let min: number | null = null;
+  for (let i = 1; i < legs.length; i++) {
+    const gap = transferMinutes(legs[i - 1], legs[i]);
+    if (gap == null) continue;
+    min = min == null ? gap : Math.min(min, gap);
+  }
+  return min;
+}
+
 export function stopLabel(stop: TransitStopRef): string {
   if (stop.name === "START") return "Start";
   if (stop.name === "END") return "Destination";
@@ -275,8 +296,57 @@ export function modeLabel(leg: TransitLeg): string {
   }
 }
 
-/** A stable, readable line colour; provider colour wins. */
+const LINE_KIND_COLORS = {
+  sbahn: "#1E8A4C",
+  ice: "#F2F5F7",
+  regio: "#C7362F",
+  tram: "#E8C547",
+  flix: "#A6F53C",
+} as const;
+
+export type TransitLineKind = keyof typeof LINE_KIND_COLORS | "other";
+
+/** Classifies a leg so rail/tram types carry a stable, known colour. */
+export function transitLineKind(leg: TransitLeg): TransitLineKind {
+  if (leg.mode !== "transit") return "other";
+  const line = (leg.line ?? "").toLowerCase();
+  const text = [leg.line, leg.agency, leg.rawMode, leg.routeType, leg.tripShortName]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (text.includes("flix")) return "flix";
+  if (transitModeKey(leg) === "TRAM") return "tram";
+  if (
+    /\bs\d{1,3}\b/.test(line)
+    || text.includes("s-bahn")
+    || text.includes("sbahn")
+    || text.includes("suburban")
+  ) {
+    return "sbahn";
+  }
+  if (
+    /\bice\b/.test(text)
+    || text.includes("intercityexpress")
+    || text.includes("highspeed")
+    || text.includes("high_speed")
+  ) {
+    return "ice";
+  }
+  if (
+    /\b(re|rb|ire|mrb|mex)\s?\d/.test(line)
+    || text.includes("db regio")
+    || text.includes("regional")
+    || text.includes("regional_rail")
+  ) {
+    return "regio";
+  }
+  return "other";
+}
+
+/** A stable, readable line colour; known types win over provider colours. */
 export function lineColor(leg: TransitLeg): string {
+  const kind = transitLineKind(leg);
+  if (kind !== "other") return LINE_KIND_COLORS[kind];
   const provider = normalizeHex(leg.routeColor);
   if (provider) return provider;
   switch (transitModeKey(leg)) {
@@ -298,8 +368,10 @@ export function lineColor(leg: TransitLeg): string {
 }
 
 export function lineTextColor(leg: TransitLeg): string {
-  const provider = normalizeHex(leg.routeTextColor);
-  if (provider) return provider;
+  if (transitLineKind(leg) === "other") {
+    const provider = normalizeHex(leg.routeTextColor);
+    if (provider) return provider;
+  }
   return luminance(lineColor(leg)) > 0.42 ? "#10120b" : "#ffffff";
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
+import { Fragment } from "react";
 import { formatClock, formatDayOffset, formatDistance, formatDuration } from "@/lib/routing";
+import { WalkIcon } from "@/components/ui/icons";
 import type { RoutePlan, TransitStopRef } from "@/lib/routing";
 import {
   allowsBikes,
@@ -17,6 +19,7 @@ import {
   modeLabel,
   needsReservation,
   stopLabel,
+  transferMinutes,
   transferWarnings,
   walkTotals,
 } from "@/lib/planner/transitFormat";
@@ -82,7 +85,7 @@ export function JourneyDetail({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {delay > 0 && <span className="ui-badge" data-tone="warn">+{delay} min</span>}
         {cancelled && <span className="ui-badge" data-tone="danger">Cancelled</span>}
         {live && <span className="ui-badge" data-tone="info">Live</span>}
@@ -152,7 +155,8 @@ export function JourneyDetail({
           const platform = platformLabel(leg.from);
           const toPlatform = platformLabel(leg.to);
           return (
-            <div key={i} className="flex gap-3 py-2">
+            <Fragment key={i}>
+            <div className="flex gap-3 py-2">
               <div className="flex w-14 shrink-0 flex-col items-end">
                 <span className="hud-mono text-[12px] text-[color:var(--ink)]">
                   {formatClock(leg.departure, undefined, leg.from.tz ?? zone)}
@@ -160,7 +164,7 @@ export function JourneyDetail({
                 <span className="hud-mono text-[10.5px] text-[color:var(--ink-mute)]">
                   {formatClock(leg.arrival, undefined, leg.to.tz ?? zone)}
                   {arrivalDay && (
-                    <span className="ml-0.5 text-[9px]">{arrivalDay}</span>
+                    <span className="ml-1 text-[9px]">{arrivalDay}</span>
                   )}
                 </span>
               </div>
@@ -177,10 +181,11 @@ export function JourneyDetail({
                 )}
               </div>
               <div className="min-w-0 flex-1 pb-1">
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-2">
                   {leg.mode === "walk" ? (
-                    <span className="text-[12.5px] font-semibold text-[color:var(--ink)]">
-                      Walk · {formatDuration(legDurationMin(leg))}
+                    <span className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-[color:var(--ink)]">
+                      <WalkIcon size={16} />
+                      {formatDuration(legDurationMin(leg))}
                       {leg.distanceKm
                         ? ` · ${formatDistance(leg.distanceKm)}`
                         : ""}
@@ -256,7 +261,7 @@ export function JourneyDetail({
                       {leg.intermediateStops.length} intermediate stop
                       {leg.intermediateStops.length === 1 ? "" : "s"}
                     </summary>
-                    <ul className="mt-1 flex flex-col gap-0.5 pl-2">
+                    <ul className="mt-1 flex flex-col gap-1 pl-2">
                       {leg.intermediateStops.map((stop, stopIndex) => (
                         <li key={`${stop.stopId ?? stop.name}-${stopIndex}`} className="truncate">
                           {stop.departure ?? stop.arrival ? (
@@ -277,6 +282,23 @@ export function JourneyDetail({
                 )}
               </div>
             </div>
+            {i < transit.legs.length - 1 && (() => {
+              const next = transit.legs[i + 1];
+              const gap = transferMinutes(leg, next);
+              if (gap == null) return null;
+              return (
+                <div className="flex gap-3 py-1">
+                  <div className="w-14 shrink-0" />
+                  <div className="flex w-4 shrink-0 justify-center">
+                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[color:var(--ink-mute)]" />
+                  </div>
+                  <div className="min-w-0 flex-1 text-[11px] text-[color:var(--ink-dim)]">
+                    Transfer · {gap} min
+                  </div>
+                </div>
+              );
+            })()}
+            </Fragment>
           );
         })}
       </div>

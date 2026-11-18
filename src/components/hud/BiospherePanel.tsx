@@ -179,7 +179,7 @@ export function BiospherePanel(props: BiospherePanelProps) {
         }}
         extras={
           props.speciesOn && (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <span className="hud-label">Taxon</span>
               <div className="hud-variant-chips no-scrollbar" role="radiogroup" aria-label="Taxonomic filter">
                 {props.speciesTaxonOptions.map((opt) => {
@@ -302,7 +302,7 @@ function BiosphereLayerCard({
 }: BiosphereLayerCardProps) {
   return (
     <HudPanel>
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
             {label}
@@ -386,7 +386,7 @@ function SwatchGrid({ spec }: { spec: SwatchSpec }) {
     <div className="flex flex-col gap-1 rounded-[10px] bg-[color:var(--surf-2)] p-2" aria-label="Class legend">
       <div className="grid grid-cols-2 gap-x-2 gap-y-1">
         {spec.swatches.map((s) => (
-          <div key={s.label} className="flex items-center gap-1.5">
+          <div key={s.label} className="flex items-center gap-2">
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ backgroundColor: s.color }}

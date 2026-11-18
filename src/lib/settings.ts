@@ -110,7 +110,7 @@ export const useSettings = create<Settings>()(
     (set) => ({
       imageBasemapId: DEFAULT_IMAGE_BASEMAP_ID,
       vectorBasemapId: DEFAULT_VECTOR_BASEMAP_ID,
-      basemapMode: "photo",
+      basemapMode: "vector",
       basemapVariants: {},
       liveBasemapDayOffset: 0,
       projection: "mercator",
@@ -182,7 +182,7 @@ export const useSettings = create<Settings>()(
     }),
     {
       name: "kugelmaps:settings",
-      version: 19,
+      version: 20,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         imageBasemapId: state.imageBasemapId,
@@ -216,6 +216,12 @@ export const useSettings = create<Settings>()(
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
         const p = persisted as Record<string, unknown>;
+        // v19 → v20: land new and returning users on the dark vector
+        // basemap; the previous choice is superseded once.
+        if (version < 20) {
+          p.basemapMode = "vector";
+          p.vectorBasemapId = "streets-dark";
+        }
         // v18 → v19: Clouds + Fires removed entirely; NDVI moved out of
         // the exclusive `activeOverlay` slot and into the Biosphere stack
         // as an independent toggle. Rail collapses to its own boolean.

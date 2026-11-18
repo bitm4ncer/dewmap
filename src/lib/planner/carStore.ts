@@ -32,6 +32,7 @@ interface CarState {
   notice: string | null;
 
   addWaypoint: (w: Omit<Waypoint, "id">) => void;
+  setWaypoints: (waypoints: Omit<Waypoint, "id">[]) => void;
   removeWaypoint: (id: string) => void;
   moveWaypoint: (id: string, dir: -1 | 1) => void;
   clear: () => void;
@@ -69,6 +70,14 @@ export const useCar = create<CarState>()(
           selectedId: null,
           phase: { kind: "idle" },
         })),
+      setWaypoints: (waypoints) =>
+        set({
+          waypoints: waypoints.map((w) => ({ ...w, id: id() })),
+          routes: [],
+          selectedId: null,
+          phase: { kind: "idle" },
+          notice: null,
+        }),
       removeWaypoint: (wId) =>
         set((s) => ({
           waypoints: s.waypoints.filter((w) => w.id !== wId),
