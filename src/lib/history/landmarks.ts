@@ -16,6 +16,64 @@ const OVERPASS_ENDPOINTS = [
 
 const WIKIDATA_SPARQL = "https://query.wikidata.org/sparql";
 
+/**
+ * Per-attempt and overall budgets for Overpass. A single stalled mirror
+ * used to block the whole tile forever: `fetch` has no default timeout,
+ * so the promise never settled and neither source ever reached the map.
+ * Mirrors are tried sequentially; the overall deadline bounds the worst
+ * case to ~12 s even when every mirror hangs.
+ */
+export const HISTORY_OVERPASS_ATTEMPT_TIMEOUT_MS = 6_000;
+export const HISTORY_OVERPASS_TOTAL_TIMEOUT_MS = 12_000;
+/** Wikidata SPARQL normally answers in 1–4 s; 10 s is generous. */
+export const HISTORY_WIKIDATA_TIMEOUT_MS = 10_000;
+
+/** Year from which undated `historic=*` features are shown. */
+export const HISTORY_UNDATED_VISIBLE_FROM = 2000;
+
+function abortError(): Error {
+  const err = new Error("Aborted");
+  err.name = "AbortError";
+  return err;
+}
+
+interface Attempt {
+  signal: AbortSignal;
+  didTimeout: () => boolean;
+  /** Clear the timer and detach from the caller's signal. */
+  cancel: () => void;
+}
+
+/**
+ * Combine the caller's abort signal with a timeout. `AbortSignal.any`
+ * is still missing on some supported Safari versions, so wire the two
+ * controllers by hand.
+ */
+function createAttempt(
+  caller: AbortSignal | undefined,
+  timeoutMs: number,
+): Attempt {
+  const controller = new AbortController();
+  let timedOut = false;
+  const onCallerAbort = () => controller.abort();
+  if (caller) {
+    if (caller.aborted) controller.abort();
+    else caller.addEventListener("abort", onCallerAbort, { once: true });
+  }
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, Math.max(1, timeoutMs));
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cancel: () => {
+      clearTimeout(timer);
+      caller?.removeEventListener("abort", onCallerAbort);
+    },
+  };
+}
+
 // Wikidata QIDs of "things that are not landmarks" — events, people,
 // administrative units. Used as a *negative* filter on the bbox query
 // to reduce noise without forcing items into a narrow whitelist
@@ -48,6 +106,8 @@ export interface LandmarkProperties {
   wikipediaTitle?: string;
   /** Wikipedia language edition for the title above (default "en"). */
   wikipediaLang?: string;
+  /** Representative image (Wikimedia Commons), when known. */
+  imageUrl?: string;
   /** Source bucket — useful for diagnostics + potential UI filters. */
   source: "osm" | "wikidata";
 }
@@ -61,6 +121,19 @@ export type LandmarkCollection = GeoJSON.FeatureCollection<
   GeoJSON.Point,
   LandmarkProperties
 >;
+
+/**
+ * Single source of truth for the timeline filter, shared by the MapLibre
+ * expression (dots) and the panel's visible-site counter.
+ */
+export function isLandmarkVisibleAtYear(
+  props: LandmarkProperties,
+  year: number,
+): boolean {
+  if (props.inception === undefined) return year >= HISTORY_UNDATED_VISIBLE_FROM;
+  if (props.inception > year) return false;
+  return props.dissolved === undefined || props.dissolved >= year;
+}
 
 // ─── Overpass ─────────────────────────────────────────────────────────
 
@@ -80,14 +153,28 @@ async function overpass(
   query: string,
   signal?: AbortSignal,
 ): Promise<OverpassResponse> {
+  if (Date.now() < overpassUnavailableUntil) {
+    throw new Error("Overpass temporarily unavailable (backoff)");
+  }
   let lastErr: unknown;
+  const deadline = Date.now() + HISTORY_OVERPASS_TOTAL_TIMEOUT_MS;
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    if (signal?.aborted) throw abortError();
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      lastErr = new Error("Overpass overall timeout reached");
+      break;
+    }
+    const attempt = createAttempt(
+      signal,
+      Math.min(HISTORY_OVERPASS_ATTEMPT_TIMEOUT_MS, remaining),
+    );
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `data=${encodeURIComponent(query)}`,
-        signal,
+        signal: attempt.signal,
       });
       if (!res.ok) {
         lastErr = new Error(`Overpass ${endpoint} → ${res.status}`);
@@ -95,10 +182,17 @@ async function overpass(
       }
       return (await res.json()) as OverpassResponse;
     } catch (err) {
-      if ((err as Error).name === "AbortError") throw err;
-      lastErr = err;
+      // A caller abort must win over the attempt timeout so the whole
+      // tile fetch stops when the user pans away.
+      if (signal?.aborted) throw abortError();
+      lastErr = attempt.didTimeout()
+        ? new Error(`Overpass ${endpoint} → timed out`)
+        : err;
+    } finally {
+      attempt.cancel();
     }
   }
+  overpassUnavailableUntil = Date.now() + OVERPASS_BACKOFF_MS;
   throw new Error(
     `All Overpass endpoints failed: ${(lastErr as Error)?.message ?? "unknown"}`,
   );
@@ -120,6 +214,38 @@ function parseOsmYear(value: string | undefined): number | undefined {
   return y;
 }
 
+/**
+ * Turn an OSM `image` / `wikimedia_commons` tag into a usable image URL.
+ * Direct http(s) URLs are accepted; Commons file references
+ * (`File:Foo.jpg`) go through Special:FilePath, which redirects to the
+ * actual file and supports server-side thumbnailing.
+ */
+function osmImageUrl(tags: Record<string, string>): string | undefined {
+  const direct = tags.image?.trim();
+  if (direct && /^https?:\/\//i.test(direct)) {
+    // `image` is sometimes a Commons *page* URL rather than a file URL.
+    const commonsPage = direct.match(
+      /^https?:\/\/commons\.wikimedia\.org\/wiki\/(File:[^#?]+)/i,
+    );
+    if (commonsPage) {
+      const file = decodeURIComponent(commonsPage[1]).slice("File:".length);
+      return commonsFilePath(file);
+    }
+    return direct;
+  }
+  const commons = tags.wikimedia_commons?.trim();
+  if (!commons?.startsWith("File:")) return undefined;
+  const file = commons.slice("File:".length).trim();
+  if (!file) return undefined;
+  return commonsFilePath(file);
+}
+
+function commonsFilePath(file: string): string {
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(
+    file,
+  )}?width=320`;
+}
+
 async function fetchOverpassLandmarks(
   bbox: [number, number, number, number],
   signal?: AbortSignal,
@@ -128,8 +254,7 @@ async function fetchOverpassLandmarks(
   const q = `
     [out:json][timeout:25];
     (
-      node[historic](${s},${w},${n},${e});
-      way[historic](${s},${w},${n},${e});
+      nwr[historic](${s},${w},${n},${e});
     );
     out tags center 400;
   `;
@@ -143,7 +268,7 @@ async function fetchOverpassLandmarks(
     const name =
       tags.name ?? tags["name:en"] ?? tags["name:de"] ?? tags.historic ?? "";
     if (!name) continue;
-    const kind = tags.historic ?? "site";
+    const kind = (tags.historic ?? "site").replace(/_/g, " ");
     const inception = parseOsmYear(tags.start_date);
     const dissolved = parseOsmYear(tags.end_date);
     const wikidataId =
@@ -176,6 +301,8 @@ async function fetchOverpassLandmarks(
     if (wikidataId) props.wikidataId = wikidataId;
     if (wikipediaTitle) props.wikipediaTitle = wikipediaTitle;
     if (wikipediaLang) props.wikipediaLang = wikipediaLang;
+    const imageUrl = osmImageUrl(tags);
+    if (imageUrl) props.imageUrl = imageUrl;
     out.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: [lon, lat] },
@@ -201,6 +328,7 @@ interface SparqlRow {
   inception?: SparqlBinding;
   dissolved?: SparqlBinding;
   kind?: SparqlBinding;
+  kindLabel?: SparqlBinding;
   wpTitle?: SparqlBinding;
 }
 
@@ -252,7 +380,7 @@ async function fetchWikidataLandmarks(
   // castle, Q1149531 fort, Q57831 fortress, etc.) and a positive
   // VALUES list silently skipped most of them.
   const query = `
-    SELECT ?item ?itemLabel ?coord ?inception ?dissolved ?kind ?wpTitle WHERE {
+    SELECT ?item ?itemLabel ?coord ?inception ?dissolved ?kind ?kindLabel ?wpTitle WHERE {
       SERVICE wikibase:box {
         ?item wdt:P625 ?coord .
         bd:serviceParam wikibase:cornerSouthWest "Point(${fmt(w)} ${fmt(s)})"^^geo:wktLiteral .
@@ -276,15 +404,27 @@ async function fetchWikidataLandmarks(
   `;
   // POST avoids the URL-length cliff (the QID VALUES list pushes us
   // close to the 414 limit on some proxies).
-  const res = await fetch(WIKIDATA_SPARQL, {
-    method: "POST",
-    headers: {
-      Accept: "application/sparql-results+json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `query=${encodeURIComponent(query)}`,
-    signal,
-  });
+  const attempt = createAttempt(signal, HISTORY_WIKIDATA_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(WIKIDATA_SPARQL, {
+      method: "POST",
+      headers: {
+        Accept: "application/sparql-results+json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: `query=${encodeURIComponent(query)}`,
+      signal: attempt.signal,
+    });
+  } catch (err) {
+    if (signal?.aborted) throw abortError();
+    if (attempt.didTimeout()) {
+      throw new Error("Wikidata SPARQL → timed out");
+    }
+    throw err;
+  } finally {
+    attempt.cancel();
+  }
   if (!res.ok) {
     throw new Error(`Wikidata SPARQL → ${res.status}`);
   }
@@ -305,6 +445,7 @@ async function fetchWikidataLandmarks(
     const name = row.itemLabel?.value ?? qid;
     const kindUri = row.kind?.value ?? "";
     const kindQid = kindUri.split("/").pop() ?? "site";
+    const kind = row.kindLabel?.value ?? kindQid;
     const wikipediaTitle = row.wpTitle?.value;
     const existing = byItem.get(qid);
     if (existing) {
@@ -314,7 +455,7 @@ async function fetchWikidataLandmarks(
     const props: LandmarkProperties = {
       id: `wd/${qid}`,
       name,
-      kind: kindQid,
+      kind,
       inception,
       wikidataId: qid,
       source: "wikidata",
@@ -344,11 +485,24 @@ export const HISTORY_TILE_ZOOM = 9;
 
 interface CachedTile {
   features: LandmarkFeature[];
+  /** True when only one of the two sources answered. */
+  partial: boolean;
+  cachedAt: number;
 }
 const tileCache = new Map<string, CachedTile>();
-const tileInFlight = new Map<string, Promise<LandmarkFeature[]>>();
+interface InFlightTile {
+  promise: Promise<LandmarkFeature[]>;
+  /** The request that started this load; aborted entries must not be reused. */
+  signal?: AbortSignal;
+}
+const tileInFlight = new Map<string, InFlightTile>();
 let rateLimitedUntil = 0;
 const RATE_LIMIT_BACKOFF_MS = 15_000;
+/** Skip Overpass for a while after every mirror failed (capacity/outage). */
+let overpassUnavailableUntil = 0;
+const OVERPASS_BACKOFF_MS = 60_000;
+/** Re-try a one-source tile after this long, so missing OSM data fills in. */
+const PARTIAL_TILE_TTL_MS = 60_000;
 
 function isRateLimitError(err: unknown): boolean {
   const msg = (err as Error)?.message ?? "";
@@ -382,17 +536,25 @@ export function tilesForBounds(
   bounds: { west: number; south: number; east: number; north: number },
   z: number,
 ): { x: number; y: number }[] {
+  const n = 1 << z;
+  // MapLibre reports longitudes beyond ±180 when the viewport crosses
+  // the antimeridian (e.g. west 170, east 190). Normalise tile x so we
+  // fetch the valid wrapped tiles instead of out-of-range indices.
+  const wrapX = (x: number) => ((x % n) + n) % n;
   const xMin = lon2tileX(bounds.west, z);
   const xMax = lon2tileX(bounds.east, z);
-  const yMin = lat2tileY(bounds.north, z);
-  const yMax = lat2tileY(bounds.south, z);
-  const out: { x: number; y: number }[] = [];
+  // Mercator cannot represent latitudes beyond ±85.0511°; clamp y.
+  const yMin = Math.max(0, lat2tileY(bounds.north, z));
+  const yMax = Math.min(n - 1, lat2tileY(bounds.south, z));
+  // Deduplicate because a world-spanning bbox can wrap back onto itself.
+  const out = new Map<string, { x: number; y: number }>();
   for (let x = xMin; x <= xMax; x += 1) {
+    const wx = wrapX(x);
     for (let y = yMin; y <= yMax; y += 1) {
-      out.push({ x, y });
+      out.set(`${wx}/${y}`, { x: wx, y });
     }
   }
-  return out;
+  return [...out.values()];
 }
 
 export function tileBbox(
@@ -409,55 +571,107 @@ export function tileBbox(
   ];
 }
 
+/**
+ * Merge the two source buckets, preferring the Wikidata entry when both
+ * describe the same QID (Wikidata always has a date; OSM rarely does).
+ */
+function mergeLandmarkSources(
+  osm: LandmarkFeature[],
+  wikidata: LandmarkFeature[],
+): LandmarkFeature[] {
+  const seenQids = new Set<string>();
+  for (const f of wikidata) {
+    if (f.properties.wikidataId) seenQids.add(f.properties.wikidataId);
+  }
+  return [
+    ...osm.filter(
+      (f) =>
+        !f.properties.wikidataId || !seenQids.has(f.properties.wikidataId),
+    ),
+    ...wikidata,
+  ];
+}
+
 async function loadTile(
   x: number,
   y: number,
   signal?: AbortSignal,
+  /** Called whenever one source settles, so callers can paint early. */
+  onPartial?: (features: LandmarkFeature[]) => void,
 ): Promise<LandmarkFeature[]> {
   const key = tileKey(x, y);
   const cached = tileCache.get(key);
-  if (cached) return cached.features;
+  const cachedIsFresh =
+    cached &&
+    (!cached.partial || Date.now() - cached.cachedAt < PARTIAL_TILE_TTL_MS);
+  if (cached && cachedIsFresh) {
+    onPartial?.(cached.features);
+    return cached.features;
+  }
+  if (cached) tileCache.delete(key);
   const inFlight = tileInFlight.get(key);
-  if (inFlight) return inFlight;
+  if (inFlight && !inFlight.signal?.aborted) return inFlight.promise;
+  // A stale entry from an aborted request must not be reused, or the
+  // next fetch inherits the old AbortError and the area stays blank.
   const bbox = tileBbox(HISTORY_TILE_ZOOM, x, y);
+  let osmFeatures: LandmarkFeature[] = [];
+  let wdFeatures: LandmarkFeature[] = [];
+  const emitPartial = () => {
+    if (signal?.aborted || !onPartial) return;
+    onPartial(mergeLandmarkSources(osmFeatures, wdFeatures));
+  };
   const promise = (async () => {
     // Run both queries in parallel; either failing alone shouldn't
-    // wipe out the other source.
+    // wipe out the other source. Timeouts inside the fetchers keep a
+    // stalled mirror from blocking the whole tile indefinitely.
     const [osmRes, wdRes] = await Promise.allSettled([
-      fetchOverpassLandmarks(bbox, signal),
-      fetchWikidataLandmarks(bbox, signal),
+      fetchOverpassLandmarks(bbox, signal).then((features) => {
+        osmFeatures = features;
+        emitPartial();
+        return features;
+      }),
+      fetchWikidataLandmarks(bbox, signal).then((features) => {
+        wdFeatures = features;
+        emitPartial();
+        return features;
+      }),
     ]);
     if (signal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
+      throw abortError();
     }
-    const merged: LandmarkFeature[] = [];
-    if (osmRes.status === "fulfilled") merged.push(...osmRes.value);
+    if (osmRes.status === "fulfilled") osmFeatures = osmRes.value;
     else if (isRateLimitError(osmRes.reason)) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
     }
-    if (wdRes.status === "fulfilled") merged.push(...wdRes.value);
+    if (wdRes.status === "fulfilled") wdFeatures = wdRes.value;
     else if (isRateLimitError(wdRes.reason)) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
     }
-    // Prefer Wikidata entry when both sources reference the same QID
-    // (Wikidata always has a date; OSM rarely does).
-    const seenQids = new Set<string>();
-    for (const f of merged) {
-      if (f.properties.source === "wikidata" && f.properties.wikidataId) {
-        seenQids.add(f.properties.wikidataId);
-      }
+    const deduped = mergeLandmarkSources(osmFeatures, wdFeatures);
+    // Only cache a tile when at least one source answered. An empty
+    // result produced by two transient failures used to be cached
+    // forever, so the area stayed blank for the rest of the session.
+    const answered =
+      osmRes.status === "fulfilled" || wdRes.status === "fulfilled";
+    if (!answered) {
+      // Surface the failure; without this the UI just says "no data".
+      console.warn(
+        `[history-landmarks] tile ${key} failed:`,
+        osmRes.status === "rejected" ? osmRes.reason : undefined,
+        wdRes.status === "rejected" ? wdRes.reason : undefined,
+      );
     }
-    const deduped = merged.filter(
-      (f) =>
-        f.properties.source !== "osm" ||
-        !f.properties.wikidataId ||
-        !seenQids.has(f.properties.wikidataId),
-    );
-    // Never poison the tile cache with a result produced after abort.
-    if (!signal?.aborted) tileCache.set(key, { features: deduped });
+    if (!signal?.aborted && answered) {
+      tileCache.set(key, {
+        features: deduped,
+        partial:
+          osmRes.status !== "fulfilled" || wdRes.status !== "fulfilled",
+        cachedAt: Date.now(),
+      });
+    }
     return deduped;
   })();
-  tileInFlight.set(key, promise);
+  tileInFlight.set(key, { promise, signal });
   try {
     return await promise;
   } catch (err) {
@@ -466,7 +680,10 @@ async function loadTile(
     }
     throw err;
   } finally {
-    tileInFlight.delete(key);
+    // Only remove our own entry; a newer request may have replaced it.
+    if (tileInFlight.get(key)?.promise === promise) {
+      tileInFlight.delete(key);
+    }
   }
 }
 
@@ -478,6 +695,8 @@ async function loadTile(
 export async function fetchLandmarksForBounds(
   bounds: { west: number; south: number; east: number; north: number },
   signal?: AbortSignal,
+  /** Progressive results: called whenever a source or tile settles. */
+  onProgress?: (collection: LandmarkCollection) => void,
 ): Promise<LandmarkCollection> {
   if (Date.now() < rateLimitedUntil) {
     return featuresToCollection(collectCachedFeaturesForBounds(bounds));
@@ -493,6 +712,22 @@ export async function fetchLandmarksForBounds(
     );
     return featuresToCollection(collectCachedFeaturesForBounds(bounds));
   }
+  // Track the latest merged result per tile so a partial update from a
+  // second source can replace the first without losing other tiles.
+  const perTile = new Map<string, LandmarkFeature[]>();
+  const emitProgress = () => {
+    if (!onProgress || signal?.aborted) return;
+    const seen = new Set<string>();
+    const merged: LandmarkFeature[] = [];
+    for (const features of perTile.values()) {
+      for (const f of features) {
+        if (seen.has(f.properties.id)) continue;
+        seen.add(f.properties.id);
+        merged.push(f);
+      }
+    }
+    onProgress(featuresToCollection(merged));
+  };
   // Cap parallelism — Wikidata SPARQL throttles aggressively.
   const MAX_PARALLEL = 2;
   const queue = tiles.slice();
@@ -502,8 +737,13 @@ export async function fetchLandmarksForBounds(
     while (queue.length > 0) {
       const t = queue.shift();
       if (!t) return;
+      const key = tileKey(t.x, t.y);
       try {
-        const tileFeatures = await loadTile(t.x, t.y, signal);
+        const tileFeatures = await loadTile(t.x, t.y, signal, (partial) => {
+          perTile.set(key, partial);
+          emitProgress();
+        });
+        perTile.set(key, tileFeatures);
         for (const f of tileFeatures) {
           if (seen.has(f.properties.id)) continue;
           seen.add(f.properties.id);

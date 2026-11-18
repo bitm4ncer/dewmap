@@ -1,5 +1,46 @@
 # CHANGELOG
 
+## 2026-11-18 — History tab: reliable landmarks + image enrichment
+
+### Fixed
+
+- **Historic sites could stay invisible forever.** Overpass was fetched
+  without a timeout and every tile waited for `Promise.allSettled([OSM,
+  Wikidata])`; one stalled mirror blocked both sources. Requests now have
+  per-mirror (6 s), overall (12 s) and Wikidata (10 s) budgets, fall back
+  through the mirrors, and are skipped for 60 s after a full outage.
+- **Progressive rendering.** Wikidata results paint as soon as they arrive
+  instead of waiting for Overpass; the panel shows
+  `N sites · loading…`.
+- **Abort race.** An aborted in-flight tile is no longer reused by the next
+  fetch, which previously inherited the `AbortError` and left the area
+  blank.
+- **Poisoned tiles.** Tiles where both sources failed are not cached;
+  one-source tiles are revalidated after 60 s.
+- **Worldwide geometry.** Overpass now includes `relation[historic]`
+  (`nwr`), tile indices wrap correctly across the antimeridian, and tile
+  rows are clamped to the Web Mercator range.
+- **Blank map on a failed OHM style.** A 12 s watchdog reverts to the
+  previous basemap and turns `historyMapOn` off instead of hanging.
+- **Landmark labels on OHM.** The label layer now uses OHM's
+  `OpenHistorical` font there and Noto Sans on the vector basemaps,
+  instead of requesting a font OHM's glyph server does not have.
+- **Counter.** Visible sites now respect the year filter and update live
+  while dragging the slider.
+
+### Added
+
+- Wikimedia Commons image fallback: OSM `image`/`wikimedia_commons` tags
+  and Wikidata `P18` (looked up on marker click, not in the bbox query).
+- Popup renders a `Commons ↗` link alongside Wikipedia/Wikidata.
+- History panel copy documents period-aware political borders and the
+  year filter.
+
+### Docs
+
+- `docs/audit/2026-11-18-history-tab-audit.md` — root cause, fixes,
+  remaining findings and a feature roadmap (borders, archives, timeline).
+
 ## 2026-11-18 — Rebrand: BiosphereOne → KugelMaps
 
 Full brand pass across the app, metadata and docs.

@@ -67,7 +67,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
               <div className="ui-row-title">Historical map</div>
               <div className="ui-row-sub">
                 Replaces the basemap with OpenHistoricalMap&apos;s sepia
-                historical style for the chosen year.
+                historical style for the chosen year — including period-aware
+                political borders, settlements and roads where mapped.
               </div>
             </div>
             <Switch
@@ -134,7 +135,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
               style={{ background: "var(--landmark-osm)" }}
             />{" "}
             OpenStreetMap <span className="hud-mono">historic=*</span>. Tap a
-            marker for a summary.
+            marker for its summary and, where available, a photo. The year
+            slider hides sites that did not exist yet.
           </p>
         </div>
       </HudPanel>

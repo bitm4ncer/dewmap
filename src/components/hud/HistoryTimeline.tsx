@@ -61,10 +61,12 @@ export function HistoryTimeline({
         </span>
         <span className="hud-mono text-[12px] uppercase tracking-wider text-[color:var(--ink-dim)]">
           {loading
-            ? "loading…"
+            ? visibleCount > 0
+              ? `${visibleCount} site${visibleCount === 1 ? "" : "s"} · loading…`
+              : "loading…"
             : visibleCount > 0
               ? `${visibleCount} site${visibleCount === 1 ? "" : "s"}`
-              : "no data"}
+              : "no sites"}
         </span>
       </div>
 

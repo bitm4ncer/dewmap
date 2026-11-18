@@ -68,8 +68,10 @@ KugelMaps is a client-side navigation and exploration app. It plans train, bus, 
 
 ### History
 
-- **OpenHistoricalMap** — time-travel basemap with a year slider.
-- **Historic landmarks** — Wikidata and OSM sites, filtered by inception year.
+- **OpenHistoricalMap** — time-travel basemap with a year slider and
+  period-aware political borders, settlements and roads.
+- **Historic landmarks** — Wikidata and OSM sites, filtered by inception
+  year, with Wikipedia summaries and Wikimedia Commons images.
 
 ### App
 
