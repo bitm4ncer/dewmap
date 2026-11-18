@@ -482,7 +482,7 @@ function PoiDetailContent({
         <div
           className="poi-mini"
           onPointerDown={(e) => {
-            if ((e.target as HTMLElement).closest(".poi-mini-actions")) return;
+            if ((e.target as HTMLElement).closest("button, a")) return;
             beginResize("compact", e);
           }}
           onPointerMove={(e) => {
@@ -498,69 +498,80 @@ function PoiDetailContent({
           <span className="poi-grip" aria-hidden />
           <button
             type="button"
-            className="poi-mini-main"
+            className="poi-mini-thumb"
             onClick={expand}
             aria-label={`Open details for ${name}`}
           >
-            <span className="poi-mini-thumb">
-              {hasImage && current ? (
-                <img
-                  src={current.url}
-                  alt=""
-                  loading="eager"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  onLoad={() => setLoadedUrl(current.url)}
-                  onError={() => onImageError(current.url)}
-                />
-              ) : (
-                <ImageIcon size={20} />
-              )}
-            </span>
-            <span className="poi-mini-copy">
-              <span className="poi-mini-kicker">
-                {category}
-                {city ? ` · ${city}` : ""}
-              </span>
-              <span className="poi-mini-title">{name}</span>
-              {(address || loading) && (
-                <span className="poi-mini-line">
-                  {address || "Loading details…"}
-                </span>
-              )}
-              {status && (
-                <span className="poi-status" data-tone={status.tone}>
-                  {status.label}
-                </span>
-              )}
-            </span>
+            {hasImage && current ? (
+              <img
+                src={current.url}
+                alt=""
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onLoad={() => setLoadedUrl(current.url)}
+                onError={() => onImageError(current.url)}
+              />
+            ) : (
+              <ImageIcon size={20} />
+            )}
           </button>
+          <div className="poi-mini-content">
+            <button
+              type="button"
+              className="poi-mini-main"
+              onClick={expand}
+              aria-label={`Open details for ${name}`}
+            >
+              <span className="poi-mini-copy">
+                <span className="poi-mini-kicker">
+                  {category}
+                  {city ? ` · ${city}` : ""}
+                </span>
+                <span className="poi-mini-title">{name}</span>
+                {(address || loading) && (
+                  <span className="poi-mini-line">
+                    {address || "Loading details…"}
+                  </span>
+                )}
+                {status && (
+                  <span className="poi-status" data-tone={status.tone}>
+                    {status.label}
+                  </span>
+                )}
+              </span>
+            </button>
+            {(onPlanRoute || streetView) && (
+              <div className="poi-mini-secondary">
+                {onPlanRoute && (
+                  <button
+                    type="button"
+                    className="poi-mini-subbtn"
+                    onClick={planRoute}
+                    aria-label="Plan route"
+                    title="Plan route"
+                  >
+                    <RouteIcon size={15} />
+                  </button>
+                )}
+                {streetView && (
+                  <button
+                    type="button"
+                    className="poi-mini-subbtn"
+                    onClick={() => {
+                      haptic("tap");
+                      setStreetViewOpen(true);
+                    }}
+                    aria-label="Open Street View"
+                    title="Open Street View"
+                  >
+                    <StreetViewIcon size={15} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <div className="poi-mini-actions">
-            {onPlanRoute && (
-              <button
-                type="button"
-                className="poi-mini-btn"
-                onClick={planRoute}
-                aria-label="Plan route"
-                title="Plan route"
-              >
-                <RouteIcon size={18} />
-              </button>
-            )}
-            {streetView && (
-              <button
-                type="button"
-                className="poi-mini-btn"
-                onClick={() => {
-                  haptic("tap");
-                  setStreetViewOpen(true);
-                }}
-                aria-label="Open Street View"
-                title="Open Street View"
-              >
-                <StreetViewIcon size={18} />
-              </button>
-            )}
             <button
               type="button"
               className="poi-mini-btn"

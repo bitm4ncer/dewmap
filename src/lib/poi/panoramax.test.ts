@@ -70,6 +70,34 @@ describe("findPanoramaxStreetView", () => {
     expect(url).toContain("place_fov_tolerance=60");
   });
 
+  it("falls back to the nearest picture when no facade shot exists", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("place_fov_tolerance=60")) {
+        return jsonResponse({ features: [] });
+      }
+      return jsonResponse({
+        features: [
+          {
+            id: "nearby",
+            geometry: { coordinates: [13.405, 52.52] },
+            properties: { "view:azimuth": 180 },
+            assets: { thumb: { href: "https://example.test/nearby.jpg" } },
+          },
+        ],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await findPanoramaxStreetView(13.405, 52.52);
+
+    expect(result?.id).toBe("nearby");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const fallbackUrl = String(fetchMock.mock.calls[1]?.[0]);
+    expect(fallbackUrl).toContain("place_distance=3-100");
+    expect(fallbackUrl).toContain("place_fov_tolerance=180");
+  });
+
   it("returns null when there is no nearby picture", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ features: [] })));
 

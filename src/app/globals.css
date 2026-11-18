@@ -669,9 +669,14 @@ body {
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-left,
   body:has(.hud-bottom-sheet[data-sheet-state="modes"]) .maplibregl-ctrl-bottom-right,
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-right,
-  body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-right {
-    opacity: 0;
-    pointer-events: none;
+  body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-right,
+  body:has(.poi-detail) .maplibregl-ctrl,
+  body:has(.poi-detail) .maplibregl-ctrl-bottom-left,
+  body:has(.poi-detail) .maplibregl-ctrl-bottom-right,
+  body:has(.poi-detail) .maplibregl-ctrl-attrib,
+  body:has(.poi-detail) .maplibregl-ctrl-attrib-button,
+  body:has(.poi-detail) .hud-sheet-tabs {
+    display: none !important;
   }
 }
 
@@ -1999,12 +2004,18 @@ input[type="range"].hud-slider::-moz-range-thumb {
   background: var(--surf-3);
 }
 
-.poi-mini-main {
+.poi-mini-content {
   display: flex;
-  flex: 1;
   min-width: 0;
-  align-items: center;
-  gap: 12px;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poi-mini-main {
+  display: block;
+  width: 100%;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2022,10 +2033,36 @@ input[type="range"].hud-slider::-moz-range-thumb {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  padding: 0;
+  border: 0;
   border-radius: 12px;
   background: var(--surf-2);
   color: var(--ink-mute);
+  cursor: pointer;
 }
+.poi-mini-thumb:focus-visible { box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent); }
+
+.poi-mini-secondary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.poi-mini-subbtn {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surf-2);
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.poi-mini-subbtn:hover { background: var(--surf-3); color: var(--ink); }
+.poi-mini-subbtn:focus-visible { box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent); }
 .poi-mini-thumb img {
   display: block;
   width: 100%;

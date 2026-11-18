@@ -139,15 +139,17 @@ function toStreetView(
  *
  * https://api.panoramax.xyz/api/search?place_position=...
  */
-export async function findPanoramaxStreetView(
+async function searchStreetView(
   lon: number,
   lat: number,
+  distance: string,
+  fovTolerance: string,
   signal?: AbortSignal,
 ): Promise<PanoramaxStreetView | null> {
   const url = new URL(SEARCH_URL);
   url.searchParams.set("place_position", `${lon},${lat}`);
-  url.searchParams.set("place_distance", "3-50");
-  url.searchParams.set("place_fov_tolerance", "60");
+  url.searchParams.set("place_distance", distance);
+  url.searchParams.set("place_fov_tolerance", fovTolerance);
   url.searchParams.set("limit", "5");
 
   let response: Response;
@@ -185,4 +187,22 @@ export async function findPanoramaxStreetView(
     if (result) return result;
   }
   return null;
+}
+
+/**
+ * Find a Panoramax picture for a place.
+ *
+ * First try a real facade shot (within 50 m, looking towards the place).
+ * If that fails, fall back to the nearest picture within 100 m regardless
+ * of its heading. This also makes long-press crosshair inspection work in
+ * places where the building centroid has no direct facade capture.
+ */
+export async function findPanoramaxStreetView(
+  lon: number,
+  lat: number,
+  signal?: AbortSignal,
+): Promise<PanoramaxStreetView | null> {
+  const facade = await searchStreetView(lon, lat, "3-50", "60", signal);
+  if (facade) return facade;
+  return searchStreetView(lon, lat, "3-100", "180", signal);
 }
