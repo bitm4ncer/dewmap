@@ -3687,6 +3687,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       POI_ICON_LAYER_ID,
       POI_LABEL_LAYER_ID,
       historyLayers.siteLayer,
+      historyLayers.siteHit,
       ...historyLayers.clusterDots,
     ]);
     const onClick = (event: MapMouseEvent) => {

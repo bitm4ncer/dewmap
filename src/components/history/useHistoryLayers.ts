@@ -63,6 +63,7 @@ function firstSymbolBefore(map: MLMap): string | undefined {
     ...ids.clusterCounts,
     ...ids.clusterDots,
     ids.siteLayer,
+    ids.siteHit,
     ids.siteLabel,
   ]);
   const layers = map.getStyle()?.layers ?? [];
@@ -171,7 +172,7 @@ export function useHistoryLayers(
     const onClick = (event: maplibregl.MapMouseEvent) => {
       const ids = globalLayerIds();
       const features = map.queryRenderedFeatures(event.point, {
-        layers: [...ids.clusterDots, ids.siteLayer],
+        layers: [...ids.clusterDots, ids.siteLayer, ids.siteHit],
       });
       if (features.length === 0) return;
       const feature = features[0];
@@ -208,7 +209,11 @@ export function useHistoryLayers(
       window.setTimeout(updateCount, 0);
     };
 
-    const hoverLayers = [...globalLayerIds().clusterDots, globalLayerIds().siteLayer];
+    const hoverLayers = [
+      ...globalLayerIds().clusterDots,
+      globalLayerIds().siteLayer,
+      globalLayerIds().siteHit,
+    ];
     const siteSource = globalLayerIds().siteSource;
     const onSourceData = (event: MapSourceDataEvent) => {
       // `idle` can fire before the vector site source has finished loading,

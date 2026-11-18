@@ -61,7 +61,11 @@ describe("globalLayerIds", () => {
     const ids = globalLayerIds();
     expect(ids.clusterSources).toHaveLength(4);
     expect(ids.siteSource).toBe("history-global-sites");
+    expect(ids.siteHit).toBe("history-global-sites-hit");
     expect(new Set(ids.clusterSources).size).toBe(4);
+    expect(
+      new Set([...ids.clusterDots, ids.siteLayer, ids.siteHit]).size,
+    ).toBe(6);
   });
 });
 

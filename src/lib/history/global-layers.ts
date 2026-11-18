@@ -29,6 +29,7 @@ const CLUSTER_SOURCE_PREFIX = "history-global-clusters";
 export const GLOBAL_SITE_SOURCE_ID = "history-global-sites";
 export const GLOBAL_SITE_LAYER_ID = "history-global-sites-dot";
 export const GLOBAL_SITE_LABEL_LAYER_ID = "history-global-sites-label";
+export const GLOBAL_SITE_HIT_LAYER_ID = "history-global-sites-hit";
 
 function clusterSourceId(minzoom: number, maxzoom: number): string {
   return `${CLUSTER_SOURCE_PREFIX}-${minzoom}-${maxzoom}`;
@@ -59,6 +60,7 @@ export function globalLayerIds() {
     siteSource: GLOBAL_SITE_SOURCE_ID,
     siteLayer: GLOBAL_SITE_LAYER_ID,
     siteLabel: GLOBAL_SITE_LABEL_LAYER_ID,
+    siteHit: GLOBAL_SITE_HIT_LAYER_ID,
   };
 }
 
@@ -213,6 +215,24 @@ export function ensureGlobalLayers(
       beforeId,
     );
   }
+  if (!map.getLayer(GLOBAL_SITE_HIT_LAYER_ID)) {
+    map.addLayer(
+      {
+        id: GLOBAL_SITE_HIT_LAYER_ID,
+        type: "circle",
+        source: GLOBAL_SITE_SOURCE_ID,
+        "source-layer": "history_sites",
+        minzoom: 8,
+        paint: {
+          // Invisible 36 px touch target around the smaller visual dot.
+          "circle-radius": 18,
+          "circle-color": "#000000",
+          "circle-opacity": 0,
+        },
+      },
+      beforeId,
+    );
+  }
   if (!map.getLayer(GLOBAL_SITE_LABEL_LAYER_ID)) {
     map.addLayer(
       {
@@ -253,12 +273,19 @@ export function applyGlobalFilters(map: MLMap, filters: GlobalFilters) {
     if (map.getLayer(id)) map.setFilter(id, clusterFilter);
   }
   if (map.getLayer(ids.siteLayer)) map.setFilter(ids.siteLayer, siteFilter);
+  if (map.getLayer(ids.siteHit)) map.setFilter(ids.siteHit, siteFilter);
   if (map.getLayer(ids.siteLabel)) map.setFilter(ids.siteLabel, siteFilter);
 }
 
 export function removeGlobalLayers(map: MLMap) {
   const ids = globalLayerIds();
-  for (const id of [...ids.clusterCounts, ...ids.clusterDots, ids.siteLabel, ids.siteLayer]) {
+  for (const id of [
+    ...ids.clusterCounts,
+    ...ids.clusterDots,
+    ids.siteLabel,
+    ids.siteHit,
+    ids.siteLayer,
+  ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
   for (const id of [...ids.clusterSources, ids.siteSource]) {
