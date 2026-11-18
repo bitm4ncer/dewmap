@@ -55,18 +55,24 @@ describe("flat CSS invariants", () => {
   });
 
   it("keeps the search glass off the input's ancestor chain", () => {
-    expect(block(".ui-search-pill")?.body).toContain("isolation: isolate");
-    const glass = blocks.find(
-      (b) => b.selector.trim().endsWith(".ui-search-pill::before"),
+    const base = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".ui-search-pill") &&
+        b.body.includes("isolation: isolate"),
     );
-    expect(glass?.body).toContain("backdrop-filter");
-    expect(block(".ui-search-pill")?.body).not.toContain("backdrop-filter");
+    expect(base).toBeTruthy();
+    expect(base?.body).not.toContain("backdrop-filter");
+    const glass = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".ui-search-pill::before") &&
+        b.body.includes("backdrop-filter"),
+    );
+    expect(glass).toBeTruthy();
   });
 
-  it("drops the mobile search blur so Safari keeps the caret inside", () => {
-    expect(css).toMatch(
-      /\.ui-search-pill::before \{ backdrop-filter: none;/,
-    );
+  it("flattens the mobile search pill so Safari keeps the caret inside", () => {
+    expect(css).toMatch(/\.ui-search-pill::before \{ display: none;/);
+    expect(css).toMatch(/\.ui-search-pill \{ background: var\(--glass-strong\);/);
   });
 
   it("keeps search focus soft and free of an inner ring", () => {
