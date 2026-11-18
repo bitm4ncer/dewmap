@@ -54,6 +54,17 @@ describe("flat CSS invariants", () => {
     expect(sheet.some((b) => b.body.includes("backdrop-filter"))).toBe(false);
   });
 
+  it("uses the warm locator only for own position", () => {
+    const users = blocks.filter((b) => b.body.includes("var(--locator)"));
+    expect(users.length).toBeGreaterThan(0);
+    expect(users.every((b) => /live-location|user-location-accuracy/.test(b.selector))).toBe(true);
+  });
+
+  it("pulses the locator slowly to 1.5", () => {
+    expect(css).toContain("live-location-pulse 2.6s");
+    expect(css).toMatch(/@keyframes live-location-pulse \{[\s\S]*?scale\(1\.5\)/);
+  });
+
   it("keeps row separators out of the UI", () => {
     expect(css).not.toMatch(/\.ui-row\s*\+\s*\.ui-row\s*\{[^}]*border/);
     expect(css).not.toContain(".ui-divider");

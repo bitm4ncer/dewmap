@@ -183,7 +183,7 @@ body {
   height: 28px;
   pointer-events: none;
   /* Cone fill inherits this color via stop-color="currentColor". */
-  color: var(--accent);
+  color: var(--locator);
 }
 .live-location-scaler {
   position: absolute;
@@ -194,26 +194,26 @@ body {
 .live-location-dot {
   position: absolute;
   inset: 7px;
-  background: var(--accent);
+  background: var(--locator);
   border-radius: 50%;
   box-shadow:
     0 0 0 2.5px #ffffff,
-    0 0 0 3.5px rgba(0, 0, 0, 0.45),
     0 2px 6px rgba(0, 0, 0, 0.55);
   z-index: 2;
 }
 .live-location-pulse {
   position: absolute;
   inset: 0;
-  background: var(--accent);
+  background: var(--locator);
   border-radius: 50%;
-  opacity: 0.45;
-  animation: live-location-pulse 2s ease-out infinite;
+  opacity: 0.3;
+  animation: live-location-pulse 2.6s ease-out infinite;
   z-index: 1;
 }
 @keyframes live-location-pulse {
-  0%   { transform: scale(0.4); opacity: 0.5; }
-  100% { transform: scale(2.6); opacity: 0; }
+  0%   { transform: scale(1); opacity: 0.3; }
+  70%  { opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
 }
 .live-location-cone {
   position: absolute;
@@ -238,7 +238,7 @@ body {
 .maplibregl-user-location-dot::before { display: none !important; }
 
 .maplibregl-user-location-accuracy-circle {
-  background-color: var(--accent) !important;
+  background-color: var(--locator) !important;
   opacity: 0.18 !important;
 }
 

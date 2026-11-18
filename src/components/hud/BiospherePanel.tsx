@@ -361,13 +361,13 @@ function BiosphereLayerCard({
 
 function LegendBar({ spec }: { spec: LegendSpec }) {
   return (
-    <div className="flex flex-col gap-1" aria-label="Legend">
+    <div className="flex flex-col gap-1 rounded-[10px] bg-[color:var(--surf-2)] p-2" aria-label="Legend">
       <div
         className="h-1.5 w-full rounded-full"
         style={{ background: spec.gradient }}
         aria-hidden
       />
-      <div className="flex justify-between text-[11.5px] text-[color:var(--ink-dim)]">
+      <div className="flex justify-between text-[11.5px] text-[color:var(--ink-mute)]">
         <span>{spec.minLabel}</span>
         {spec.midLabel && <span>{spec.midLabel}</span>}
         <span>{spec.maxLabel}</span>
@@ -383,7 +383,7 @@ function LegendBar({ spec }: { spec: LegendSpec }) {
 
 function SwatchGrid({ spec }: { spec: SwatchSpec }) {
   return (
-    <div className="flex flex-col gap-1" aria-label="Class legend">
+    <div className="flex flex-col gap-1 rounded-[10px] bg-[color:var(--surf-2)] p-2" aria-label="Class legend">
       <div className="grid grid-cols-2 gap-x-2 gap-y-1">
         {spec.swatches.map((s) => (
           <div key={s.label} className="flex items-center gap-1.5">
