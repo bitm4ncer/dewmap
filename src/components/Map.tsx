@@ -12,6 +12,7 @@ import {
   DEFAULT_VECTOR_BASEMAP_ID,
   availableBasemapsInGroup,
   basemapAvailableAt,
+  basemapPresentation,
   basemapsInGroup,
   getActiveVariant,
   getBasemap,
@@ -3975,6 +3976,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     setVectorBasemapId(id);
                     if (basemapMode !== "vector") setBasemapMode("vector");
                   }}
+                  onSelectDrawn={(id) => {
+                    setImageBasemapId(id);
+                    setBasemapMode("photo");
+                  }}
                   onSelectVariant={(id, variantId) =>
                     setBasemapVariant(id, variantId)
                   }
@@ -4105,6 +4110,7 @@ interface BasemapPanelProps {
   map: MLMap | null;
   onSelectImage: (id: string) => void;
   onSelectVector: (id: string) => void;
+  onSelectDrawn: (id: string) => void;
   onSelectVariant: (id: string, variantId: string) => void;
 }
 
@@ -4182,6 +4188,7 @@ function BasemapPanel({
   map,
   onSelectImage,
   onSelectVector,
+  onSelectDrawn,
   onSelectVariant,
 }: BasemapPanelProps) {
   const [group, setGroup] = useState<BasemapGroup | "all">(lastBasemapGroup);
@@ -4205,8 +4212,15 @@ function BasemapPanel({
   const filtered = basemapsInGroup(group);
   const available = availableBasemapsInGroup(group, center);
   const hiddenCount = filtered.length - available.length;
-  const imageMaps = available.filter((b) => b.category === "photo");
-  const vectorMaps = available.filter((b) => b.category === "vector");
+  const vectorMaps = available.filter(
+    (b) => basemapPresentation(b) === "vector",
+  );
+  const drawnMaps = available.filter(
+    (b) => basemapPresentation(b) === "drawn",
+  );
+  const imageMaps = available.filter(
+    (b) => basemapPresentation(b) === "photo",
+  );
 
   const renderGroup = (
     label: string,
@@ -4332,10 +4346,17 @@ function BasemapPanel({
           onSelectVector,
         )}
         {renderGroup(
+          "Drawn Maps",
+          drawnMaps,
+          imageId,
+          mode !== "vector",
+          onSelectDrawn,
+        )}
+        {renderGroup(
           "Image Maps",
           imageMaps,
           imageId,
-          mode === "photo" || mode === "hybrid",
+          mode !== "vector",
           onSelectImage,
         )}
       </div>

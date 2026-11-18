@@ -732,7 +732,7 @@ export const NEW_BASEMAPS: Basemap[] = [
 Implemented in this change set:
 
 - `src/lib/basemaps.ts`: **63 basemaps** in five groups (`global`, `dach`, `europe`, `historical`, `thematic`), each with `provider`, `license`, `coverage` and optional WGS84 `bounds`.
-- Picker: group filter chips, counts, **year/edition variants** inline (chips ≤8 options, native select for longer series), and a provider/licence line.
+- Picker: group filter chips, counts, **year/edition variants** inline (chips ≤8 options, native select for longer series), and a provider/licence line. Three sections separate true vector styles, **Drawn** raster cartography and **Image** imagery; `category` remains the technical slot, `presentation` drives the section.
 - Regional layers are only offered while the map centre lies inside their coverage. Country maps use simplified Natural Earth outlines (`src/lib/basemap-regions.ts`); city layers use their bounds. Panning out auto-falls back to the global default instead of leaving blank tiles.
 - Regional raster sources pass `bounds` to MapLibre, so out-of-coverage tile requests are avoided.
 - Style watchdog: a remote vector style that does not load within 12 s falls back to the CARTO dark default.

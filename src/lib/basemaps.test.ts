@@ -8,6 +8,7 @@ import {
   availableBasemapsInGroup,
   basemapAvailableAt,
   basemapGroup,
+  basemapPresentation,
   basemapsInGroup,
   getActiveVariant,
   getBasemap,
@@ -82,6 +83,29 @@ describe("basemap collection", () => {
       const hasWmsBbox = url.includes("{bbox-epsg-3857}");
       expect(hasXyz || hasWmsBbox, basemap.id).toBe(true);
     }
+  });
+
+  it("separates technical category from picker presentation", () => {
+    for (const basemap of BASEMAPS) {
+      expect(basemap.category, basemap.id).toBe(
+        basemap.kind === "style" ? "vector" : "photo",
+      );
+      if (basemapPresentation(basemap) === "vector") {
+        expect(basemap.kind, basemap.id).toBe("style");
+      }
+      if (basemapPresentation(basemap) === "drawn") {
+        expect(basemap.kind, basemap.id).toBe("raster");
+      }
+    }
+    const siegfried = getBasemap("ch-siegfried");
+    const imagery = getBasemap("esri-imagery");
+    const ofm = getBasemap("ofm-dark");
+    expect(siegfried && basemapPresentation(siegfried)).toBe("drawn");
+    expect(imagery && basemapPresentation(imagery)).toBe("photo");
+    expect(ofm && basemapPresentation(ofm)).toBe("vector");
+    expect(
+      BASEMAPS.filter((b) => basemapPresentation(b) === "drawn").length,
+    ).toBeGreaterThan(20);
   });
 
   it("uses https style URLs for style entries", () => {

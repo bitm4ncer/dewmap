@@ -192,7 +192,7 @@ export const useSettings = create<Settings>()(
     }),
     {
       name: "kugelmaps:settings",
-      version: 21,
+      version: 22,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         imageBasemapId: state.imageBasemapId,
@@ -228,6 +228,22 @@ export const useSettings = create<Settings>()(
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
         const p = persisted as Record<string, unknown>;
+        // v21 → v22: raster cartography moved out of the vector slot.
+        // A drawn map that was active in vector mode becomes an image
+        // basemap; a passive vector slot is reset to the dark style.
+        if (version < 22) {
+          const vector =
+            typeof p.vectorBasemapId === "string"
+              ? BASEMAPS.find((b) => b.id === p.vectorBasemapId)
+              : undefined;
+          if (vector && vector.category !== "vector") {
+            if (p.basemapMode === "vector") {
+              p.imageBasemapId = vector.id;
+              p.basemapMode = "photo";
+            }
+            p.vectorBasemapId = DEFAULT_VECTOR_BASEMAP_ID;
+          }
+        }
         // v20 → v21: global heritage filter toggles.
         if (version < 21) {
           if (typeof p.historyHeritageOnly !== "boolean")
