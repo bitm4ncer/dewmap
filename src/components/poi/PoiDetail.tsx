@@ -10,7 +10,6 @@ import {
   CloseIcon,
   ExternalLinkIcon,
   GlobeIcon,
-  ImageIcon,
   MailIcon,
   MapPinIcon,
   PhoneIcon,
@@ -108,6 +107,17 @@ function PoiDetailContent({
         ? { label: "Closed", tone: "closed" as const }
         : null;
 
+  const closeButton = (
+    <button
+      type="button"
+      onClick={onClose}
+      className={hasImage ? "poi-close" : "poi-close poi-close--inline"}
+      aria-label="Close place details"
+    >
+      <CloseIcon size={19} />
+    </button>
+  );
+
   return (
     <section
       ref={cardRef}
@@ -118,8 +128,8 @@ function PoiDetailContent({
       data-loading={loading ? "true" : "false"}
     >
       <div className="poi-scroll">
-        <div className={`poi-hero${hasImage ? "" : " poi-hero--empty"}`}>
-          {hasImage && current ? (
+        {hasImage && current && (
+          <div className="poi-hero">
             <img
               key={current.url}
               src={current.url}
@@ -136,22 +146,8 @@ function PoiDetailContent({
                 }
               }}
             />
-          ) : (
-            <div className="poi-hero-fallback">
-              <ImageIcon size={26} />
-              <span>{category}</span>
-            </div>
-          )}
-          <div className="poi-hero-shade" />
-          <button
-            type="button"
-            onClick={onClose}
-            className="poi-close"
-            aria-label="Close place details"
-          >
-            <CloseIcon size={19} />
-          </button>
-          {hasImage && current && (
+            <div className="poi-hero-shade" />
+            {closeButton}
             <a
               className="poi-credit"
               href={current.href ?? current.url}
@@ -160,35 +156,44 @@ function PoiDetailContent({
             >
               {current.credit}
             </a>
-          )}
-          {images.length > 1 && (
-            <div className="poi-thumbs" role="group" aria-label="Photos">
-              {images.slice(0, 4).map((image, i) => (
-                <button
-                  key={image.url}
-                  type="button"
-                  onClick={() => {
-                    setActiveImage(i);
-                    setImageFailed(false);
-                  }}
-                  className="poi-thumb"
-                  data-active={i === activeImage}
-                  aria-label={`Show photo ${i + 1}`}
-                >
-                  <img
-                    src={image.url}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            {images.length > 1 && (
+              <div className="poi-thumbs" role="group" aria-label="Photos">
+                {images.slice(0, 4).map((image, i) => (
+                  <button
+                    key={image.url}
+                    type="button"
+                    onClick={() => {
+                      setActiveImage(i);
+                      setImageFailed(false);
+                    }}
+                    className="poi-thumb"
+                    data-active={i === activeImage}
+                    aria-label={`Show photo ${i + 1}`}
+                  >
+                    <img
+                      src={image.url}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="poi-body">
+          {!hasImage && (
+            <div className="poi-head">
+              <p className="ui-kicker">
+                {category}
+                {city ? ` · ${city}` : ""}
+              </p>
+              {closeButton}
+            </div>
+          )}
           {onPlanRoute && (
             <button
               type="button"
@@ -208,10 +213,12 @@ function PoiDetailContent({
               Plan Route
             </button>
           )}
-          <p className="ui-kicker">
-            {category}
-            {city ? ` · ${city}` : ""}
-          </p>
+          {hasImage && (
+            <p className="ui-kicker">
+              {category}
+              {city ? ` · ${city}` : ""}
+            </p>
+          )}
           <h2 className="poi-title">{name}</h2>
           {details?.address && <p className="poi-address">{details.address}</p>}
 

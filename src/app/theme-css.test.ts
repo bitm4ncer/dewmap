@@ -225,6 +225,13 @@ describe("sheet chrome and compact date field", () => {
     expect(css).toContain("top: 8px !important");
   });
 
+  it("has no empty POI hero and keeps the inline close compact", () => {
+    expect(css).not.toContain("poi-hero--empty");
+    expect(css).not.toContain("poi-hero-fallback");
+    expect(block(".poi-close--inline")?.body).toContain("position: static");
+    expect(block(".poi-close--inline")?.body).toContain("width: 32px");
+  });
+
   it("starts map attribution collapsed and narrow on phones", () => {
     expect(
       blocks.some(
