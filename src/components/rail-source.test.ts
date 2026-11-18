@@ -16,7 +16,7 @@ describe("rail data path", () => {
   });
 
   it("uses the vector tile source for the rail style", () => {
-    expect(mapSource).toContain("RAIL_VECTOR_TILE_URL");
+    expect(mapSource).toContain("RAIL_VECTOR_TILEJSON_URL");
     expect(mapSource).toContain("RAIL_VECTOR_LINES_LAYER");
     expect(mapSource).toContain("RAIL_VECTOR_STATIONS_LAYER");
   });

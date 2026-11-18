@@ -3,21 +3,20 @@ import {
   RAIL_VECTOR_ATTRIBUTION,
   RAIL_VECTOR_LINES_LAYER,
   RAIL_VECTOR_STATIONS_LAYER,
-  RAIL_VECTOR_TILE_URL,
+  RAIL_VECTOR_TILEJSON_URL,
   RAILWAY_TILE_URLS,
 } from "./railway";
 
 describe("rail data sources", () => {
-  it("uses a vector tile template with the Protomaps rail schema", () => {
-    expect(RAIL_VECTOR_TILE_URL).toContain("{z}/{x}/{y}");
-    expect(RAIL_VECTOR_TILE_URL).toContain(".mvt");
-    expect(RAIL_VECTOR_LINES_LAYER).toBe("roads");
-    expect(RAIL_VECTOR_STATIONS_LAYER).toBe("pois");
+  it("uses the OpenFreeMap rail schema", () => {
+    expect(RAIL_VECTOR_TILEJSON_URL).toContain("openfreemap.org");
+    expect(RAIL_VECTOR_LINES_LAYER).toBe("transportation");
+    expect(RAIL_VECTOR_STATIONS_LAYER).toBe("poi");
     expect(RAIL_VECTOR_ATTRIBUTION).toContain("OpenStreetMap");
-    expect(RAIL_VECTOR_ATTRIBUTION).toContain("CARTO");
+    expect(RAIL_VECTOR_ATTRIBUTION).toContain("OpenFreeMap");
   });
 
-  it("keeps the raster fallback shards", () => {
+  it("keeps the explicit ORM raster option", () => {
     expect(RAILWAY_TILE_URLS).toHaveLength(3);
     expect(RAILWAY_TILE_URLS[0]).toContain("{z}/{x}/{y}.png");
   });

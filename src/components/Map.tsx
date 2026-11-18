@@ -36,7 +36,7 @@ import {
   RAIL_VECTOR_LINES_LAYER,
   RAIL_VECTOR_MAX_ZOOM,
   RAIL_VECTOR_STATIONS_LAYER,
-  RAIL_VECTOR_TILE_URL,
+  RAIL_VECTOR_TILEJSON_URL,
 } from "@/lib/railway";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
@@ -352,48 +352,25 @@ function removeRailwayLayer(map: MLMap) {
 }
 
 // ── Rail vector detail ───────────────────────────────────────────────
-// CARTO/Protomaps vector tiles contain the OSM rail network in `roads`
-// (kind=rail) and stations in `pois` (kind=station). The tiles are already
-// generalized per zoom and MapLibre only fetches the visible tiles. This
-// replaces the old viewport-sized Overpass batches (up to ~7 MB per z9 tile)
-// with normal vector-tile streaming.
+// OpenFreeMap vector tiles carry the OSM rail network in `transportation`
+// (class=rail/transit) and stations in `poi` (class=railway). The tiles are
+// generalized per zoom, including low zoom, and MapLibre only fetches the
+// visible tiles. This replaces both the old Overpass batches and the coarse
+// ORM raster fallback.
 const RAIL_VECTOR_SOURCE_ID = "rail-vector-src";
 const RAIL_VECTOR_CASING_LAYER_ID = "rail-vector-casing";
 const RAIL_VECTOR_MAIN_LAYER_ID = "rail-vector-main";
 const RAIL_VECTOR_STATION_HIT_LAYER_ID = "rail-vector-station-hit";
 const RAIL_VECTOR_STATION_DOT_LAYER_ID = "rail-vector-station-dot";
 const RAIL_VECTOR_STATION_LABEL_LAYER_ID = "rail-vector-station-label";
-const RAIL_VECTOR_MIN_ZOOM = 12;
-const RAIL_VECTOR_STATION_MIN_ZOOM = 12;
-const RAIL_VECTOR_FALLBACK_SOURCE_ID = "rail-vector-fallback";
-const RAIL_VECTOR_FALLBACK_LAYER_ID = "rail-vector-fallback-layer";
+const RAIL_VECTOR_MIN_ZOOM = 4;
+const RAIL_VECTOR_STATION_MIN_ZOOM = 10;
 
 function ensureRailVectorLayers(map: MLMap, opacity: number) {
-  // Protomaps/CARTO only carries rail from z12. Below that, the ORM raster
-  // is the fast overview layer; the vector detail takes over at z12.
-  if (!map.getSource(RAIL_VECTOR_FALLBACK_SOURCE_ID)) {
-    map.addSource(RAIL_VECTOR_FALLBACK_SOURCE_ID, {
-      type: "raster",
-      tiles: RAILWAY_TILE_URLS,
-      tileSize: 256,
-      maxzoom: RAILWAY_MAX_ZOOM,
-      attribution: RAILWAY_ATTRIBUTION,
-    });
-  }
-  if (!map.getLayer(RAIL_VECTOR_FALLBACK_LAYER_ID)) {
-    map.addLayer({
-      id: RAIL_VECTOR_FALLBACK_LAYER_ID,
-      type: "raster",
-      source: RAIL_VECTOR_FALLBACK_SOURCE_ID,
-      maxzoom: RAIL_VECTOR_MIN_ZOOM,
-      paint: { "raster-opacity": opacity, "raster-fade-duration": 0 },
-    });
-  }
   if (!map.getSource(RAIL_VECTOR_SOURCE_ID)) {
     map.addSource(RAIL_VECTOR_SOURCE_ID, {
       type: "vector",
-      tiles: [RAIL_VECTOR_TILE_URL],
-      minzoom: RAIL_VECTOR_MIN_ZOOM,
+      url: RAIL_VECTOR_TILEJSON_URL,
       maxzoom: RAIL_VECTOR_MAX_ZOOM,
       attribution: RAIL_VECTOR_ATTRIBUTION,
     });
@@ -406,7 +383,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       source: RAIL_VECTOR_SOURCE_ID,
       "source-layer": RAIL_VECTOR_LINES_LAYER,
       minzoom: RAIL_VECTOR_MIN_ZOOM,
-      filter: ["==", ["get", "kind"], "rail"],
+      filter: ["in", ["get", "class"], ["literal", ["rail", "transit"]]],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": THEME.casing,
@@ -429,17 +406,21 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       source: RAIL_VECTOR_SOURCE_ID,
       "source-layer": RAIL_VECTOR_LINES_LAYER,
       minzoom: RAIL_VECTOR_MIN_ZOOM,
-      filter: ["==", ["get", "kind"], "rail"],
+      filter: ["in", ["get", "class"], ["literal", ["rail", "transit"]]],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": [
           "match",
-          ["get", "kind_detail"],
-          "light_rail", THEME.lightRail,
-          "subway", THEME.lightRail,
-          "tram", THEME.tram,
-          "narrow_gauge", THEME.narrowGauge,
-          "monorail", THEME.narrowGauge,
+          ["get", "class"],
+          "transit",
+          [
+            "match",
+            ["get", "subclass"],
+            "tram", THEME.tram,
+            "narrow_gauge", THEME.narrowGauge,
+            "monorail", THEME.narrowGauge,
+            THEME.lightRail,
+          ],
           THEME.info,
         ],
         "line-width": [
@@ -452,7 +433,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
         "line-opacity": opacity,
         "line-dasharray": [
           "case",
-          ["==", ["get", "is_tunnel"], true], ["literal", [2, 2]],
+          ["==", ["get", "brunnel"], "tunnel"], ["literal", [2, 2]],
           ["literal", [1, 0]],
         ],
       },
@@ -466,7 +447,11 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       source: RAIL_VECTOR_SOURCE_ID,
       "source-layer": RAIL_VECTOR_STATIONS_LAYER,
       minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
-      filter: ["==", ["get", "kind"], "station"],
+      filter: [
+        "all",
+        ["==", ["get", "class"], "railway"],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+      ],
       paint: {
         "circle-radius": 18,
         "circle-color": "transparent",
@@ -482,7 +467,11 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       source: RAIL_VECTOR_SOURCE_ID,
       "source-layer": RAIL_VECTOR_STATIONS_LAYER,
       minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
-      filter: ["==", ["get", "kind"], "station"],
+      filter: [
+        "all",
+        ["==", ["get", "class"], "railway"],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+      ],
       paint: {
         "circle-radius": [
           "interpolate", ["linear"], ["zoom"],
@@ -505,7 +494,11 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       source: RAIL_VECTOR_SOURCE_ID,
       "source-layer": RAIL_VECTOR_STATIONS_LAYER,
       minzoom: 11,
-      filter: ["==", ["get", "kind"], "station"],
+      filter: [
+        "all",
+        ["==", ["get", "class"], "railway"],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+      ],
       layout: {
         "text-field": ["coalesce", ["get", "name"], ""],
         "text-font": ["Noto Sans Regular"],
@@ -520,7 +513,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
         "text-optional": true,
         "text-allow-overlap": false,
         "text-padding": 4,
-        "symbol-sort-key": ["coalesce", ["get", "sort_rank"], 0],
+        "symbol-sort-key": ["coalesce", ["get", "rank"], 0],
       },
       paint: {
         "text-color": THEME.ink,
@@ -533,13 +526,6 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
 }
 
 function updateRailVectorOpacity(map: MLMap, opacity: number) {
-  if (map.getLayer(RAIL_VECTOR_FALLBACK_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_VECTOR_FALLBACK_LAYER_ID,
-      "raster-opacity",
-      opacity,
-    );
-  }
   if (map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
     map.setPaintProperty(RAIL_VECTOR_MAIN_LAYER_ID, "line-opacity", opacity);
   }
@@ -564,7 +550,6 @@ function updateRailVectorOpacity(map: MLMap, opacity: number) {
 
 function removeRailVectorLayers(map: MLMap) {
   for (const id of [
-    RAIL_VECTOR_FALLBACK_LAYER_ID,
     RAIL_VECTOR_STATION_LABEL_LAYER_ID,
     RAIL_VECTOR_STATION_DOT_LAYER_ID,
     RAIL_VECTOR_STATION_HIT_LAYER_ID,
@@ -575,9 +560,6 @@ function removeRailVectorLayers(map: MLMap) {
   }
   if (map.getSource(RAIL_VECTOR_SOURCE_ID)) {
     map.removeSource(RAIL_VECTOR_SOURCE_ID);
-  }
-  if (map.getSource(RAIL_VECTOR_FALLBACK_SOURCE_ID)) {
-    map.removeSource(RAIL_VECTOR_FALLBACK_SOURCE_ID);
   }
 }
 
@@ -2532,11 +2514,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       return;
     }
 
-    const apply = () => ensureRailVectorLayers(map, railwayOpacity);
-    if (map.isStyleLoaded()) apply();
+    const apply = () => {
+      try {
+        ensureRailVectorLayers(map, railwayOpacity);
+      } catch {
+        // A style swap can remove the source between the check and add.
+      }
+    };
+    // `isStyleLoaded()` can stay false while tiles are still streaming even
+    // though the style and its layers already exist. Apply immediately, then
+    // retry on style reloads and when the map becomes idle.
+    apply();
     map.on("style.load", apply);
-    // The initial `style.load` can fire before this effect registers;
-    // `idle` guarantees one more attempt once the map is usable.
     map.once("idle", apply);
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
@@ -4210,7 +4199,7 @@ function RailsPanel({
 }: RailsPanelProps) {
   const caption =
     railStyle === "lines"
-      ? "Vector z12+ · ORM raster below · OSM"
+      ? "Vector tiles · OpenFreeMap · OSM"
       : "OpenRailwayMap raster · OSM";
 
   return (
