@@ -232,7 +232,10 @@ export function useHistoryLayers(
           }
           sourceUrlsRef.current.clusters.set(
             file.path,
-            await protocol.open(file, mode),
+            await protocol.open(
+              file,
+              probe.mode === "range" ? "range" : "full",
+            ),
           );
         } else {
           sourceUrlsRef.current.clusters.set(

@@ -70,9 +70,13 @@ export function HistoryPanel(props: HistoryPanelProps) {
       : globalReady
         ? props.globalTotal
         : props.visibleCount;
-  const dataAsOf = props.globalDataAsOf
-    ? new Date(props.globalDataAsOf).toISOString().slice(0, 10)
+  const parsedDataAsOf = props.globalDataAsOf
+    ? new Date(props.globalDataAsOf)
     : null;
+  const dataAsOf =
+    parsedDataAsOf && !Number.isNaN(parsedDataAsOf.getTime())
+      ? parsedDataAsOf.toISOString().slice(0, 10)
+      : null;
   return (
     <div className="flex flex-col gap-3">
       {showYearSlider && (
