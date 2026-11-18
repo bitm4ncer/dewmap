@@ -15,6 +15,12 @@ describe("transit panel layout", () => {
     expect(src).toContain("scrollIntoView");
   });
 
+  it("offers departure chips above the journey detail", () => {
+    expect(src).toContain("journey-switcher");
+    expect(src).toContain("Next departures");
+    expect(src).toContain("selectJourney(entry.id)");
+  });
+
   it("keeps the When field at a compact width", () => {
     expect(src).toContain('className="ui-input ui-input-date"');
   });

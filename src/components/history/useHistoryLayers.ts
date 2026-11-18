@@ -90,6 +90,9 @@ export function useHistoryLayers(
   const forceFullRef = useRef(false);
 
   useEffect(() => {
+    // Reading the token makes a manual full-download retry re-run this
+    // effect; the ref keeps the consent across that render.
+    void retryToken;
     if (!map || !options.enabled) {
       if (map) {
         try {
@@ -323,7 +326,7 @@ export function useHistoryLayers(
       }
       manifestRef.current = null;
     };
-  }, [map, options.enabled]);
+  }, [map, options.enabled, retryToken]);
 
   useEffect(() => {
     if (!map || !options.enabled || status !== "ready") return;

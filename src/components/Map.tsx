@@ -1538,13 +1538,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const transitTo = useTransit((s) => s.to);
   const [liveHeadingDeg, setLiveHeadingDeg] = useState<number | null>(null);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(0);
+  const historyDataRef = useRef<LandmarkCollection | null>(null);
   const [historyEarliestYear, setHistoryEarliestYear] = useState<number | null>(
     null,
   );
   const [historyLoading, setHistoryLoading] = useState(false);
   const historyPopupRef = useRef<maplibregl.Popup | null>(null);
-  /** Latest fetched collection, for recounting when the slider moves. */
-  const historyDataRef = useRef<LandmarkCollection | null>(null);
   const {
     imageBasemapId,
     vectorBasemapId,
@@ -2867,6 +2866,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       historyPopupRef.current = null;
       historyDataRef.current = null;
       /* eslint-disable react-hooks/set-state-in-effect -- cleanup of a map-driven layer */
+      historyDataRef.current = null;
       setHistoryVisibleCount(0);
       setHistoryEarliestYear(null);
       /* eslint-enable react-hooks/set-state-in-effect */
