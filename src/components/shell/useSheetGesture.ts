@@ -108,10 +108,14 @@ interface Options {
 /**
  * Pointer-driven bottom sheet with native-like spring detents.
  *
- * The gesture writes a pixel height into `--sheet-h` while the finger is
- * down. On release a spring (with the gesture velocity) carries the sheet to
- * the projected detent. If the user touches the sheet mid-flight, the spring
- * is stopped at its current height and the drag continues without a jump.
+ * The gesture writes the sheet's height directly while the finger is down.
+ * On release a spring (with the gesture velocity) carries the sheet to the
+ * projected detent. If the user touches the sheet mid-flight, the spring is
+ * stopped at its current height and the drag continues without a jump.
+ *
+ * The height is intentionally written as `style.height`, not as a custom
+ * property: inherited custom properties invalidate the style of every child
+ * on each frame, which makes the panel noticeably janky on mobile.
  */
 export function useSheetGesture({ state, onChange, enabled }: Options) {
   const sheetRef = useRef<HTMLElement | null>(null);
@@ -176,13 +180,13 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       onChange(target);
 
       if (!enabled || prefersReducedMotion() || Math.abs(to - from) < 0.5) {
-        el.style.removeProperty("--sheet-h");
+        el.style.removeProperty("height");
         el.removeAttribute("data-springing");
         return;
       }
 
       el.setAttribute("data-springing", "true");
-      el.style.setProperty("--sheet-h", `${from}px`);
+      el.style.height = `${from}px`;
       const handle: SpringHandle = createSpring({
         from,
         to,
@@ -192,10 +196,10 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
             ? SPRING.sheetPeek
             : SPRING.sheetSnap,
         onUpdate: (value) => {
-          el.style.setProperty("--sheet-h", `${value}px`);
+          el.style.height = `${value}px`;
         },
         onComplete: () => {
-          el.style.removeProperty("--sheet-h");
+          el.style.removeProperty("height");
           el.removeAttribute("data-springing");
           if (springRef.current === handle) springRef.current = null;
         },
@@ -257,7 +261,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
         const raw = drag.startHeight + (drag.startY - e.clientY);
         const next = rubberband(raw, h.peek, h.full, h.vh);
         drag.lastHeight = next;
-        el.style.setProperty("--sheet-h", `${next}px`);
+        el.style.height = `${next}px`;
       });
     },
     [heights],
@@ -287,7 +291,8 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       }
 
       const target = nearest(height, heightVelocity);
-      sheetRef.current?.style.setProperty("--sheet-h", `${height}px`);
+      const currentSheet = sheetRef.current;
+      if (currentSheet) currentSheet.style.height = `${height}px`;
       if (target !== state) haptic("snap");
       animateTo(target, heightVelocity);
     },
@@ -401,7 +406,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
         const raw = activeTouch.startHeight + (activeTouch.startY - t.clientY);
         const next = rubberband(raw, h.peek, h.full, h.vh);
         activeTouch.lastHeight = next;
-        el.style.setProperty("--sheet-h", `${next}px`);
+        el.style.height = `${next}px`;
       });
     };
 
@@ -428,7 +433,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       const heightVelocity = -touch.tracker.velocity(e.timeStamp);
       setDragging(false);
       const target = nearest(height, heightVelocity);
-      el.style.setProperty("--sheet-h", `${height}px`);
+      el.style.height = `${height}px`;
       if (target !== state) haptic("snap");
       animateTo(target, heightVelocity);
       touch = null;
@@ -467,7 +472,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       springRef.current = null;
       const el = sheetRef.current;
       el?.removeAttribute("data-springing");
-      el?.style.removeProperty("--sheet-h");
+      el?.style.removeProperty("height");
     };
     onResize();
     window.addEventListener("resize", onResize);

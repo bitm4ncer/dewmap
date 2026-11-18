@@ -396,7 +396,7 @@ body {
     top: auto !important;
     z-index: var(--z-sheet);
     --sheet-base: var(--hud-peek-h);
-    height: var(--sheet-h, var(--sheet-base));
+    height: var(--sheet-base);
     background: var(--surf-0);
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     contain: layout paint;
@@ -409,7 +409,6 @@ body {
   .hud-bottom-sheet[data-springing="true"] {
     transition: none;
     user-select: none;
-    will-change: height;
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] { --sheet-base: var(--hud-peek-h); }
@@ -641,11 +640,11 @@ body {
     left: auto !important;
     right: 12px;
     align-items: flex-end;
-    margin-bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 12px) !important;
+    margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
     transition: opacity 180ms ease, margin-bottom 180ms ease;
   }
   .maplibregl-ctrl-bottom-right {
-    margin-bottom: calc(var(--sheet-h, var(--hud-peek-h)) + 12px) !important;
+    margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
     transition: opacity 180ms ease, margin-bottom 180ms ease;
   }
   .maplibregl-ctrl-scale { display: none !important; }
@@ -1738,7 +1737,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .poi-detail[data-resizing="true"],
 .poi-detail[data-springing="true"] {
   transition: none;
-  will-change: height;
   user-select: none;
 }
 

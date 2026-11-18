@@ -128,7 +128,8 @@ describe("flat CSS invariants", () => {
   it("lets the drag height override every snap state", () => {
     const stateRules = blocks.filter((b) => b.selector.includes("data-sheet-state="));
     expect(stateRules.every((b) => !/(^|;)\s*height:/.test(b.body))).toBe(true);
-    expect(css).toContain("height: var(--sheet-h, var(--sheet-base))");
+    expect(css).toContain("height: var(--sheet-base)");
+    expect(css).not.toContain("--sheet-h");
   });
 
   it("keeps the mobile sheet solid", () => {
