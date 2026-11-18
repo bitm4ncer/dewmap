@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { delayIntensity, transferSeverity } from "./transitFormat";
 import { ProviderError, type RoutePlan, type TransitLeg } from "../routing";
 import {
   bestJourneyId,
@@ -359,5 +360,23 @@ describe("calendar export", () => {
 
   it("returns an empty string without transit data", () => {
     expect(buildIcs(plan({ transit: undefined }))).toBe("");
+  });
+});
+
+describe("delay and transfer urgency", () => {
+  it("scales delay intensity from amber to red up to 12 minutes", () => {
+    expect(delayIntensity(0)).toBe(0);
+    expect(delayIntensity(6)).toBeCloseTo(0.5);
+    expect(delayIntensity(20)).toBe(1);
+  });
+
+  it("marks transfers under five minutes, with under two as critical", () => {
+    expect(transferSeverity(8)).toBe("none");
+    expect(transferSeverity(5)).toBe("none");
+    expect(transferSeverity(4)).toBe("tight");
+    expect(transferSeverity(2)).toBe("tight");
+    expect(transferSeverity(1)).toBe("critical");
+    expect(transferSeverity(-1)).toBe("critical");
+    expect(transferSeverity(null)).toBe("none");
   });
 });

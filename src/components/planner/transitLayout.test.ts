@@ -15,6 +15,18 @@ describe("transit panel layout", () => {
     expect(src).toContain("scrollIntoView");
   });
 
+  it("explains reservation and colours transfer urgency", () => {
+    const detail = readFileSync(
+      new URL("./JourneyDetail.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(detail).toContain(
+      "Reservation required: book a seat before boarding.",
+    );
+    expect(detail).toContain("transferSeverity");
+    expect(detail).toContain("Transfer colours: amber under 5 min");
+  });
+
   it("offers departure chips above the journey detail", () => {
     expect(src).toContain("journey-switcher");
     expect(src).toContain("Next departures");

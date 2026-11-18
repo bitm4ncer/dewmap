@@ -1717,6 +1717,18 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-badge[data-tone="warn"] { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
 .ui-badge[data-tone="danger"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
 .ui-badge[data-tone="info"] { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.ui-badge[data-tone="delay"] {
+  color: color-mix(in srgb, var(--warn), var(--danger) calc(var(--delay, 0) * 100%));
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+/* Transfer urgency shares the delay ramp: amber → red. */
+.transfer-row { color: var(--ink-dim); }
+.transfer-row[data-tone="tight"] { color: var(--warn); }
+.transfer-row[data-tone="critical"] { color: var(--danger); }
+.transfer-warning { color: var(--ink-dim); }
+.transfer-warning[data-tone="tight"] { color: var(--warn); }
+.transfer-warning[data-tone="critical"] { color: var(--danger); }
 
 .ui-status-dot {
   width: 7px;

@@ -5,18 +5,21 @@ import type { RoutePlan } from "@/lib/routing";
 import { WalkIcon } from "@/components/ui/icons";
 import {
   allowsBikes,
+  delayIntensity,
   isAccessibleJourney,
   isLiveJourney,
   journeyDelayMinutes,
   journeyTimeZone,
   legDurationMin,
   lineColor,
+  minTransferMinutes,
   stopClock,
   stopDayOffset,
   lineLabel,
   lineTextColor,
   modeLabel,
   needsReservation,
+  transferSeverity,
   walkTotals,
 } from "@/lib/planner/transitFormat";
 
@@ -40,6 +43,8 @@ export function JourneyCard({ journey, best, active, onSelect }: Props) {
   const accessible = isAccessibleJourney(journey);
   const bikes = allowsBikes(journey);
   const reservation = needsReservation(journey);
+  const minTransfer = minTransferMinutes(journey);
+  const transfer = transferSeverity(minTransfer);
   const firstLeg = transit.legs[0];
   const lastLeg = transit.legs[transit.legs.length - 1];
   const zone = journeyTimeZone(journey);
@@ -114,7 +119,13 @@ export function JourneyCard({ journey, best, active, onSelect }: Props) {
       <div className="flex flex-wrap items-center gap-2">
         {best && <span className="ui-badge" data-tone="accent">Best</span>}
         {delay > 0 && (
-          <span className="ui-badge" data-tone="warn">+{delay} min</span>
+          <span
+            className="ui-badge"
+            data-tone="delay"
+            style={{ ["--delay" as string]: delayIntensity(delay) }}
+          >
+            +{delay} min
+          </span>
         )}
         {cancelled && (
           <span className="ui-badge" data-tone="danger">Cancelled</span>
@@ -122,7 +133,23 @@ export function JourneyCard({ journey, best, active, onSelect }: Props) {
         {live && <span className="ui-badge" data-tone="info">Live</span>}
         {accessible && <span className="ui-badge">Step-free</span>}
         {bikes && <span className="ui-badge">Bike</span>}
-        {reservation && <span className="ui-badge" data-tone="warn">Reservation</span>}
+        {reservation && (
+          <span
+            className="ui-badge"
+            title="Seat reservation required — book before boarding"
+          >
+            Reservation
+          </span>
+        )}
+        {transfer !== "none" && (
+          <span
+            className="ui-badge"
+            data-tone={transfer === "critical" ? "danger" : "warn"}
+            title={`Shortest transfer: ${minTransfer} min`}
+          >
+            {transfer === "critical" ? "Very tight transfer" : "Tight transfer"}
+          </span>
+        )}
         {walk.minutes > 0 && (
           <span className="text-[10.5px] text-[color:var(--ink-mute)]">
             {formatDuration(walk.minutes)} walk

@@ -247,6 +247,22 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".poi-close--inline")?.body).toContain("width: 32px");
   });
 
+  it("ramps delay badges and transfer rows from amber to red", () => {
+    expect(
+      blocks.some(
+        (b) =>
+          b.selector.includes('data-tone="delay"') &&
+          b.body.includes("color-mix"),
+      ),
+    ).toBe(true);
+    expect(block('.transfer-row[data-tone="tight"]')?.body).toContain(
+      "var(--warn)",
+    );
+    expect(block('.transfer-row[data-tone="critical"]')?.body).toContain(
+      "var(--danger)",
+    );
+  });
+
   it("starts map attribution collapsed and narrow on phones", () => {
     expect(
       blocks.some(
