@@ -42,6 +42,7 @@ import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
+import { formatCoordinates } from "@/lib/map/coordinates";
 import type { RoutePoint } from "@/lib/routing/routeInput";
 import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
@@ -50,7 +51,9 @@ import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
 import {
+  CheckIcon,
   ChevronDownIcon,
+  CopyIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
@@ -4313,6 +4316,7 @@ function BasemapSwitch({ mode, onModeChange }: BasemapSwitchProps) {
 
 function MapReadout({ map }: { map: MLMap | null }) {
   const [view, setView] = useState<ViewState>(INITIAL_VIEW);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!map) return;
@@ -4340,12 +4344,36 @@ function MapReadout({ map }: { map: MLMap | null }) {
     };
   }, [map]);
 
+  const copyCoordinates = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        formatCoordinates(view.center[1], view.center[0]),
+      );
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be denied; leave the readout untouched.
+    }
+  };
+
   return (
     <HudPanel className="hud-mono">
-      <span className="text-[13px] text-[color:var(--ink)]">
-        {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
-        {view.zoom.toFixed(1)}
-      </span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] text-[color:var(--ink)]">
+          {view.center[1].toFixed(4)}°, {view.center[0].toFixed(4)}° · z
+          {view.zoom.toFixed(1)}
+        </span>
+        <button
+          type="button"
+          onClick={() => void copyCoordinates()}
+          aria-label="Copy coordinates"
+          title="Copy coordinates"
+          className="ui-input-action"
+          data-active={copied}
+        >
+          {copied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+        </button>
+      </div>
     </HudPanel>
   );
 }
