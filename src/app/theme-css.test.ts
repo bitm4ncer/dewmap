@@ -41,6 +41,16 @@ describe("flat CSS invariants", () => {
     expect(rule?.body).toContain("brightness(0)");
   });
 
+  it("gives the search field the full pill height", () => {
+    const input = blocks.find(
+      (b) =>
+        b.selector.trim().endsWith(".ui-search-pill input") &&
+        b.body.includes("height: 46px"),
+    );
+    expect(input).toBeTruthy();
+    expect(input?.body).toContain("align-self: stretch");
+  });
+
   it("keeps search focus soft and free of an inner ring", () => {
     const pill = blocks.find((b) => b.selector === ".ui-search-pill:focus-within");
     expect(pill?.body).toContain("var(--accent-soft)");

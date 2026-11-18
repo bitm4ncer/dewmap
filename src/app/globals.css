@@ -1331,11 +1331,16 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-search-pill input {
   min-width: 0;
   flex: 1;
+  align-self: stretch;
+  height: 46px;
+  padding: 0;
   background: transparent;
   border: 0;
   outline: 0;
   color: var(--ink);
+  caret-color: var(--accent);
   font-size: 14px;
+  line-height: normal;
 }
 .ui-search-pill input::placeholder { color: var(--ink-dim); }
 .ui-search-kbd {
