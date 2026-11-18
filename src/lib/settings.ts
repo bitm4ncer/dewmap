@@ -41,6 +41,8 @@ export interface Settings {
   railOn: boolean;
   railwayOpacity: number;
   railStyle: RailStyle;
+  /** Small POI dots (shops, food, culture, sport) above the basemap. */
+  poiOn: boolean;
   /** Biosphere panel — independent overlay toggles, can stack. */
   ndviOn: boolean;
   ndviOpacity: number;
@@ -68,6 +70,8 @@ export interface Settings {
    * up to today are shown. */
   historyLandmarksOn: boolean;
   historyLandmarksOpacity: number;
+  /** Global heritage layer visibility. */
+  historyGlobalOn: boolean;
   /** Global heritage layer — heritage-only and UNESCO-only filters. */
   historyHeritageOnly: boolean;
   historyUnescoOnly: boolean;
@@ -83,6 +87,7 @@ export interface Settings {
   setRailOn: (on: boolean) => void;
   setRailwayOpacity: (o: number) => void;
   setRailStyle: (style: RailStyle) => void;
+  setPoiOn: (on: boolean) => void;
   setNdviOn: (on: boolean) => void;
   setNdviOpacity: (o: number) => void;
   setSpeciesOn: (on: boolean) => void;
@@ -98,6 +103,7 @@ export interface Settings {
   setLandCoverOpacity: (o: number) => void;
   setHistoryLandmarksOn: (on: boolean) => void;
   setHistoryLandmarksOpacity: (o: number) => void;
+  setHistoryGlobalOn: (on: boolean) => void;
   setHistoryHeritageOnly: (on: boolean) => void;
   setHistoryUnescoOnly: (on: boolean) => void;
   setHistoryMapOn: (on: boolean) => void;
@@ -123,6 +129,7 @@ export const useSettings = create<Settings>()(
       railOn: false,
       railwayOpacity: 0.85,
       railStyle: "lines",
+      poiOn: true,
       ndviOn: false,
       ndviOpacity: 0.7,
       speciesOn: false,
@@ -139,6 +146,7 @@ export const useSettings = create<Settings>()(
       historyMapOn: false,
       historyLandmarksOn: false,
       historyLandmarksOpacity: 0.9,
+      historyGlobalOn: true,
       historyHeritageOnly: false,
       historyUnescoOnly: false,
       historyYear: HISTORY_YEAR_MAX,
@@ -160,6 +168,7 @@ export const useSettings = create<Settings>()(
       setRailOn: (on) => set({ railOn: on }),
       setRailwayOpacity: (o) => set({ railwayOpacity: clamp01(o) }),
       setRailStyle: (style) => set({ railStyle: style }),
+      setPoiOn: (on) => set({ poiOn: on }),
       setNdviOn: (on) => set({ ndviOn: on }),
       setNdviOpacity: (o) => set({ ndviOpacity: clamp01(o) }),
       setSpeciesOn: (on) => set({ speciesOn: on }),
@@ -176,6 +185,7 @@ export const useSettings = create<Settings>()(
       setHistoryLandmarksOn: (on) => set({ historyLandmarksOn: on }),
       setHistoryLandmarksOpacity: (o) =>
         set({ historyLandmarksOpacity: clamp01(o) }),
+      setHistoryGlobalOn: (on: boolean) => set({ historyGlobalOn: on }),
       setHistoryHeritageOnly: (on: boolean) =>
         set({ historyHeritageOnly: on }),
       setHistoryUnescoOnly: (on: boolean) => set({ historyUnescoOnly: on }),
@@ -192,7 +202,7 @@ export const useSettings = create<Settings>()(
     }),
     {
       name: "kugelmaps:settings",
-      version: 22,
+      version: 25,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         imageBasemapId: state.imageBasemapId,
@@ -205,6 +215,7 @@ export const useSettings = create<Settings>()(
         railOn: state.railOn,
         railwayOpacity: state.railwayOpacity,
         railStyle: state.railStyle,
+        poiOn: state.poiOn,
         ndviOn: state.ndviOn,
         ndviOpacity: state.ndviOpacity,
         speciesOn: state.speciesOn,
@@ -221,6 +232,7 @@ export const useSettings = create<Settings>()(
         historyMapOn: state.historyMapOn,
         historyLandmarksOn: state.historyLandmarksOn,
         historyLandmarksOpacity: state.historyLandmarksOpacity,
+        historyGlobalOn: state.historyGlobalOn,
         historyHeritageOnly: state.historyHeritageOnly,
         historyUnescoOnly: state.historyUnescoOnly,
         historyYear: state.historyYear,
@@ -228,6 +240,11 @@ export const useSettings = create<Settings>()(
       migrate: (persisted: unknown, version: number) => {
         if (!persisted || typeof persisted !== "object") return persisted;
         const p = persisted as Record<string, unknown>;
+        // POI dots default on; also fills the field for v24 states that
+        // predate this toggle.
+        if (typeof p.poiOn !== "boolean") {
+          p.poiOn = true;
+        }
         // v21 → v22: raster cartography moved out of the vector slot.
         // A drawn map that was active in vector mode becomes an image
         // basemap; a passive vector slot is reset to the dark style.
@@ -243,6 +260,10 @@ export const useSettings = create<Settings>()(
             }
             p.vectorBasemapId = DEFAULT_VECTOR_BASEMAP_ID;
           }
+        }
+        // v23 → v24: global heritage layer visibility.
+        if (version < 24) {
+          if (typeof p.historyGlobalOn !== "boolean") p.historyGlobalOn = true;
         }
         // v20 → v21: global heritage filter toggles.
         if (version < 21) {

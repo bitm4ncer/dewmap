@@ -14,6 +14,8 @@ interface HistoryPanelProps {
   visibleCount: number;
   loading: boolean;
 
+  globalOn: boolean;
+  onGlobalOnChange: (on: boolean) => void;
   globalStatus: "idle" | "loading" | "ready" | "error";
   globalCount: number;
   globalTotal: number;
@@ -42,11 +44,13 @@ function Switch({
   on,
   onChange,
   disabled = false,
+  size = "md",
 }: {
   label: string;
   on: boolean;
   onChange: (on: boolean) => void;
   disabled?: boolean;
+  size?: "sm" | "md" | "lg";
 }) {
   return (
     <button
@@ -59,6 +63,7 @@ function Switch({
       className="hud-switch"
       data-on={on}
       data-disabled={disabled}
+      data-size={size}
     >
       <span className="hud-switch-thumb" aria-hidden />
     </button>
@@ -66,7 +71,7 @@ function Switch({
 }
 
 export function HistoryPanel(props: HistoryPanelProps) {
-  const globalReady = props.globalStatus === "ready";
+  const globalReady = props.globalOn && props.globalStatus === "ready";
   const showYearSlider = props.mapOn || props.landmarksOn || globalReady;
   const shownCount = globalReady
     ? props.siteZoom
@@ -113,6 +118,7 @@ export function HistoryPanel(props: HistoryPanelProps) {
               label="Historical map"
               on={props.mapOn}
               onChange={props.onMapOnChange}
+              size="md"
             />
           </div>
         </div>
@@ -140,11 +146,13 @@ export function HistoryPanel(props: HistoryPanelProps) {
                   props.globalStatus === "loading" ? "polite" : undefined
                 }
               >
-                {props.globalStatus === "error"
-                  ? props.fullBlocked
-                    ? "metered connection"
-                    : "offline"
-                  : panelSummary({
+                {!props.globalOn
+                  ? "off"
+                  : props.globalStatus === "error"
+                    ? props.fullBlocked
+                      ? "metered connection"
+                      : "offline"
+                    : panelSummary({
                       status: props.globalStatus,
                       count: props.globalCount,
                       total: props.globalTotal,
@@ -156,6 +164,12 @@ export function HistoryPanel(props: HistoryPanelProps) {
                       },
                     })}
               </span>
+              <Switch
+                label="Historic sites"
+                on={props.globalOn}
+                onChange={props.onGlobalOnChange}
+                size="lg"
+              />
             </span>
           </div>
           {props.fullBlocked ? (
@@ -187,6 +201,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
                   label="Heritage only"
                   on={props.heritageOnly}
                   onChange={props.onHeritageOnlyChange}
+                  disabled={!props.globalOn}
+                  size="sm"
                 />
               </div>
               <div className="ui-row">
@@ -200,12 +216,14 @@ export function HistoryPanel(props: HistoryPanelProps) {
                   label="UNESCO only"
                   on={props.unescoOnly}
                   onChange={props.onUnescoOnlyChange}
+                  disabled={!props.globalOn}
+                  size="sm"
                 />
               </div>
               <HistoryFilters
                 categories={props.categories}
                 onCategoriesChange={props.onCategoriesChange}
-                disabled={!props.siteZoom}
+                disabled={!props.globalOn || !props.siteZoom}
               />
               <p className="hud-mono text-[11px] text-[color:var(--ink-dim)]">
                 Year and category filters apply from city zoom (z8).
@@ -227,7 +245,8 @@ export function HistoryPanel(props: HistoryPanelProps) {
               label="Local OSM detail"
               on={props.landmarksOn}
               onChange={props.onLandmarksOnChange}
-              disabled={globalReady}
+              disabled={!props.globalOn || globalReady}
+              size="sm"
             />
           </div>
 

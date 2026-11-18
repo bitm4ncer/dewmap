@@ -1148,6 +1148,28 @@ input[type="range"].hud-slider::-moz-range-thumb {
   transition: background var(--dur-base) var(--ease);
 }
 .hud-switch[data-on="true"] { background: var(--accent); }
+.hud-switch[data-size="sm"] {
+  width: 32px;
+  height: 20px;
+}
+.hud-switch[data-size="sm"] .hud-switch-thumb {
+  width: 14px;
+  height: 14px;
+}
+.hud-switch[data-size="sm"][data-on="true"] .hud-switch-thumb {
+  transform: translateX(12px);
+}
+.hud-switch[data-size="lg"] {
+  width: 48px;
+  height: 28px;
+}
+.hud-switch[data-size="lg"] .hud-switch-thumb {
+  width: 22px;
+  height: 22px;
+}
+.hud-switch[data-size="lg"][data-on="true"] .hud-switch-thumb {
+  transform: translateX(20px);
+}
 
 .hud-switch-thumb {
   position: absolute;

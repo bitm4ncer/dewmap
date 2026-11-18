@@ -90,7 +90,7 @@ const SOURCES: Source[] = [
   {
     name: "OpenFreeMap · VersaTiles",
     detail:
-      "Keyless OpenStreetMap vector basemaps and styles, used as independent fallbacks.",
+      "Keyless OpenStreetMap vector basemaps, styles and the zoom-level place data used for POI icons.",
     href: "https://openfreemap.org/",
   },
   {

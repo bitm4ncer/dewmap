@@ -49,6 +49,7 @@ import {
   RAIL_VECTOR_STATIONS_LAYER,
   RAIL_VECTOR_TILEJSON_URL,
 } from "@/lib/railway";
+import { ensurePoiLayers, removePoiLayers } from "@/lib/poi/poiLayer";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
@@ -286,7 +287,7 @@ function rasterStyle(basemap: Basemap, variantId?: string, dayOffset?: number) {
         tiles: [resolveBasemapUrl(basemap, variantId, dayOffset)],
         tileSize: basemap.tileSize ?? 256,
         attribution: basemap.attribution,
-        bounds: basemap.bounds,
+        ...(basemap.bounds ? { bounds: basemap.bounds } : {}),
         maxzoom: basemap.maxzoom ?? 18,
       },
     },
@@ -1560,6 +1561,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     railOn,
     railwayOpacity,
     railStyle,
+    poiOn,
     ndviOn,
     ndviOpacity,
     speciesOn,
@@ -1575,6 +1577,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     landCoverOpacity,
     historyLandmarksOn,
     historyLandmarksOpacity,
+    historyGlobalOn,
     historyHeritageOnly,
     historyUnescoOnly,
     historyMapOn,
@@ -1589,6 +1592,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setRailOn,
     setRailwayOpacity,
     setRailStyle,
+    setPoiOn,
     setNdviOn,
     setNdviOpacity,
     setSpeciesOn,
@@ -1604,6 +1608,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setLandCoverOpacity,
     setHistoryLandmarksOn,
     setHistoryLandmarksOpacity,
+    setHistoryGlobalOn,
     setHistoryHeritageOnly,
     setHistoryUnescoOnly,
     setHistoryMapOn,
@@ -1766,7 +1771,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setVectorBasemapId,
   ]);
   const [historyCategories, setHistoryCategories] = useState<HistoricCategory[]>([]);
-  const historyGlobalActive = activePane === "history";
+  const historyGlobalActive = activePane === "history" && historyGlobalOn;
   const historyGlobal = useHistoryLayers(mapInstance, {
     enabled: historyGlobalActive,
     year: historyYear,
@@ -2796,6 +2801,55 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (!map || !railwayOn || railStyle !== "lines") return;
     updateRailVectorOpacity(map, railwayOpacity);
   }, [railwayOn, railStyle, railwayOpacity]);
+
+  // Google-Maps-style place dots. These ride on the same keyless
+  // OpenFreeMap vector tiles as the rail detail, but in their own source
+  // so they survive basemap swaps and can be toggled independently.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    if (!poiOn) {
+      try {
+        removePoiLayers(map);
+      } catch {
+        // A style swap may already have removed the source.
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let frame = 0;
+    const startedAt = Date.now();
+    const apply = () => {
+      if (cancelled || !map.isStyleLoaded()) return;
+      try {
+        ensurePoiLayers(map);
+      } catch (error) {
+        console.warn("[poi] layers could not be added", error);
+      }
+    };
+    // The initial style can finish before this effect registers, so poll
+    // briefly in addition to the style/idle events.
+    const waitForStyle = () => {
+      if (cancelled) return;
+      if (map.isStyleLoaded()) {
+        apply();
+        return;
+      }
+      if (Date.now() - startedAt < 10_000) {
+        frame = requestAnimationFrame(waitForStyle);
+      }
+    };
+    waitForStyle();
+    map.on("style.load", apply);
+    map.once("idle", apply);
+    return () => {
+      cancelled = true;
+      if (frame) cancelAnimationFrame(frame);
+      map.off("style.load", apply);
+      map.off("idle", apply);
+    };
+  }, [poiOn, active, mapInstance]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────
   useEffect(() => {
@@ -3900,6 +3954,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 onLoadFull={historyGlobal.retryFullDownload}
                 categories={historyCategories}
                 onCategoriesChange={setHistoryCategories}
+                globalOn={historyGlobalOn}
+                onGlobalOnChange={setHistoryGlobalOn}
                 heritageOnly={historyHeritageOnly}
                 onHeritageOnlyChange={setHistoryHeritageOnly}
                 unescoOnly={historyUnescoOnly}
@@ -3959,6 +4015,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onOrientationChange={setOrientationMode}
                   basemapMode={basemapMode}
                   onBasemapModeChange={setBasemapMode}
+                  poiOn={poiOn}
+                  onPoiChange={setPoiOn}
                 />
 
                 <BasemapPanel
@@ -4531,6 +4589,8 @@ interface ViewPanelProps {
   onOrientationChange: (m: OrientationMode) => void;
   basemapMode: BasemapMode;
   onBasemapModeChange: (m: BasemapMode) => void;
+  poiOn: boolean;
+  onPoiChange: (on: boolean) => void;
 }
 
 function ViewPanel({
@@ -4540,6 +4600,8 @@ function ViewPanel({
   onOrientationChange,
   basemapMode,
   onBasemapModeChange,
+  poiOn,
+  onPoiChange,
 }: ViewPanelProps) {
   const fullscreen = () => {
     if (typeof document === "undefined") return;
@@ -4628,6 +4690,26 @@ function ViewPanel({
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col">
+            <span className="ui-row-title">Places</span>
+            <span className="text-[10.5px] text-[color:var(--ink-mute)]">
+              Shops, food, culture &amp; sport
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={poiOn}
+            aria-label="Places overlay on/off"
+            onClick={() => onPoiChange(!poiOn)}
+            className="hud-switch"
+            data-on={poiOn}
+          >
+            <span className="hud-switch-thumb" aria-hidden />
+          </button>
         </div>
 
         <button
