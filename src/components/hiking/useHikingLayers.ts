@@ -19,6 +19,7 @@ const ROUTE_LAYER_ALT = "hiking-routes-alt";
 const ROUTE_LAYER_ALT_CASING = "hiking-routes-alt-casing";
 const ROUTE_LAYER_LABELS = "hiking-routes-labels";
 const ROUTE_LABEL_SOURCE = "hiking-route-labels";
+const ROUTE_LAYER_ALT_HIT = "hiking-routes-alt-hit";
 
 export const COLOR_START = THEME.accent;
 export const COLOR_END = THEME.warn;
@@ -35,6 +36,7 @@ export function colorForCandidate(index: number): string {
 const HIKING_Z_ORDER: string[] = [
   ROUTE_LAYER_ALT_CASING,
   ROUTE_LAYER_ALT,
+  ROUTE_LAYER_ALT_HIT,
   ROUTE_LAYER_CASING,
   ROUTE_LAYER_PRIMARY,
   ROUTE_LAYER_LABELS,
@@ -291,6 +293,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
       if (!enabled || candidates.length === 0) {
         removeLayerIfExists(map, ROUTE_LAYER_LABELS);
         removeSourceIfExists(map, ROUTE_LABEL_SOURCE);
+        removeLayerIfExists(map, ROUTE_LAYER_ALT_HIT);
         removeLayerIfExists(map, ROUTE_LAYER_ALT);
         removeLayerIfExists(map, ROUTE_LAYER_ALT_CASING);
         removeLayerIfExists(map, ROUTE_LAYER_PRIMARY);
@@ -365,6 +368,20 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           },
         });
       }
+      if (!map.getLayer(ROUTE_LAYER_ALT_HIT)) {
+        map.addLayer({
+          id: ROUTE_LAYER_ALT_HIT,
+          type: "line",
+          source: ROUTE_SOURCE,
+          filter: ["!", ["get", "selected"]],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": THEME.casing,
+            "line-width": 18,
+            "line-opacity": 0.01,
+          },
+        });
+      }
       if (!map.getLayer(ROUTE_LAYER_LABELS)) {
         map.addLayer({
           id: ROUTE_LAYER_LABELS,
@@ -391,11 +408,17 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
 
     const onClickAlt = (e: maplibregl.MapMouseEvent) => {
       const feats = map.queryRenderedFeatures(e.point, {
-        layers: [ROUTE_LAYER_ALT],
+        layers: [ROUTE_LAYER_ALT_HIT],
       });
       if (feats.length === 0) return;
+      e.preventDefault();
+      e.originalEvent?.stopPropagation();
       const id = feats[0].properties?.id;
       if (typeof id === "string") selectCandidate(id);
+    };
+    const onPrimaryClick = (e: maplibregl.MapMouseEvent) => {
+      e.preventDefault();
+      e.originalEvent?.stopPropagation();
     };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -404,14 +427,16 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
       map.getCanvas().style.cursor = "";
     };
     if (enabled && candidates.length > 0 && !finalized) {
-      map.on("click", ROUTE_LAYER_ALT, onClickAlt);
-      map.on("mouseenter", ROUTE_LAYER_ALT, onEnter);
-      map.on("mouseleave", ROUTE_LAYER_ALT, onLeave);
+      map.on("click", ROUTE_LAYER_ALT_HIT, onClickAlt);
+      map.on("click", ROUTE_LAYER_PRIMARY, onPrimaryClick);
+      map.on("mouseenter", ROUTE_LAYER_ALT_HIT, onEnter);
+      map.on("mouseleave", ROUTE_LAYER_ALT_HIT, onLeave);
     }
     return () => {
-      map.off("click", ROUTE_LAYER_ALT, onClickAlt);
-      map.off("mouseenter", ROUTE_LAYER_ALT, onEnter);
-      map.off("mouseleave", ROUTE_LAYER_ALT, onLeave);
+      map.off("click", ROUTE_LAYER_ALT_HIT, onClickAlt);
+      map.off("mouseenter", ROUTE_LAYER_ALT_HIT, onEnter);
+      map.off("mouseleave", ROUTE_LAYER_ALT_HIT, onLeave);
+      map.off("click", ROUTE_LAYER_PRIMARY, onPrimaryClick);
       map.off("style.load", apply);
     };
   }, [map, enabled, candidates, selectedCandidateId, finalized, selectCandidate]);

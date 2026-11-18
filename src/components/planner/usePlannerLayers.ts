@@ -28,6 +28,7 @@ const LINE = "planner-route-line";
 const LINE_LABELS = "planner-line-labels";
 const WALK = "planner-route-walk";
 const ALT = "planner-route-alt";
+const ALT_HIT = "planner-route-alt-hit";
 const ALT_CASING = "planner-route-alt-casing";
 const LABELS = "planner-route-labels";
 const LABELS_SRC = "planner-route-labels-src";
@@ -300,6 +301,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
         STOP_DOTS,
         WALK,
         LABELS,
+        ALT_HIT,
         ALT,
         ALT_CASING,
         LINE,
@@ -347,6 +349,18 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
             "line-width": 2.5,
             "line-opacity": 0.65,
             "line-dasharray": [2, 1.5],
+          },
+        });
+        map.addLayer({
+          id: ALT_HIT,
+          type: "line",
+          source: SRC,
+          filter: ["!", ["get", "selected"]],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": THEME.casing,
+            "line-width": 18,
+            "line-opacity": 0.01,
           },
         });
         map.addLayer({
@@ -537,7 +551,12 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       const id = event.features?.[0]?.properties?.id;
       if (typeof id !== "string") return;
       event.preventDefault();
+      event.originalEvent?.stopPropagation();
       useCar.getState().selectRoute(id);
+    };
+    const onCarPrimaryClick = (event: MapLayerMouseEvent) => {
+      event.preventDefault();
+      event.originalEvent?.stopPropagation();
     };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -560,18 +579,20 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
     map.on("click", STOP_DOTS, onStopClick);
     map.on("mouseenter", STOP_DOTS, onEnter);
     map.on("mouseleave", STOP_DOTS, onLeave);
-    map.on("click", ALT, onCarAltClick);
-    map.on("mouseenter", ALT, onEnter);
-    map.on("mouseleave", ALT, onLeave);
+    map.on("click", ALT_HIT, onCarAltClick);
+    map.on("click", LINE, onCarPrimaryClick);
+    map.on("mouseenter", ALT_HIT, onEnter);
+    map.on("mouseleave", ALT_HIT, onLeave);
     return () => {
       map.off("load", safeApply);
       map.off("style.load", safeApply);
       map.off("click", STOP_DOTS, onStopClick);
       map.off("mouseenter", STOP_DOTS, onEnter);
       map.off("mouseleave", STOP_DOTS, onLeave);
-      map.off("click", ALT, onCarAltClick);
-      map.off("mouseenter", ALT, onEnter);
-      map.off("mouseleave", ALT, onLeave);
+      map.off("click", ALT_HIT, onCarAltClick);
+      map.off("click", LINE, onCarPrimaryClick);
+      map.off("mouseenter", ALT_HIT, onEnter);
+      map.off("mouseleave", ALT_HIT, onLeave);
     };
   }, [
     map,

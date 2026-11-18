@@ -18,6 +18,13 @@ describe("car, walk and bike route layers", () => {
     }
   });
 
+  it("uses a wide hit path for alternatives and suppresses POI clicks", () => {
+    for (const src of [hiking, car]) {
+      expect(src).toContain("ALT_HIT");
+      expect(src).toContain("preventDefault");
+    }
+  });
+
   it("labels every route with distance and duration", () => {
     for (const src of [hiking, car]) {
       expect(src).toContain("formatRouteLabel");
