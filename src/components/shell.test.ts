@@ -21,6 +21,17 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("keeps the search action in the location card", () => {
+    const panel = readFileSync(
+      new URL("./planner/TransitPanel.tsx", import.meta.url),
+      "utf8",
+    );
+    const find = panel.indexOf("Find connections");
+    const when = panel.indexOf('"ui-kicker">When');
+    expect(find).toBeGreaterThan(-1);
+    expect(find).toBeLessThan(when);
+  });
+
   it("gives every travel mode an icon", () => {
     const routes = readFileSync(new URL("./hud/RoutesPanel.tsx", import.meta.url), "utf8");
     for (const icon of ["TransitIcon", "WalkIcon", "BikeIcon", "CarIcon"]) {

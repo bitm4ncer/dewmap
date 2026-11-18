@@ -593,6 +593,14 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => void search()}
+            disabled={phase.kind === "routing" || !from || !to}
+            className="hud-btn-primary w-full"
+          >
+            {phase.kind === "routing" ? "Searching…" : "Find connections"}
+          </button>
         </div>
       </HudPanel>
 
@@ -649,14 +657,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
               Tomorrow
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void search()}
-            disabled={phase.kind === "routing" || !from || !to}
-            className="hud-btn-primary mt-1 w-full"
-          >
-            {phase.kind === "routing" ? "Searching…" : "Find connections"}
-          </button>
         </div>
       </HudPanel>
 
