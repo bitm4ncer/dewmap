@@ -8,17 +8,15 @@ export const RAILWAY_TILE_URLS: string[] = ["a", "b", "c"].map(
 );
 
 /**
- * Public CARTO vector tiles (Protomaps basemap schema). They contain the
- * `roads` layer with `kind=rail` plus the `pois` layer with `kind=station`,
- * already generalized per zoom. CORS is enabled, so this works on raster
- * basemaps as well.
- *
- * Keep this version in sync with the CARTO style when it is refreshed.
+ * OpenFreeMap vector tiles (OpenMapTiles schema). The transportation layer
+ * carries `class=rail` and `class=transit` at low and high zooms; railway
+ * stations live in the `poi` layer (`class=railway`, `subclass=station`).
+ * The TileJSON URL tracks OpenFreeMap's current planet build, so no tile
+ * version has to be pinned in the app.
  */
-export const RAIL_VECTOR_TILE_URL =
-  "https://tiles.basemaps.cartocdn.com/v/20261026-01/vectortiles/carto.streets/v2/{z}/{x}/{y}.mvt";
-export const RAIL_VECTOR_MAX_ZOOM = 15;
+export const RAIL_VECTOR_TILEJSON_URL = "https://tiles.openfreemap.org/planet";
+export const RAIL_VECTOR_MAX_ZOOM = 14;
 export const RAIL_VECTOR_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
-export const RAIL_VECTOR_LINES_LAYER = "roads";
-export const RAIL_VECTOR_STATIONS_LAYER = "pois";
+  '<a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · &copy; OpenStreetMap contributors';
+export const RAIL_VECTOR_LINES_LAYER = "transportation";
+export const RAIL_VECTOR_STATIONS_LAYER = "poi";
