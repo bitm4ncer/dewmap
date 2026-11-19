@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import type { Map as MLMap } from "maplibre-gl";
-import maplibregl from "maplibre-gl";
 import { useHiking } from "@/lib/hiking/store";
 import { THEME, VIA_PALETTE } from "@/lib/theme";
+import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import type { RouteCandidate, Waypoint } from "@/lib/hiking/types";
 import { formatRouteLabel } from "@/lib/routing";
 
@@ -252,21 +252,18 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
     else map.once("load", apply);
     map.on("style.load", apply);
 
-    // Tap a waypoint to remove it.
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      const feats = map.queryRenderedFeatures(e.point, {
-        layers: [WAYPOINT_DOT_LAYER],
-      });
-      if (feats.length === 0) return;
-      const id = feats[0].properties?.id;
-      if (typeof id === "string") {
-        // stop the click from bubbling so the long-press / map click handlers
-        // don't also fire
-        e.preventDefault();
-        e.originalEvent?.stopPropagation();
-        removeWaypoint(id);
-      }
-    };
+    // Tap a waypoint to remove it. The pipeline resolves the tap with
+    // tolerance across dot + halo and fires feedback before the removal.
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "hiking-waypoints",
+      layers: [WAYPOINT_DOT_LAYER, WAYPOINT_HALO_LAYER],
+      tolerancePx: 16,
+      hapticKind: "tap",
+      onFeature: (feature) => {
+        const id = feature.properties?.id;
+        if (typeof id === "string") removeWaypoint(id);
+      },
+    });
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
     };
@@ -274,12 +271,11 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
       map.getCanvas().style.cursor = "";
     };
     if (enabled && waypoints.length > 0) {
-      map.on("click", WAYPOINT_DOT_LAYER, onClick);
       map.on("mouseenter", WAYPOINT_DOT_LAYER, onEnter);
       map.on("mouseleave", WAYPOINT_DOT_LAYER, onLeave);
     }
     return () => {
-      map.off("click", WAYPOINT_DOT_LAYER, onClick);
+      unregisterTaps();
       map.off("mouseenter", WAYPOINT_DOT_LAYER, onEnter);
       map.off("mouseleave", WAYPOINT_DOT_LAYER, onLeave);
       map.off("style.load", apply);
@@ -377,7 +373,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": THEME.casing,
-            "line-width": 18,
+            "line-width": 24,
             "line-opacity": 0.01,
           },
         });
@@ -406,20 +402,6 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
     else map.once("load", apply);
     map.on("style.load", apply);
 
-    const onClickAlt = (e: maplibregl.MapMouseEvent) => {
-      const feats = map.queryRenderedFeatures(e.point, {
-        layers: [ROUTE_LAYER_ALT_HIT],
-      });
-      if (feats.length === 0) return;
-      e.preventDefault();
-      e.originalEvent?.stopPropagation();
-      const id = feats[0].properties?.id;
-      if (typeof id === "string") selectCandidate(id);
-    };
-    const onPrimaryClick = (e: maplibregl.MapMouseEvent) => {
-      e.preventDefault();
-      e.originalEvent?.stopPropagation();
-    };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
     };
@@ -427,16 +409,33 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
       map.getCanvas().style.cursor = "";
     };
     if (enabled && candidates.length > 0 && !finalized) {
-      map.on("click", ROUTE_LAYER_ALT_HIT, onClickAlt);
-      map.on("click", ROUTE_LAYER_PRIMARY, onPrimaryClick);
+      const unregisterAlt = registerFeatureTaps(map, {
+        id: "hiking-alt-routes",
+        layers: [ROUTE_LAYER_ALT_HIT],
+        tolerancePx: 10,
+        onFeature: (feature) => {
+          const id = feature.properties?.id;
+          if (typeof id === "string") selectCandidate(id);
+        },
+      });
+      // Claiming taps on the selected route keeps the bare-map place
+      // card from opening under the finger.
+      const unregisterPrimary = registerFeatureTaps(map, {
+        id: "hiking-selected-route",
+        layers: [ROUTE_LAYER_PRIMARY],
+        hapticKind: "tap",
+        onFeature: () => {},
+      });
       map.on("mouseenter", ROUTE_LAYER_ALT_HIT, onEnter);
       map.on("mouseleave", ROUTE_LAYER_ALT_HIT, onLeave);
+      return () => {
+        unregisterAlt();
+        unregisterPrimary();
+        map.off("mouseenter", ROUTE_LAYER_ALT_HIT, onEnter);
+        map.off("mouseleave", ROUTE_LAYER_ALT_HIT, onLeave);
+      };
     }
     return () => {
-      map.off("click", ROUTE_LAYER_ALT_HIT, onClickAlt);
-      map.off("mouseenter", ROUTE_LAYER_ALT_HIT, onEnter);
-      map.off("mouseleave", ROUTE_LAYER_ALT_HIT, onLeave);
-      map.off("click", ROUTE_LAYER_PRIMARY, onPrimaryClick);
       map.off("style.load", apply);
     };
   }, [map, enabled, candidates, selectedCandidateId, finalized, selectCandidate]);

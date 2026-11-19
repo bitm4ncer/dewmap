@@ -18,10 +18,12 @@ describe("car, walk and bike route layers", () => {
     }
   });
 
-  it("uses a wide hit path for alternatives and suppresses POI clicks", () => {
+  it("uses a wide hit path for alternatives and routes taps through the pipeline", () => {
     for (const src of [hiking, car]) {
       expect(src).toContain("ALT_HIT");
-      expect(src).toContain("preventDefault");
+      // Alt-route taps resolve via the central feature-tap pipeline,
+      // which owns preventDefault + haptic + ripple feedback.
+      expect(src).toContain("registerFeatureTaps");
     }
   });
 

@@ -105,6 +105,7 @@ body {
   --topbar-h:     calc(56px + var(--safe-top));
   --hud-topbar-h: var(--topbar-h);
   --hud-nav-h:    calc(56px + var(--safe-bottom));
+  --hud-peek-h:   calc(88px + var(--safe-bottom));
   --panel-w:      380px;
 
   /* Z scale */
@@ -359,7 +360,7 @@ body {
     bottom: 0 !important;
     top: auto !important;
     z-index: var(--z-sheet);
-    --sheet-base: 48dvh;
+    --sheet-base: var(--hud-peek-h);
     height: var(--sheet-base);
     background: var(--surf-0);
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
@@ -369,6 +370,7 @@ body {
        their slow-start curve tracks the spring's pace so the content
        rides with the sheet instead of jumping mid-flight. */
     transition: padding-top 480ms cubic-bezier(0.5, 0, 0.2, 1), border-radius 480ms cubic-bezier(0.5, 0, 0.2, 1);
+    --hud-peek-h: calc(88px + var(--safe-bottom));
   }
 
   .hud-bottom-sheet[data-dragging="true"],
@@ -376,12 +378,15 @@ body {
     user-select: none;
   }
 
+  .hud-bottom-sheet[data-sheet-state="half"] { --sheet-base: 48dvh; }
   .hud-bottom-sheet[data-sheet-state="full"] {
     --sheet-base: 100dvh;
     padding-top: var(--safe-top);
     border: 0;
     border-radius: 0;
   }
+
+  .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -594,21 +599,20 @@ body {
   .maplibregl-ctrl-top-left,
   .maplibregl-ctrl-top-right { margin-top: var(--safe-top); }
 
-  /* Move the map control stack to the right edge on phones. The panel
-     always covers at least half the screen, so the stacks float just
-     above its edge and disappear when the sheet takes the full screen. */
+  /* Move the map control stack to the right edge on phones; keep it
+     above the sheet in peek, fade it when the sheet covers the map. */
   .maplibregl-ctrl-bottom-left {
     left: auto !important;
     right: 12px;
     align-items: flex-end;
-    margin-bottom: calc(48dvh + 12px) !important;
+    margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
     transition: opacity var(--dur-base) var(--ease), margin-bottom var(--dur-base) var(--ease);
   }
   .maplibregl-ctrl-bottom-right {
     left: 12px !important;
     right: auto !important;
     align-items: flex-start;
-    margin-bottom: calc(48dvh + 12px) !important;
+    margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
     transition: opacity var(--dur-base) var(--ease), margin-bottom var(--dur-base) var(--ease);
   }
   .maplibregl-ctrl-scale { display: none !important; }
@@ -622,7 +626,9 @@ body {
   .maplibregl-ctrl-projection,
   .maplibregl-ctrl-orientation { display: none !important; }
 
+  body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-left,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-left,
+  body:has(.hud-bottom-sheet[data-sheet-state="half"]) .maplibregl-ctrl-bottom-right,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .maplibregl-ctrl-bottom-right,
   body:has(.poi-detail) .maplibregl-ctrl,
   body:has(.poi-detail) .maplibregl-ctrl-bottom-left,
@@ -2215,6 +2221,74 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .poi-crosshair svg { display: block; }
 
+/* Inner element carries the animations; the outer marker element is
+ * positioned by MapLibre via inline `transform`, so animating `transform`
+ * there would fight the positioning. */
+.poi-crosshair-inner {
+  width: 100%;
+  height: 100%;
+  animation: crosshair-lock 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.35) both;
+}
+@keyframes crosshair-lock {
+  from { transform: scale(2); opacity: 0; }
+  55%  { opacity: 1; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* Brief focus pulse after the map settles under a placed crosshair. */
+.poi-crosshair.is-settle .poi-crosshair-inner {
+  animation: crosshair-settle 0.24s ease-out;
+}
+@keyframes crosshair-settle {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+/* Faint aiming preview while the long press is still held down. */
+.poi-crosshair--preview {
+  opacity: 0.55;
+  color: var(--danger);
+}
+.poi-crosshair--preview .poi-crosshair-inner {
+  animation: crosshair-breathe 1s ease-in-out infinite;
+}
+@keyframes crosshair-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* Tap ripple — spawned synchronously by the map feature-tap pipeline. */
+.map-tap-ripple {
+  position: absolute;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--ripple-color, var(--accent));
+  pointer-events: none;
+  animation: map-tap-ripple 0.45s ease-out forwards;
+}
+@keyframes map-tap-ripple {
+  from { transform: scale(0.6); opacity: 0.5; }
+  to   { transform: scale(3.6); opacity: 0; }
+}
+
+/* Unified press feedback for DOM controls: opt in with `class="tactile"`
+ * plus `data-tactile` (the attribute drives the haptic via TactileRoot). */
+.tactile {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform 0.12s ease;
+}
+.tactile:active { transform: scale(var(--press-btn)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-tap-ripple { display: none; }
+  .poi-crosshair-inner { animation: none; }
+}
+
 .poi-title {
   margin: 2px 0 0;
   font-size: 22px;
@@ -2640,7 +2714,7 @@ select {
   .map-overlay-badges {
     position: absolute;
     right: 12px;
-    bottom: calc(48dvh + 12px);
+    bottom: calc(var(--hud-peek-h) + 148px);
     z-index: 20;
     display: flex;
     width: 36px;
@@ -2666,6 +2740,7 @@ select {
   }
   .map-overlay-badge:hover { background: var(--surf-2); color: var(--ink); }
   .map-overlay-badge:active { transform: scale(var(--press-btn)); }
+  body:has(.hud-bottom-sheet[data-sheet-state="half"]) .map-overlay-badges,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .map-overlay-badges {
     opacity: 0;
     pointer-events: none;

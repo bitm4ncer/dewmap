@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import maplibregl, { Map as MLMap, ScaleControl, type MapMouseEvent } from "maplibre-gl";
+import maplibregl, {
+  Map as MLMap,
+  ScaleControl,
+  type MapGeoJSONFeature,
+  type MapMouseEvent,
+} from "maplibre-gl";
 import { THEME } from "@/lib/theme";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { ExpressionSpecification } from "@maplibre/maplibre-gl-style-spec";
@@ -57,6 +62,10 @@ import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { haptic } from "@/lib/haptics";
+import {
+  installFeatureTapPipeline,
+  registerFeatureTaps,
+} from "@/lib/map/featureTaps";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
 import { formatCoordinates } from "@/lib/map/coordinates";
@@ -75,6 +84,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  CloseIcon,
   AirQualityIcon,
   FlatIcon,
   ForestLossIcon,
@@ -90,7 +100,6 @@ import {
 import { BiospherePanel } from "./hud/BiospherePanel";
 import { HistoryPanel } from "./hud/HistoryPanel";
 import { useHistoryLayers } from "./history/useHistoryLayers";
-import { globalLayerIds } from "@/lib/history/global-layers";
 import {
   escapeHistoryHtml,
   externalLinkIcon,
@@ -1533,6 +1542,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     lon: number;
     lat: number;
   } | null>(null);
+  /** Aiming preview while a long press is held (not yet locked in). */
+  const [crosshairPreview, setCrosshairPreview] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
   const sheetBeforePoiRef = useRef<SheetState | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
@@ -1723,8 +1737,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [routesMode]);
   const [sheetState, setSheetState] = useState<SheetState>(() => {
-    if (typeof window === "undefined") return "half";
-    return "half";
+    if (typeof window === "undefined") return "peek";
+    return "peek";
   });
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1757,9 +1771,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // state on desktop or a closed drawer on a phone.
     setSheetState("half");
   }, [isMobile]);
-  // Mobile panel positions are half and full — the panel is always open.
-  // On desktop the same state doubles as the drawer open/close flag.
-  const sidebarOpen = isMobile || sheetState === "full";
+  const sidebarOpen = sheetState !== "peek";
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
   // Regional basemaps are tied to their coverage. If the user pans out of
@@ -1918,7 +1930,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       stopSpring();
       applyShift(0);
       haptic("snap");
-      snapTo("half");
+      snapTo(sheetState === "full" ? "half" : "peek");
     };
 
     const onStart = (e: TouchEvent) => {
@@ -2091,25 +2103,26 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
 
-  // Half is the default: map and panel are visible together so changes
-  // land on the map immediately. Full is an explicit option; half is the
-  // collapsed state reached by the close button or a downward drag.
+  // Peek shows only the page buttons; half keeps the map and the panel
+  // visible together; full is the explicit deep-dive state. Tapping the
+  // active tab or the grabber always steps one level toward peek.
   const selectPane = (pane: SidebarPane) => {
     haptic("tap");
     if (pane === activePane) {
-      snapTo(sheetState === "full" ? "half" : "full");
+      snapTo(sheetState === "full" ? "half" : sheetState === "half" ? "peek" : "half");
       return;
     }
     setActivePane(pane);
+    if (sheetState === "peek") snapTo("half");
   };
 
   const toggleFull = () => {
     haptic("tap");
     snapTo(sheetState === "full" ? "half" : "full");
   };
-  const collapseToHalf = useCallback(() => {
+  const collapseToPeek = useCallback(() => {
     haptic("tap");
-    snapTo("half");
+    snapTo("peek");
   }, [snapTo]);
 
   /** Opening a place card clears the sheet out of the way, then restores
@@ -2120,10 +2133,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (
         isMobile
         && sheetBeforePoiRef.current == null
-        && sheetState !== "half"
+        && sheetState !== "peek"
       ) {
         sheetBeforePoiRef.current = sheetState;
-        snapTo("half");
+        snapTo("peek");
       }
       setPoiSelection(selection);
     },
@@ -2132,12 +2145,21 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
   // Long press = inspect this point. A normal tap never sets the
   // crosshair; the card opens with the crosshair kept in place. In the
-  // hiking pane the familiar waypoint drop still happens too.
+  // hiking pane the familiar waypoint drop still happens too. While the
+  // press is held, a faint preview crosshair tracks the finger and the
+  // lock-in lands at the last aimed position.
+  const onCrosshairPreview = useCallback(
+    (point: { lng: number; lat: number } | null) => {
+      setCrosshairPreview(point ? { lon: point.lng, lat: point.lat } : null);
+    },
+    [],
+  );
   useLongPress(
     mapInstance,
     true,
     useCallback(
       (lng: number, lat: number) => {
+        setCrosshairPreview(null);
         setCrosshair({ lon: lng, lat });
         if (activePane === "hiking") {
           useHiking.getState().addWaypoint({
@@ -2151,6 +2173,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       },
       [activePane, openPoi],
     ),
+    { onPreview: onCrosshairPreview },
   );
 
   const closePoi = useCallback(() => {
@@ -2234,7 +2257,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         category: result.category,
         city: result.city,
       });
-      if (isMobile) snapTo("half");
+      if (isMobile) snapTo("peek");
     },
     [isMobile, snapTo],
   );
@@ -2910,26 +2933,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("style.load", apply);
     map.once("idle", apply);
 
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      const feats = map.queryRenderedFeatures(e.point, {
-        layers: [
-          RAIL_VECTOR_STATION_HIT_LAYER_ID,
-          RAIL_VECTOR_STATION_DOT_LAYER_ID,
-        ],
-      });
-      if (feats.length === 0) return;
-      const f = feats[0];
-      const coords = (f.geometry as GeoJSON.Point).coordinates as [number, number];
-      const name = (f.properties?.name as string | undefined) ?? "Station";
-      e.preventDefault();
-      e.originalEvent?.stopPropagation();
-      useHiking.getState().addWaypoint({
-        lat: coords[1],
-        lon: coords[0],
-        label: name,
-        source: "station",
-      });
-    };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
     };
@@ -2937,14 +2940,38 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.getCanvas().style.cursor = "";
     };
 
-    map.on("click", RAIL_VECTOR_STATION_HIT_LAYER_ID, onClick);
+    // Tapping a station drops a hiking waypoint. The pipeline resolves
+    // the tap with tolerance and fires haptic + ripple before we touch
+    // any state, so the acknowledgment is instant.
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "rail-stations",
+      layers: [
+        RAIL_VECTOR_STATION_HIT_LAYER_ID,
+        RAIL_VECTOR_STATION_DOT_LAYER_ID,
+      ],
+      tolerancePx: 26,
+      hapticKind: "select",
+      onFeature: (feature) => {
+        const coords = (feature.geometry as GeoJSON.Point)
+          .coordinates as [number, number];
+        const name = (feature.properties?.name as string | undefined)
+          ?? "Station";
+        useHiking.getState().addWaypoint({
+          lat: coords[1],
+          lon: coords[0],
+          label: name,
+          source: "station",
+        });
+      },
+    });
+
     map.on("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
     map.on("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
 
     return () => {
+      unregisterTaps();
       map.off("style.load", apply);
       map.off("idle", apply);
-      map.off("click", RAIL_VECTOR_STATION_HIT_LAYER_ID, onClick);
       map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
       map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
     };
@@ -2998,9 +3025,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("style.load", apply);
     map.once("idle", apply);
 
-    const openPlace = (event: maplibregl.MapLayerMouseEvent) => {
-      const feature = event.features?.[0];
-      if (!feature) return;
+    const openPlace = (
+      feature: MapGeoJSONFeature,
+      event: MapMouseEvent,
+    ) => {
       const props = feature.properties ?? {};
       const stringValue = (...keys: string[]) => {
         for (const key of keys) {
@@ -3011,11 +3039,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       };
       const name = stringValue("name", "name:latin", "name_en", "name_de");
       const category = stringValue("class", "subclass");
-      event.preventDefault();
-      event.originalEvent?.stopPropagation();
+      // Anchor the card on the feature itself, so a tolerated near-miss
+      // still resolves to the POI's true position, not the tap point.
+      const geometry = feature.geometry as GeoJSON.Point | undefined;
+      const coords = geometry?.type === "Point"
+        ? geometry.coordinates as [number, number]
+        : null;
       openPoi({
-        lon: event.lngLat.lng,
-        lat: event.lngLat.lat,
+        lon: coords ? coords[0] : event.lngLat.lng,
+        lat: coords ? coords[1] : event.lngLat.lat,
         ...(name ? { name } : {}),
         ...(category ? { category } : {}),
       });
@@ -3026,17 +3058,21 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const hidePointer = () => {
       map.getCanvas().style.cursor = "";
     };
-    const layers = [POI_HIT_LAYER_ID, POI_ICON_LAYER_ID, POI_LABEL_LAYER_ID];
-    for (const layer of layers) map.on("click", layer, openPlace);
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "poi-dots",
+      layers: [POI_HIT_LAYER_ID, POI_ICON_LAYER_ID, POI_LABEL_LAYER_ID],
+      tolerancePx: 24,
+      onFeature: openPlace,
+    });
     map.on("mouseenter", POI_HIT_LAYER_ID, showPointer);
     map.on("mouseleave", POI_HIT_LAYER_ID, hidePointer);
 
     return () => {
+      unregisterTaps();
       cancelled = true;
       if (frame) cancelAnimationFrame(frame);
       map.off("style.load", apply);
       map.off("idle", apply);
-      for (const layer of layers) map.off("click", layer, openPlace);
       map.off("mouseenter", POI_HIT_LAYER_ID, showPointer);
       map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
     };
@@ -3244,20 +3280,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       moveTimer = window.setTimeout(refresh, 400);
     };
 
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      const feats = map.queryRenderedFeatures(e.point, {
-        layers: [HISTORY_LANDMARKS_HIT_LAYER_ID, HISTORY_LANDMARKS_DOT_LAYER_ID],
-      });
-      if (feats.length === 0) return;
-      const f = feats[0];
-      const props = f.properties as unknown as LandmarkProperties;
-      const coords = (f.geometry as GeoJSON.Point).coordinates as [
-        number,
-        number,
-      ];
-      e.preventDefault();
-      e.originalEvent?.stopPropagation();
-
+    const openLandmark = (
+      props: LandmarkProperties,
+      coords: [number, number],
+    ) => {
       const datePart = props.inception
         ? `${props.inception}${props.dissolved ? `–${props.dissolved}` : ""}`
         : "date unknown";
@@ -3359,23 +3385,39 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.getCanvas().style.cursor = "";
     };
 
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "history-landmarks",
+      layers: [
+        HISTORY_LANDMARKS_HIT_LAYER_ID,
+        HISTORY_LANDMARKS_DOT_LAYER_ID,
+      ],
+      tolerancePx: 22,
+      onFeature: (feature) => {
+        const props = feature.properties as unknown as LandmarkProperties;
+        const coords = (feature.geometry as GeoJSON.Point).coordinates as [
+          number,
+          number,
+        ];
+        openLandmark(props, coords);
+      },
+    });
+
     if (map.isStyleLoaded()) apply();
     map.on("style.load", apply);
     // The initial `style.load` can fire before this effect registers;
     // `idle` guarantees one more attempt once the map is usable.
     map.once("idle", apply);
     map.on("moveend", onMoveEnd);
-    map.on("click", HISTORY_LANDMARKS_HIT_LAYER_ID, onClick);
     map.on("mouseenter", HISTORY_LANDMARKS_HIT_LAYER_ID, onEnter);
     map.on("mouseleave", HISTORY_LANDMARKS_HIT_LAYER_ID, onLeave);
 
     return () => {
+      unregisterTaps();
       cancelled = true;
       if (moveTimer !== null) window.clearTimeout(moveTimer);
       pendingFetch?.abort();
       map.off("style.load", apply);
       map.off("moveend", onMoveEnd);
-      map.off("click", HISTORY_LANDMARKS_HIT_LAYER_ID, onClick);
       map.off("mouseenter", HISTORY_LANDMARKS_HIT_LAYER_ID, onEnter);
       map.off("mouseleave", HISTORY_LANDMARKS_HIT_LAYER_ID, onLeave);
     };
@@ -3612,11 +3654,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
     if (!isMobile) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") collapseToHalf();
+      if (e.key === "Escape") collapseToPeek();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sidebarOpen, collapseToHalf]);
+  }, [sidebarOpen, collapseToPeek]);
 
   const loadSnapshot = useCallback(
     async (lockedBbox: Bbox, snapshot: Snapshot) => {
@@ -3812,41 +3854,29 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [flyTarget]);
 
-  // Tapping the map opens place details. The crosshair is deliberately
-  // not part of this path; it is only set by a long/deep press.
+  // One central tap pipeline: registered feature groups (stations, POI
+  // dots, landmarks, stops, routes, vehicles, waypoints) resolve taps
+  // with pixel tolerance and fire instant haptic + ripple feedback; a
+  // tap that hits nothing opens the place card for the bare coordinate.
+  // The crosshair is deliberately not part of this path; it is only set
+  // by a long/deep press.
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
-    const historyLayers = globalLayerIds();
-    const interactiveLayers = new Set([
-      RAIL_VECTOR_STATION_HIT_LAYER_ID,
-      HISTORY_LANDMARKS_HIT_LAYER_ID,
-      POI_HIT_LAYER_ID,
-      POI_ICON_LAYER_ID,
-      POI_LABEL_LAYER_ID,
-      historyLayers.siteLayer,
-      historyLayers.siteHit,
-      ...historyLayers.clusterDots,
-    ]);
-    const onClick = (event: MapMouseEvent) => {
-      if (event.defaultPrevented) return;
-      const hit = map
-        .queryRenderedFeatures(event.point)
-        .some((feature) => interactiveLayers.has(feature.layer?.id ?? ""));
-      if (hit) return;
-      openPoi({
-        lon: event.lngLat.lng,
-        lat: event.lngLat.lat,
-      });
-    };
-    map.on("click", onClick);
-    return () => {
-      map.off("click", onClick);
-    };
+    installFeatureTapPipeline(map, {
+      onBareTap: (event) => {
+        openPoi({
+          lon: event.lngLat.lng,
+          lat: event.lngLat.lat,
+        });
+      },
+    });
   }, [mapInstance, openPoi]);
 
   // The crosshair is an explicit long-press inspection marker. It is not
   // tied to the place card, so tapping a shop never leaves a stray target.
+  // While the long press is still held, a faint preview crosshair tracks
+  // the finger so the target lands precisely where the user aims.
   useEffect(() => {
     const map = mapInstance;
     crosshairMarkerRef.current?.remove();
@@ -3856,23 +3886,62 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     el.className = "poi-crosshair";
     el.setAttribute("aria-hidden", "true");
     el.innerHTML = `
-      <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="19" cy="19" r="8" stroke="currentColor" stroke-width="2.4" />
-        <circle cx="19" cy="19" r="2.4" fill="currentColor" />
-        <path d="M19 1.5v8M19 28.5v8M1.5 19h8M28.5 19h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
-      </svg>
+      <div class="poi-crosshair-inner">
+        <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="19" cy="19" r="8" stroke="currentColor" stroke-width="2.4" />
+          <circle cx="19" cy="19" r="2.4" fill="currentColor" />
+          <path d="M19 1.5v8M19 28.5v8M1.5 19h8M28.5 19h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+      </div>
     `;
     const marker = new maplibregl.Marker({ element: el, anchor: "center" })
       .setLngLat([crosshair.lon, crosshair.lat])
       .addTo(map);
     crosshairMarkerRef.current = marker;
+
+    // After a pan/zoom with a placed crosshair, acknowledge the settle:
+    // a micro tick plus a brief focus pulse on the crosshair itself.
+    const onMoveEnd = () => {
+      haptic("tick");
+      el.classList.remove("is-settle");
+      // Force a reflow so the settle animation can restart.
+      void el.offsetWidth;
+      el.classList.add("is-settle");
+    };
+    map.on("moveend", onMoveEnd);
+
     return () => {
+      map.off("moveend", onMoveEnd);
       marker.remove();
       if (crosshairMarkerRef.current === marker) {
         crosshairMarkerRef.current = null;
       }
     };
   }, [mapInstance, crosshair]);
+
+  // Faint aiming preview while the long press is held down.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || !crosshairPreview || crosshair) return;
+    const el = document.createElement("div");
+    el.className = "poi-crosshair poi-crosshair--preview";
+    el.setAttribute("aria-hidden", "true");
+    el.innerHTML = `
+      <div class="poi-crosshair-inner">
+        <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="19" cy="19" r="8" stroke="currentColor" stroke-width="2.4" />
+          <circle cx="19" cy="19" r="2.4" fill="currentColor" />
+          <path d="M19 1.5v8M19 28.5v8M1.5 19h8M28.5 19h8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+        </svg>
+      </div>
+    `;
+    const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+      .setLngLat([crosshairPreview.lon, crosshairPreview.lat])
+      .addTo(map);
+    return () => {
+      marker.remove();
+    };
+  }, [mapInstance, crosshairPreview, crosshair]);
 
   const activeOverlays: {
     key: string;
@@ -4025,7 +4094,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           <button
             type="button"
             {...handleProps}
-            aria-label={sheetState === "half" ? "Expand panel" : "Shrink panel"}
+            aria-label={sheetState === "peek" ? "Open panel" : "Resize panel"}
             aria-expanded={sidebarOpen}
             className="hud-bottom-sheet-grabber"
           >
@@ -4039,6 +4108,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               className="sheet-expand hud-icon-btn"
             >
               {sheetState === "full" ? <ChevronDownIcon size={17} /> : <ChevronUpIcon size={17} />}
+            </button>
+            <button
+              type="button"
+              onClick={collapseToPeek}
+              aria-label="Close panel"
+              className="sheet-close hud-icon-btn"
+            >
+              <CloseIcon size={17} />
             </button>
           </div>
         </div>
@@ -4077,7 +4154,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={collapseToHalf}
+                onClick={collapseToPeek}
                 aria-label={isMobile ? "Collapse panel" : "Close panel"}
                 className="hud-icon-btn"
               >

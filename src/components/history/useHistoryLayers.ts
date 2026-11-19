@@ -21,6 +21,7 @@ import {
   globalLayerIds,
   removeGlobalLayers,
 } from "@/lib/history/global-layers";
+import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import type {
   HistoricCategory,
   HistoricManifest,
@@ -169,34 +170,34 @@ export function useHistoryLayers(
       }
     };
 
-    const onClick = (event: maplibregl.MapMouseEvent) => {
-      const ids = globalLayerIds();
-      const features = map.queryRenderedFeatures(event.point, {
-        layers: [...ids.clusterDots, ids.siteLayer, ids.siteHit],
-      });
-      if (features.length === 0) return;
-      const feature = features[0];
-      const properties = feature.properties ?? {};
-      const coordinates = (feature.geometry as GeoJSON.Point)?.coordinates as
-        | [number, number]
-        | undefined;
-      if (!coordinates) return;
-      event.preventDefault();
-      event.originalEvent?.stopPropagation();
+    // Cluster dots and site markers resolve through the central pipeline
+    // with pixel tolerance and instant haptic + ripple feedback.
+    const ids = globalLayerIds();
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "history-sites",
+      layers: [...ids.clusterDots, ids.siteLayer, ids.siteHit],
+      tolerancePx: 24,
+      onFeature: (feature) => {
+        const properties = feature.properties ?? {};
+        const coordinates = (feature.geometry as GeoJSON.Point)?.coordinates as
+          | [number, number]
+          | undefined;
+        if (!coordinates) return;
 
-      if (!ids.clusterDots.includes(feature.layer?.id ?? "")) {
-        optionsRef.current.onSiteClick?.(
-          properties as unknown as HistoricSiteTile,
-          coordinates,
-        );
-        return;
-      }
+        if (!ids.clusterDots.includes(feature.layer?.id ?? "")) {
+          optionsRef.current.onSiteClick?.(
+            properties as unknown as HistoricSiteTile,
+            coordinates,
+          );
+          return;
+        }
 
-      map.easeTo({
-        center: coordinates,
-        zoom: Math.min(map.getZoom() + 2, 9),
-      });
-    };
+        map.easeTo({
+          center: coordinates,
+          zoom: Math.min(map.getZoom() + 2, 9),
+        });
+      },
+    });
 
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -233,7 +234,6 @@ export function useHistoryLayers(
     map.on("idle", updateCount);
     map.on("sourcedata", onSourceData);
     map.on("render", scheduleCount);
-    map.on("click", onClick);
     map.on("mouseenter", hoverLayers, onEnter);
     map.on("mouseleave", hoverLayers, onLeave);
     map.on("style.load", onStyleLoad);
@@ -345,10 +345,10 @@ export function useHistoryLayers(
       window.clearTimeout(timeout);
       controller.abort();
       if (countTimer !== null) window.clearTimeout(countTimer);
+      unregisterTaps();
       map.off("idle", updateCount);
       map.off("sourcedata", onSourceData);
       map.off("render", scheduleCount);
-      map.off("click", onClick);
       map.off("mouseenter", hoverLayers, onEnter);
       map.off("mouseleave", hoverLayers, onLeave);
       map.off("style.load", onStyleLoad);

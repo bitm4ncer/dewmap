@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import {
   Popup,
   type Map as MLMap,
-  type MapLayerMouseEvent,
+  type MapGeoJSONFeature,
 } from "maplibre-gl";
 import {
   fetchLiveVehicles,
@@ -14,6 +14,7 @@ import {
   type LiveVehicle,
 } from "@/lib/routing";
 import { useTransit } from "@/lib/planner/transitStore";
+import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import { THEME } from "@/lib/theme";
 
 const SRC = "live-vehicles";
@@ -255,11 +256,11 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
       }, delay);
     };
 
-    const onClick = (event: MapLayerMouseEvent) => {
-      const feature = event.features?.[0];
-      if (!feature) return;
+    const openVehiclePopup = (feature: MapGeoJSONFeature) => {
       new Popup({ offset: 12, closeButton: true })
-        .setLngLat(event.lngLat)
+        .setLngLat(
+          (feature.geometry as GeoJSON.Point).coordinates as [number, number],
+        )
         .setHTML(popupHtml(feature.properties ?? {}))
         .addTo(map);
     };
@@ -269,6 +270,15 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
     const onLeave = () => {
       map.getCanvas().style.cursor = "";
     };
+    // Taps resolve through the central pipeline with pixel tolerance and
+    // instant feedback; claiming the click also stops the bare-map place
+    // card from opening on top of the vehicle popup.
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "live-vehicles",
+      layers: [DOTS, HALO],
+      tolerancePx: 18,
+      onFeature: openVehiclePopup,
+    });
     let started = false;
     const start = () => {
       if (!alive || started) return;
@@ -294,18 +304,17 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
     start();
     map.on("style.load", onStyle);
     map.on("moveend", onMove);
-    map.on("click", DOTS, onClick);
     map.on("mouseenter", DOTS, onEnter);
     map.on("mouseleave", DOTS, onLeave);
 
     return () => {
       alive = false;
+      unregisterTaps();
       controller?.abort();
       if (timer) window.clearTimeout(timer);
       if (moveTimer) window.clearTimeout(moveTimer);
       map.off("style.load", onStyle);
       map.off("moveend", onMove);
-      map.off("click", DOTS, onClick);
       map.off("mouseenter", DOTS, onEnter);
       map.off("mouseleave", DOTS, onLeave);
       removeAll(map);

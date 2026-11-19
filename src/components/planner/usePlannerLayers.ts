@@ -5,10 +5,11 @@ import { THEME } from "@/lib/theme";
 import {
   Popup,
   type Map as MLMap,
-  type MapLayerMouseEvent,
+  type MapGeoJSONFeature,
 } from "maplibre-gl";
 import { useCar } from "@/lib/planner/carStore";
 import { useTransit } from "@/lib/planner/transitStore";
+import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import {
   lineColor,
   lineLabel,
@@ -34,6 +35,7 @@ const LABELS = "planner-route-labels";
 const LABELS_SRC = "planner-route-labels-src";
 const STOPS = "planner-stops";
 const STOP_DOTS = "planner-stop-dots";
+const STOP_HIT = "planner-stop-hit";
 const STOP_LABELS = "planner-stop-labels";
 
 const ACCENT = THEME.accent;
@@ -299,6 +301,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
         STOP_LABELS,
         LINE_LABELS,
         STOP_DOTS,
+        STOP_HIT,
         WALK,
         LABELS,
         ALT_HIT,
@@ -359,7 +362,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
             "line-color": THEME.casing,
-            "line-width": 18,
+            "line-width": 24,
             "line-opacity": 0.01,
           },
         });
@@ -410,6 +413,18 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
             "circle-color": ACCENT,
             "circle-stroke-color": THEME.casing,
             "circle-stroke-width": 2,
+          },
+        });
+        // Invisible, finger-sized tap target around each waypoint dot.
+        map.addLayer({
+          id: STOP_HIT,
+          type: "circle",
+          source: STOPS,
+          paint: {
+            "circle-radius": 16,
+            "circle-color": THEME.casing,
+            "circle-opacity": 0,
+            "circle-stroke-width": 0,
           },
         });
         return;
@@ -498,6 +513,18 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
             "circle-stroke-width": 1.5,
           },
         });
+        // Invisible, finger-sized tap target around each stop dot.
+        map.addLayer({
+          id: STOP_HIT,
+          type: "circle",
+          source: STOPS,
+          paint: {
+            "circle-radius": 15,
+            "circle-color": THEME.casing,
+            "circle-opacity": 0,
+            "circle-stroke-width": 0,
+          },
+        });
         map.addLayer({
           id: STOP_LABELS,
           type: "symbol",
@@ -539,24 +566,12 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       }
     };
 
-    const onStopClick = (event: MapLayerMouseEvent) => {
-      const feature = event.features?.[0];
-      if (!feature) return;
-      new Popup({ offset: 10, closeButton: true })
-        .setLngLat(event.lngLat)
+    const openStopPopup = (feature: MapGeoJSONFeature) => {      new Popup({ offset: 10, closeButton: true })
+        .setLngLat(
+          (feature.geometry as GeoJSON.Point).coordinates as [number, number],
+        )
         .setHTML(popupHtml(feature.properties ?? {}))
         .addTo(map);
-    };
-    const onCarAltClick = (event: MapLayerMouseEvent) => {
-      const id = event.features?.[0]?.properties?.id;
-      if (typeof id !== "string") return;
-      event.preventDefault();
-      event.originalEvent?.stopPropagation();
-      useCar.getState().selectRoute(id);
-    };
-    const onCarPrimaryClick = (event: MapLayerMouseEvent) => {
-      event.preventDefault();
-      event.originalEvent?.stopPropagation();
     };
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -576,21 +591,47 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
     if (map.isStyleLoaded()) safeApply();
     else map.once("load", safeApply);
     map.on("style.load", safeApply);
-    map.on("click", STOP_DOTS, onStopClick);
+
+    // Taps resolve through the central pipeline with pixel tolerance:
+    // stops get an invisible hit disc plus extra padding, alt routes a
+    // wider hit line. Feedback (haptic + ripple) fires before the popup
+    // or route switch happens.
+    const unregisterStops = registerFeatureTaps(map, {
+      id: "planner-stops",
+      layers: [STOP_HIT, STOP_DOTS],
+      tolerancePx: 18,
+      onFeature: openStopPopup,
+    });
+    const unregisterAlt = registerFeatureTaps(map, {
+      id: "planner-alt-routes",
+      layers: [ALT_HIT],
+      tolerancePx: 10,
+      onFeature: (feature) => {
+        const id = feature.properties?.id;
+        if (typeof id !== "string") return;
+        useCar.getState().selectRoute(id);
+      },
+    });
+    // Claiming taps on the selected line keeps them from falling through
+    // to the bare-map place card.
+    const unregisterPrimary = registerFeatureTaps(map, {
+      id: "planner-selected-route",
+      layers: [LINE],
+      hapticKind: "tap",
+      onFeature: () => {},
+    });
     map.on("mouseenter", STOP_DOTS, onEnter);
     map.on("mouseleave", STOP_DOTS, onLeave);
-    map.on("click", ALT_HIT, onCarAltClick);
-    map.on("click", LINE, onCarPrimaryClick);
     map.on("mouseenter", ALT_HIT, onEnter);
     map.on("mouseleave", ALT_HIT, onLeave);
     return () => {
+      unregisterStops();
+      unregisterAlt();
+      unregisterPrimary();
       map.off("load", safeApply);
       map.off("style.load", safeApply);
-      map.off("click", STOP_DOTS, onStopClick);
       map.off("mouseenter", STOP_DOTS, onEnter);
       map.off("mouseleave", STOP_DOTS, onLeave);
-      map.off("click", ALT_HIT, onCarAltClick);
-      map.off("click", LINE, onCarPrimaryClick);
       map.off("mouseenter", ALT_HIT, onEnter);
       map.off("mouseleave", ALT_HIT, onLeave);
     };

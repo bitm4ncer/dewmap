@@ -18,29 +18,33 @@ describe("sheet gesture", () => {
   });
 
   it("only allows directions that change the sheet state", () => {
+    expect(canDrag("peek", "up")).toBe(true);
+    expect(canDrag("peek", "down")).toBe(false);
     expect(canDrag("half", "up")).toBe(true);
-    expect(canDrag("half", "down")).toBe(false);
+    expect(canDrag("half", "down")).toBe(true);
     expect(canDrag("full", "up")).toBe(false);
     expect(canDrag("full", "down")).toBe(true);
   });
 
   it("snaps in the drag direction or by projection", () => {
-    const snap = { half: 405, full: 844 };
+    const snap = { peek: 88, half: 405, full: 844 };
     expect(pickSnap("half", 665, 500, snap)).toBe("full");
     expect(pickSnap("full", 624, -500, snap)).toBe("half");
     expect(pickSnap("half", 405, 900, snap)).toBe("full"); // flick wins
-    expect(pickSnap("half", 300, -900, snap)).toBe("half"); // no lower state
-    expect(pickSnap("half", 300, 0, snap)).toBe("half"); // short drag returns
+    expect(pickSnap("half", 200, 900, snap)).toBe("full"); // flick wins
+    expect(pickSnap("peek", 70, 0, snap)).toBe("peek"); // short drag returns
+    expect(pickSnap("peek", 300, -900, snap)).toBe("peek"); // no lower state
+    expect(pickSnap("half", 200, 0, snap)).toBe("peek"); // projected to peek
     expect(pickSnap("full", 700, 0, snap)).toBe("full");
-    expect(pickSnap("full", 500, 0, snap)).toBe("half"); // projected below mid
   });
 
   it("only stretches at the outer edges", () => {
-    expect(canOverscroll("half", "down")).toBe(true);
-    expect(canOverscroll("half", "up")).toBe(false);
+    expect(canOverscroll("peek", "down")).toBe(true);
+    expect(canOverscroll("peek", "up")).toBe(false);
     expect(canOverscroll("full", "up")).toBe(true);
     expect(canOverscroll("full", "down")).toBe(false);
-    expect(canStartDrag("half", "down", false)).toBe(true);
+    expect(canOverscroll("half", "down")).toBe(false);
+    expect(canStartDrag("peek", "down", false)).toBe(true);
   });
 
   it("applies bounded rubber-band resistance", () => {
@@ -64,13 +68,14 @@ describe("sheet gesture", () => {
     expect(canStartDrag("full", "down", true)).toBe(false);
     expect(canStartDrag("full", "up", false)).toBe(true);
     expect(canStartDrag("half", "up", false)).toBe(true);
-    expect(canStartDrag("half", "down", false)).toBe(true);
+    expect(canStartDrag("peek", "down", false)).toBe(true);
   });
 
-  it("keeps the two detents tied to the viewport height", () => {
-    const m = sheetMetrics(844);
+  it("keeps the three detents tied to the viewport height", () => {
+    const m = sheetMetrics(844, 0);
     expect(m.full).toBe(844);
     expect(m.half).toBe(405);
-    expect(sheetMetrics(700).half).toBe(336);
+    expect(m.peek).toBe(88);
+    expect(sheetMetrics(700, 34).peek).toBe(122);
   });
 });

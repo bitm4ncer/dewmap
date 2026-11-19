@@ -14,9 +14,9 @@ import {
 
 export { rubberband } from "../../lib/motion";
 
-export type SheetState = "half" | "full";
+export type SheetState = "peek" | "half" | "full";
 
-const ORDER: SheetState[] = ["half", "full"];
+const ORDER: SheetState[] = ["peek", "half", "full"];
 
 const GESTURE_AXIS_PX = 10;
 const TAP_DISTANCE_PX = 6;
@@ -47,7 +47,7 @@ export function gestureDirection(dx: number, dy: number): "up" | "down" | "none"
 /** Directions that can actually move the sheet from its current snap point. */
 export function canDrag(state: SheetState, direction: "up" | "down" | "none"): boolean {
   if (direction === "up") return state !== "full";
-  if (direction === "down") return state !== "half";
+  if (direction === "down") return state !== "peek";
   return false;
 }
 
@@ -57,7 +57,7 @@ export function canOverscroll(
   direction: "up" | "down" | "none",
 ): boolean {
   return (
-    (state === "half" && direction === "down")
+    (state === "peek" && direction === "down")
     || (state === "full" && direction === "up")
   );
 }
@@ -67,7 +67,7 @@ export function pickSnap(
   state: SheetState,
   height: number,
   velocity: number,
-  snap: { half: number; full: number },
+  snap: { peek: number; half: number; full: number },
 ): SheetState {
   return chooseDetent(
     state,
@@ -101,20 +101,24 @@ interface Options {
 
 /** Viewport metrics for one gesture. Measured once, reused every frame. */
 export interface SheetMetrics {
+  peek: number;
   half: number;
   full: number;
   vh: number;
 }
 
 /**
- * Detents must match the CSS snap heights exactly. The panel has two
- * positions — half (48dvh) and full (100dvh). In particular the full sheet
- * is 100dvh, not viewport-minus-topbar: the top bar is hidden while the
- * sheet is full, and a mismatch would cause a visible jump when the inline
- * height is removed at the end of the spring.
+ * Detents must match the CSS snap heights exactly. The panel has three
+ * positions — peek (the collapsed tab row), half (48dvh) and full
+ * (100dvh). In particular the full sheet is 100dvh, not
+ * viewport-minus-topbar: the top bar is hidden while the sheet is full,
+ * and a mismatch would cause a visible jump when the inline height is
+ * removed at the end of the spring.
  */
-export function sheetMetrics(vh: number): SheetMetrics {
+export function sheetMetrics(vh: number, safeBottom: number): SheetMetrics {
+  const peek = 88 + safeBottom;
   return {
+    peek,
     half: Math.round(vh * 0.48),
     full: vh,
     vh,
@@ -162,12 +166,16 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
 
   const heights = useCallback((): SheetMetrics => {
     const vh = window.visualViewport?.height ?? window.innerHeight;
-    return sheetMetrics(vh);
+    return sheetMetrics(vh, safeBottomRef.current);
   }, []);
 
   const heightFor = useCallback(
     (s: SheetState, m: SheetMetrics = heights()) => {
-      return s === "half" ? m.half : m.full;
+      return s === "peek"
+        ? m.peek
+        : s === "half"
+          ? m.half
+          : m.full;
     },
     [heights],
   );
@@ -197,7 +205,10 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
         from,
         to,
         velocity: clampVelocity(velocity),
-        config: SPRING.sheetSnap,
+        config:
+          target === "peek" || target === "half"
+            ? SPRING.sheetPeek
+            : SPRING.sheetSnap,
         onUpdate: (value) => {
           el.style.height = `${value}px`;
         },
@@ -221,7 +232,11 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
 
   const nearest = useCallback(
     (m: SheetMetrics, height: number, velocity: number) =>
-      pickSnap(state, height, velocity, { half: m.half, full: m.full }),
+      pickSnap(state, height, velocity, {
+        peek: m.peek,
+        half: m.half,
+        full: m.full,
+      }),
     [state],
   );
 
@@ -282,7 +297,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
         frameRef.current = null;
       }
       const raw = drag.startHeight + (drag.startY - e.clientY);
-      const height = rubberband(raw, m.half, m.full, m.vh);
+      const height = rubberband(raw, m.peek, m.full, m.vh);
       const velocityY = trackerRef.current.velocity(e.timeStamp);
       const heightVelocity = -velocityY;
       const moved = Math.abs(e.clientY - drag.startY);
@@ -290,7 +305,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
 
       if (moved < TAP_DISTANCE_PX && Math.abs(velocityY) < TAP_VELOCITY) {
         haptic("tap");
-        animateTo(state === "half" ? "full" : "half", 0);
+        animateTo(state === "peek" ? "half" : "peek", 0);
         return;
       }
 
@@ -328,7 +343,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
         snapTo(ORDER[Math.max(0, Math.min(ORDER.length - 1, next))]);
       } else if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        snapTo(state === "half" ? "full" : "half");
+        snapTo(state === "peek" ? "half" : "peek");
       }
     },
     [enabled, snapTo, state],
@@ -401,7 +416,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
       frameRef.current = requestAnimationFrame(() => {
         const raw = activeTouch.startHeight + (activeTouch.startY - t.clientY);
-        const next = rubberband(raw, m.half, m.full, m.vh);
+        const next = rubberband(raw, m.peek, m.full, m.vh);
         el.style.height = `${next}px`;
       });
     };
@@ -411,7 +426,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       if (!touch.started) {
         if (touch.onGrabber) {
           haptic("tap");
-          animateTo(state === "half" ? "full" : "half", 0);
+          animateTo(state === "peek" ? "half" : "peek", 0);
         }
         touch = null;
         return;
