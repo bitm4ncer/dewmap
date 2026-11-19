@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-19 — Sticky travel-mode bar
+
+- The Transit/Walk/Bike/Car bar pins to the top of the panel while the
+  panel body scrolls. Once scrolled down it compacts to roughly half its
+  height (smaller padding, chips, icons and labels) and grows back at
+  the top — all as a CSS transition.
+- The scroll state is written as a `data-scrolled` attribute on the
+  panel body from a rAF-throttled passive scroll listener; no React
+  render runs while scrolling.
+
 ## 2026-11-19 — Card slide gestures
 
 - The place detail card now takes slide gestures across its whole

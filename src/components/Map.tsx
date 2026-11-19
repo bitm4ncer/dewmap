@@ -1869,6 +1869,32 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     enabled: isMobile,
   });
 
+  // Panel scroll state for the sticky travel-mode bar. Written as an
+  // attribute on the scroll container itself — a scrolling panel must not
+  // re-render the map, same rule as the sheet gestures.
+  const panelBodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = panelBodyRef.current;
+    if (!el) return;
+    let raf: number | null = null;
+    const update = () => {
+      raf = null;
+      const scrolled = el.scrollTop > 8 ? "true" : "false";
+      if (el.getAttribute("data-scrolled") !== scrolled) {
+        el.setAttribute("data-scrolled", scrolled);
+      }
+    };
+    const onScroll = () => {
+      if (raf == null) raf = requestAnimationFrame(update);
+    };
+    update();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (raf != null) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   // A/B markers for points chosen with the "Map" button.
   useEffect(() => {
     const map = mapInstance;
@@ -1980,8 +2006,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const toggleFull = () => {
     haptic("tap");
     snapTo(sheetState === "full" ? "half" : "full");
-  };
-  const collapseToPeek = useCallback(() => {
+  };  const collapseToPeek = useCallback(() => {
     haptic("tap");
     snapTo("peek");
   }, [snapTo]);
@@ -4003,7 +4028,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             </nav>
           </div>
 
-          <div className="hud-scrollbar ui-panel-body">
+          <div ref={panelBodyRef} className="hud-scrollbar ui-panel-body">
             {activePane === "hiking" ? (
               <RoutesPanel
                 mapRef={mapRef}

@@ -108,22 +108,24 @@ export function RoutesPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="ui-segmented" role="group" aria-label="Travel mode">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className="ui-seg"
-            data-active={mode === m.id}
-            aria-pressed={mode === m.id}
-            onClick={() => choose(m.id)}
-          >
-            <span className="inline-flex items-center gap-2">
-              {m.icon}
-              {m.label}
-            </span>
-          </button>
-        ))}
+      <div className="routes-mode-sticky">
+        <div className="ui-segmented" role="group" aria-label="Travel mode">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className="ui-seg"
+              data-active={mode === m.id}
+              aria-pressed={mode === m.id}
+              onClick={() => choose(m.id)}
+            >
+              <span className="inline-flex items-center gap-2">
+                {m.icon}
+                {m.label}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {mode === "car" ? (

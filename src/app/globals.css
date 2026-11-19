@@ -1551,6 +1551,46 @@ input[type="range"].hud-slider::-moz-range-thumb {
   border-radius: 14px;
   background: var(--surf-2);
 }
+
+/* Sticky travel-mode bar (Routes panel). Pins under the sheet edge while
+   the panel body scrolls; once scrolled it compacts to roughly half its
+   height. The scroll state lives on .ui-panel-body[data-scrolled] — set
+   directly from a scroll listener, no React render involved. */
+.routes-mode-sticky {
+  --routes-strip-pt: var(--sp-3);
+  --routes-strip-pb: var(--sp-2);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-4)) 0;
+  padding: var(--routes-strip-pt) var(--sp-4) var(--routes-strip-pb);
+  background: var(--surf-0);
+  transition: padding-top var(--dur-base) var(--ease), padding-bottom var(--dur-base) var(--ease);
+}
+.routes-mode-sticky .ui-segmented { width: 100%; transition: padding var(--dur-base) var(--ease); }
+.routes-mode-sticky .ui-seg {
+  min-height: 36px;
+  font-size: 12px;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    filter var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease),
+    transform var(--dur-press) var(--ease),
+    min-height var(--dur-base) var(--ease), font-size var(--dur-base) var(--ease);
+}
+.routes-mode-sticky .ui-seg svg {
+  width: 16px;
+  height: 16px;
+  transition: width var(--dur-base) var(--ease), height var(--dur-base) var(--ease);
+}
+
+.ui-panel-body[data-scrolled="true"] .routes-mode-sticky {
+  --routes-strip-pt: var(--sp-1);
+  --routes-strip-pb: var(--sp-1);
+}
+.ui-panel-body[data-scrolled="true"] .routes-mode-sticky .ui-segmented { padding: 2px; }
+.ui-panel-body[data-scrolled="true"] .routes-mode-sticky .ui-seg { min-height: 18px; font-size: 11px; }
+.ui-panel-body[data-scrolled="true"] .routes-mode-sticky .ui-seg svg { width: 12px; height: 12px; }
+
 .ui-seg {
   flex: 1;
   min-width: 0;
