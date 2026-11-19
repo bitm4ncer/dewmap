@@ -265,6 +265,12 @@ describe("sheet chrome and compact date field", () => {
     );
   });
 
+  it("marks heading-up on the compass control", () => {
+    expect(
+      block(".maplibregl-ctrl-orientation.orientation-heading")?.body,
+    ).toContain("var(--accent)");
+  });
+
   it("starts map attribution collapsed and narrow on phones", () => {
     expect(
       blocks.some(

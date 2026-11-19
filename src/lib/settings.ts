@@ -13,7 +13,7 @@ import { migrateLegacyStorage } from "./legacyStorage";
 export type Projection = "mercator" | "globe";
 export type RailStyle = "tiles" | "lines";
 export type BasemapMode = "photo" | "hybrid" | "vector";
-export type OrientationMode = "north" | "route" | "heading";
+export type OrientationMode = "north" | "heading";
 
 const clamp01 = (n: number) =>
   Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
@@ -31,8 +31,7 @@ export interface Settings {
   liveBasemapDayOffset: number;
   projection: Projection;
   /**
-   * Map rotation reference. north = bearing pinned to 0; route = align
-   * to the active hike's segment under the user's GPS; heading =
+   * Map rotation reference. north = bearing pinned to 0; heading =
    * align to the device compass heading.
    */
   orientationMode: OrientationMode;
@@ -202,7 +201,7 @@ export const useSettings = create<Settings>()(
     }),
     {
       name: "kugelmaps:settings",
-      version: 25,
+      version: 26,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         imageBasemapId: state.imageBasemapId,
@@ -248,6 +247,15 @@ export const useSettings = create<Settings>()(
         // v21 → v22: raster cartography moved out of the vector slot.
         // A drawn map that was active in vector mode becomes an image
         // basemap; a passive vector slot is reset to the dark style.
+        // v25 → v26: drop the unused route-up mode.
+        if (version < 26) {
+          if (
+            p.orientationMode !== "north" &&
+            p.orientationMode !== "heading"
+          ) {
+            p.orientationMode = "north";
+          }
+        }
         if (version < 22) {
           const vector =
             typeof p.vectorBasemapId === "string"
@@ -358,7 +366,6 @@ export const useSettings = create<Settings>()(
         if (version < 12) {
           if (
             p.orientationMode !== "north" &&
-            p.orientationMode !== "route" &&
             p.orientationMode !== "heading"
           ) {
             p.orientationMode = "north";

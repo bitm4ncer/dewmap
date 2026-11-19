@@ -26,6 +26,11 @@ describe("shell", () => {
     expect(map).toContain('useState<SidebarPane>("hiking")');
   });
 
+  it("puts orientation on a map compass instead of the panel", () => {
+    expect(map).toContain("new OrientationControl");
+    expect(map).not.toContain("Map orientation");
+  });
+
   it("orders the pane tabs History, Nature, Map, Routes", () => {
     const start = map.indexOf("const SIDEBAR_PANES");
     const block = map.slice(start, map.indexOf("\n];", start) + 3);
