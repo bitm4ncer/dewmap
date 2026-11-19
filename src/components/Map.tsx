@@ -1890,7 +1890,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const vh = window.visualViewport?.height ?? window.innerHeight;
     const m = sheetMetrics(vh, measureSafeBottom());
     const target = sheetState === "peek" ? m.peek : m.half;
-    const from = map.getPadding().bottom;
+    const from = map.getPadding().bottom ?? 0;
     if (Math.abs(target - from) < 0.5) return;
     const spring = createSpring({
       from,
