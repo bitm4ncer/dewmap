@@ -85,20 +85,15 @@ const SPACE = [
   "park",
   "garden",
   "dog_park",
-  "playground",
+  // "playground" is deliberately excluded: almost every residential
+  // courtyard has one, which littered normal apartment blocks with tree
+  // icons and (with the generous tap tolerance) stole taps meant for
+  // nearby places. They are not navigation destinations.
   "community",
   "library",
   "coworking",
   "town_hall",
 ];
-const POI_CLASSES = [
-  ...FOOD,
-  ...SHOP,
-  ...CULTURE,
-  ...SPORT,
-  ...SPACE,
-];
-
 type PoiKind = "food" | "shop" | "culture" | "sport" | "space" | "default";
 
 const ICONS: Record<PoiKind, { id: string; color: string }> = {
@@ -223,10 +218,34 @@ function ensureIcons(map: MLMap) {
   }
 }
 
+/**
+ * Unnamed green space (courtyard gardens, mini parks, unnamed woods) is
+ * already conveyed by the basemap's green polygons; dots for it turned
+ * every residential block into confetti. Named green places stay, and
+ * building-like space POIs (library, town hall, community centre) show
+ * regardless of name.
+ */
+const NAMED_ONLY = ["park", "garden", "dog_park"];
+const SPACE_FREE = SPACE.filter((c) => !NAMED_ONLY.includes(c));
+
 const categoryFilter = [
   "any",
-  ["in", ["get", "class"], ["literal", POI_CLASSES]],
-  ["in", ["get", "subclass"], ["literal", POI_CLASSES]],
+  ["in", ["get", "class"], ["literal", [...FOOD, ...SHOP, ...CULTURE, ...SPORT]]],
+  ["in", ["get", "subclass"], ["literal", [...FOOD, ...SHOP, ...CULTURE, ...SPORT]]],
+  ["in", ["get", "class"], ["literal", SPACE_FREE]],
+  ["in", ["get", "subclass"], ["literal", SPACE_FREE]],
+  [
+    "all",
+    ["in", ["get", "class"], ["literal", NAMED_ONLY]],
+    ["has", "name"],
+    ["!=", ["get", "name"], ""],
+  ],
+  [
+    "all",
+    ["in", ["get", "subclass"], ["literal", NAMED_ONLY]],
+    ["has", "name"],
+    ["!=", ["get", "name"], ""],
+  ],
 ] as FilterSpecification;
 
 const iconExpression = [

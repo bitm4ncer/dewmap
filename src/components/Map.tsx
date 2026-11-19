@@ -4416,10 +4416,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           const pos = navigation.position;
           if (map && pos) {
             map.easeTo({
-            center: [pos.lon, pos.lat],
-            zoom: 16,
-            duration: prefersReducedMotion() ? 0 : 450,
-          });
+              center: [pos.lon, pos.lat],
+              // Keep the user's pinch level — never auto-zoom.
+              duration: prefersReducedMotion() ? 0 : 450,
+            });
           }
         }}
       />

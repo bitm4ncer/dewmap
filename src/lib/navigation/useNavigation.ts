@@ -5,10 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import { useNavigation } from "./store";
 import {
+  cameraBearing,
   computeRouteProgress,
   isOffRoute,
   previewSpeedMps,
   sampleRouteAtDistance,
+  smoothedBearing,
   type RouteProgress,
 } from "./progress";
 
@@ -29,6 +31,7 @@ export function useNavigationEngine({ mapRef }: Options) {
   const plan = useNavigation((s) => s.plan);
   const muted = useNavigation((s) => s.muted);
   const follow = useNavigation((s) => s.follow);
+  const freeCamera = useNavigation((s) => s.freeCamera);
   const simulate = useNavigation((s) => s.simulate);
   const guidance = useNavigation((s) => s.guidance);
   const [position, setPosition] = useState<LivePosition | null>(null);
@@ -37,6 +40,7 @@ export function useNavigationEngine({ mapRef }: Options) {
   const offSinceRef = useRef<number | null>(null);
   const lastSpokenRef = useRef<number | null>(null);
   const lastFollowRef = useRef<number>(0);
+  const smoothedBearingRef = useRef<number>(0);
   const lastTransitAlertRef = useRef<string | null>(null);
 
   const progress: RouteProgress | null = useMemo(() => {
@@ -52,6 +56,7 @@ export function useNavigationEngine({ mapRef }: Options) {
     offSinceRef.current = null;
     lastSpokenRef.current = null;
     lastFollowRef.current = 0;
+    smoothedBearingRef.current = 0;
     lastTransitAlertRef.current = null;
   }, [plan?.id, active]);
 
@@ -172,32 +177,60 @@ export function useNavigationEngine({ mapRef }: Options) {
     };
   }, []);
 
-  // Camera follow. Throttle to at most once per second and only when the
-  // position moved meaningfully.
+  // Camera follow. Throttled, only while follow mode is engaged — a user
+  // pan sets `freeCamera`, and the locate button re-engages. The map
+  // never auto-zooms: the user's pinch level is kept. Bearing comes from
+  // a smoothed course (GPS heading above the noise floor, route segment
+  // bearing otherwise) so course-up mode does not spin hectically.
   useEffect(() => {
     const map = mapRef.current;
     if (!active || !plan || !map || !position) return;
+    if (useNavigation.getState().freeCamera) return;
     const now = Date.now();
     if (now - lastFollowRef.current < 900) return;
     if (map.isMoving() && follow === "north") return;
     lastFollowRef.current = now;
-    const bearing =
-      follow === "course" ? (position.heading ?? map.getBearing()) : 0;
+
+    let bearing = 0;
+    if (follow === "course") {
+      const target = cameraBearing(progress, position.heading, position.speedMps);
+      bearing = smoothedBearing(smoothedBearingRef.current, target);
+      smoothedBearingRef.current = bearing;
+    }
+
+    const zoom =
+      plan.mode === "transit"
+        ? Math.max(12, Math.min(15, map.getZoom()))
+        : map.getZoom();
     try {
       map.easeTo({
         center: [position.lon, position.lat],
         bearing,
-        zoom:
-          plan.mode === "transit"
-            ? Math.max(12, Math.min(15, map.getZoom()))
-            : Math.max(15, map.getZoom()),
+        zoom,
         duration: 700,
         pitch: 0,
       });
     } catch {
       /* style not loaded */
     }
-  }, [active, mapRef, position, follow, plan]);
+  }, [active, mapRef, position, follow, freeCamera, progress, plan]);
+
+  // A deliberate drag detaches the camera from the marker. Pinch-zoom
+  // and rotate stay in follow mode (Google-Maps behaviour) — only an
+  // actual pan means "I want to look somewhere else".
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!active || !map) return;
+    const onDragStart = () => {
+      if (!useNavigation.getState().freeCamera) {
+        useNavigation.getState().setFreeCamera(true);
+      }
+    };
+    map.on("dragstart", onDragStart);
+    return () => {
+      map.off("dragstart", onDragStart);
+    };
+  }, [active, mapRef]);
 
   // Transit exit alert: vibrate and speak shortly before the alighting stop.
   useEffect(() => {

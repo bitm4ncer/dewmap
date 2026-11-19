@@ -1,9 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import { HudPanel } from "@/components/hud/HudPanel";
 import { useCar, CAR_PROFILES, type CarProfile } from "@/lib/planner/carStore";
+import {
+  savedPlaceKey,
+  useSavedPlaces,
+} from "@/lib/planner/savedPlaces";
 import { PlacePicker, type PickedPlace } from "./PlacePicker";
 import { planRoutes, formatDuration, formatDistance, isAbortError } from "@/lib/routing";
 import type { RoutePlan } from "@/lib/routing";
@@ -19,6 +23,15 @@ export function CarPanel({ mapRef }: Props) {
   const waypoints = useCar((s) => s.waypoints);
   const profile = useCar((s) => s.profile);
   const routes = useCar((s) => s.routes);
+  const savedHome = useSavedPlaces((s) => s.home);
+  const savedWork = useSavedPlaces((s) => s.work);
+  const savedList = useSavedPlaces((s) => s.saved);
+  const setHome = useSavedPlaces((s) => s.setHome);
+  const setWork = useSavedPlaces((s) => s.setWork);
+  const toggleSaved = useSavedPlaces((s) => s.toggleSaved);
+  const isSaved = (place: PickedPlace) =>
+    savedList.some((p) => savedPlaceKey(p) === savedPlaceKey(place));
+  const [pickAssign, setPickAssign] = useState<"home" | "work" | null>(null);
   const selectedId = useCar((s) => s.selectedId);
   const phase = useCar((s) => s.phase);
   const notice = useCar((s) => s.notice);
@@ -243,6 +256,15 @@ export function CarPanel({ mapRef }: Props) {
               placeholder="Add stop or address"
               kind="address"
               onPick={addPlace}
+              home={savedHome}
+              work={savedWork}
+              savedPlaces={savedList}
+              onAssignHome={setHome}
+              onAssignWork={setWork}
+              onToggleSaved={toggleSaved}
+              isSavedPlace={isSaved}
+              assigning={pickAssign}
+              onAssigningChange={setPickAssign}
               getNearby={() => {
                 const m = mapRef.current;
                 if (!m) return undefined;

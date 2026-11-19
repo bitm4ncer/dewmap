@@ -8,10 +8,15 @@ import {
   useTransit,
   type TransitPlace,
 } from "@/lib/planner/transitStore";
+import {
+  savedPlaceKey,
+  useSavedPlaces,
+} from "@/lib/planner/savedPlaces";
 import { PlacePicker, type PickedPlace } from "./PlacePicker";
 import { JourneyCard } from "./JourneyCard";
 import { JourneyDetail } from "./JourneyDetail";
 import { useNavigation } from "@/lib/navigation/store";
+import { haptic } from "@/lib/haptics";
 import { ChevronDownIcon, SwapIcon } from "@/components/ui/icons";
 import { formatDuration, planRoutes, isAbortError } from "@/lib/routing";
 import {
@@ -100,6 +105,14 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const searchToken = useTransit((s) => s.searchToken);
   const favorites = useTransit((s) => s.favorites);
   const recents = useTransit((s) => s.recents);
+  const savedHome = useSavedPlaces((s) => s.home);
+  const savedWork = useSavedPlaces((s) => s.work);
+  const savedList = useSavedPlaces((s) => s.saved);
+  const setHome = useSavedPlaces((s) => s.setHome);
+  const setWork = useSavedPlaces((s) => s.setWork);
+  const toggleSaved = useSavedPlaces((s) => s.toggleSaved);
+  const isSaved = (place: PickedPlace) =>
+    savedList.some((p) => savedPlaceKey(p) === savedPlaceKey(place));
 
   const setFrom = useTransit((s) => s.setFrom);
   const setTo = useTransit((s) => s.setTo);
@@ -136,6 +149,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
   const [viaOpen, setViaOpen] = useState(false);
   const [mapPick, setMapPick] = useState<"from" | "to" | null>(null);
+  /** Home/work assign-mode, also consumed by map-picked places. */
+  const [pickAssign, setPickAssign] = useState<"home" | "work" | null>(null);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
   const [swapTick, setSwapTick] = useState(0);
@@ -452,6 +467,15 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         lon: event.lngLat.lng,
         kind: "address",
       };
+      // Assign-mode (home/work) takes the pick instead of the field.
+      if (pickAssign) {
+        if (pickAssign === "home") setHome(place);
+        else setWork(place);
+        haptic("snap");
+        setPickAssign(null);
+        setMapPick(null);
+        return;
+      }
       if (mapPick === "from") setFrom(place);
       else setTo(place);
       rememberPlace(place);
@@ -467,7 +491,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
       window.removeEventListener("keydown", cancel);
       canvas.style.cursor = previous;
     };
-  }, [mapPick, mapRef, rememberPlace, setFrom, setTo]);
+  }, [mapPick, mapRef, rememberPlace, setFrom, setTo, pickAssign, setHome, setWork]);
 
   function share() {
     if (typeof window === "undefined") return;
@@ -569,6 +593,15 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                 quickPlaces={quickPlaces}
                 favorite={fromFavorite}
                 onToggleFavorite={from ? () => toggleFavorite(from) : undefined}
+                home={savedHome}
+                work={savedWork}
+                savedPlaces={savedList}
+                onAssignHome={setHome}
+                onAssignWork={setWork}
+                onToggleSaved={toggleSaved}
+                isSavedPlace={isSaved}
+                assigning={pickAssign}
+                onAssigningChange={setPickAssign}
                 onPickOnMap={() => setMapPick("from")}
                 onPick={(p) => pick("from", p)}
                 onClear={() => setFrom(null)}
@@ -590,6 +623,15 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                 quickPlaces={quickPlaces}
                 favorite={toFavorite}
                 onToggleFavorite={to ? () => toggleFavorite(to) : undefined}
+                home={savedHome}
+                work={savedWork}
+                savedPlaces={savedList}
+                onAssignHome={setHome}
+                onAssignWork={setWork}
+                onToggleSaved={toggleSaved}
+                isSavedPlace={isSaved}
+                assigning={pickAssign}
+                onAssigningChange={setPickAssign}
                 onPickOnMap={() => setMapPick("to")}
                 onPick={(p) => pick("to", p)}
                 onClear={() => setTo(null)}
@@ -605,7 +647,9 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           {mapPick && (
             <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--accent-soft)] px-2 py-2 text-[11.5px]">
               <span>
-                Click the map to set {mapPick === "from" ? "A" : "B"}.
+                {pickAssign
+                  ? `Click the map to save as ${pickAssign}.`
+                  : `Click the map to set ${mapPick === "from" ? "A" : "B"}.`}
               </span>
               <button
                 type="button"

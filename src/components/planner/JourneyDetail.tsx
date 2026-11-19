@@ -327,6 +327,11 @@ export function JourneyDetail({
             </div>
             {i < transit.legs.length - 1 && (() => {
               const next = transit.legs[i + 1];
+              // A transfer only exists between two ride legs. The gap
+              // after a walk (e.g. the approach to the first stop) is
+              // not a transfer — showing "Transfer · 0 min" there was
+              // pure noise.
+              if (leg.mode !== "transit" || next.mode !== "transit") return null;
               const gap = transferMinutes(leg, next);
               if (gap == null) return null;
               const severity = transferSeverity(gap);

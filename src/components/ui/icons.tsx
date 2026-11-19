@@ -36,8 +36,26 @@ export function SpeakerIcon({ muted = false, size = 18, className }: IconProps &
   );
 }
 
-export function RecenterIcon({ size = 18, className }: IconProps) {
+export function HomeIcon({ size = 18, className }: IconProps) {
   return (
+    <svg {...base(size, className)}>
+      <path d="M4 11.5 12 4l8 7.5" />
+      <path d="M6 10v10h4.5v-5h3v5H18V10" />
+    </svg>
+  );
+}
+
+export function WorkIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="3" y="7.5" width="18" height="12.5" rx="2" />
+      <path d="M9 7.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5" />
+      <path d="M3 12.5h18" />
+    </svg>
+  );
+}
+
+export function RecenterIcon({ size = 18, className }: IconProps) {  return (
     <svg {...base(size, className)}>
       <circle cx="12" cy="12" r="3.2" />
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
@@ -152,24 +170,60 @@ export function ManeuverIcon({
   if (modifier === "uturn") {
     return (
       <svg {...base(size, className)}>
-        <path d="M7 4v9a4 4 0 0 0 8 0V9" />
-        <path d="M7 4 3 8M7 4l4 4" />
+        {/* Up, arc over to the right, back down — head sits at the path
+         * end pointing in the new direction of travel. */}
+        <path d="M7 20V9a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v6" />
+        <path d="M13.5 11.5l3.5 3.5-3.5 3.5" />
       </svg>
     );
   }
-  if (modifier === "left" || modifier === "slight-left" || modifier === "sharp-left") {
+  if (modifier === "sharp-left") {
     return (
       <svg {...base(size, className)}>
-        <path d="M18 20V9a5 5 0 0 0-5-5H6" />
-        <path d="M6 4 2 8M6 4l4 4" />
+        <path d="M18 20V7a2.5 2.5 0 0 0-2.5-2.5H8" />
+        <path d="M11 1.5 7.5 4.5l3.5 3" />
       </svg>
     );
   }
-  if (modifier === "right" || modifier === "slight-right" || modifier === "sharp-right") {
+  if (modifier === "sharp-right") {
     return (
       <svg {...base(size, className)}>
-        <path d="M6 20V9a5 5 0 0 1 5-5h7" />
-        <path d="M18 4l4 4M18 4l-4 4" />
+        <path d="M6 20V7a2.5 2.5 0 0 1 2.5-2.5H16" />
+        <path d="M13 1.5l3.5 3-3.5 3" />
+      </svg>
+    );
+  }
+  if (modifier === "left" || modifier === "slight-left") {
+    return (
+      <svg {...base(size, className)}>
+        {modifier === "left" ? (
+          <path d="M18 20V9a5 5 0 0 0-5-5H7" />
+        ) : (
+          <path d="M16 20v-6c0-3.5-2.5-6-6-6H7.5" />
+        )}
+        {/* Chevron points LEFT, at the end of the stem. */}
+        {modifier === "left" ? (
+          <path d="M10 1 7 4l3 3" />
+        ) : (
+          <path d="M11 4.5 7.5 8l3 3" />
+        )}
+      </svg>
+    );
+  }
+  if (modifier === "right" || modifier === "slight-right") {
+    return (
+      <svg {...base(size, className)}>
+        {modifier === "right" ? (
+          <path d="M6 20V9a5 5 0 0 1 5-5h6" />
+        ) : (
+          <path d="M8 20v-6c0-3.5 2.5-6 6-6h2.5" />
+        )}
+        {/* Chevron points RIGHT, at the end of the stem. */}
+        {modifier === "right" ? (
+          <path d="M14 1l3 3-3 3" />
+        ) : (
+          <path d="M13 4.5l3.5 3.5-3.5 3.5" />
+        )}
       </svg>
     );
   }

@@ -4,13 +4,17 @@ import { useEffect, useId, useRef, useState } from "react";
 import { visibleQuickPlaces } from "@/lib/places/quickPlaces";
 import { geocode, prettyCategory, reverseGeocode } from "@/lib/geocode";
 import { geocodeStops, type MotisStop } from "@/lib/routing";
+import { haptic } from "@/lib/haptics";
+import { savedPlaceKey } from "@/lib/planner/savedPlaces";
 import {
   ChevronDownIcon,
   ClockIcon,
   CloseIcon,
+  HomeIcon,
   MapPinIcon,
   RecenterIcon,
   StarIcon,
+  WorkIcon,
 } from "@/components/ui/icons";
 
 export interface PickedPlace {
@@ -43,6 +47,23 @@ interface Props {
   onToggleFavorite?: () => void;
   /** Ask the parent to listen for the next map click. */
   onPickOnMap?: () => void;
+  /** Home / work / manually saved places (shared across planners). */
+  home?: PickedPlace | null;
+  work?: PickedPlace | null;
+  savedPlaces?: PickedPlace[];
+  /** Assign the next picked place as home / work. */
+  onAssignHome?: (place: PickedPlace | null) => void;
+  onAssignWork?: (place: PickedPlace | null) => void;
+  /**
+   * Controlled assign-mode. Kept by the parent so place picks that
+   * bypass this component (map clicks) can also complete the
+   * assignment.
+   */
+  assigning?: "home" | "work" | null;
+  onAssigningChange?: (mode: "home" | "work" | null) => void;
+  /** Toggle a place in the saved list (also used to unsave via chip). */
+  onToggleSaved?: (place: PickedPlace) => void;
+  isSavedPlace?: (place: PickedPlace) => boolean;
 }
 
 type Result = PickedPlace;
@@ -68,6 +89,15 @@ export function PlacePicker({
   favorite = false,
   onToggleFavorite,
   onPickOnMap,
+  home,
+  work,
+  savedPlaces = [],
+  onAssignHome,
+  onAssignWork,
+  onToggleSaved,
+  isSavedPlace,
+  assigning: assigningProp,
+  onAssigningChange,
 }: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
@@ -77,6 +107,9 @@ export function PlacePicker({
   const [locating, setLocating] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  /** Waiting for the next pick to become home / work (controlled). */
+  const assigning = assigningProp ?? null;
+  const setAssigning = onAssigningChange;
   const listId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +119,10 @@ export function PlacePicker({
   const editingRef = useRef(false);
   const mountedRef = useRef(true);
   const getNearbyRef = useRef(getNearby);
+  // Long-press on pinned chips clears them (or unsaves). A long-press
+  // suppresses the click that would otherwise fire on release.
+  const pressTimerRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
   useEffect(() => {
     getNearbyRef.current = getNearby;
   }, [getNearby]);
@@ -94,8 +131,35 @@ export function PlacePicker({
     return () => {
       mountedRef.current = false;
       abortRef.current?.abort();
+      if (pressTimerRef.current != null) {
+        window.clearTimeout(pressTimerRef.current);
+      }
     };
   }, []);
+
+  const startLongPress = (action: () => void) => {
+    suppressClickRef.current = false;
+    if (pressTimerRef.current != null) window.clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = window.setTimeout(() => {
+      pressTimerRef.current = null;
+      suppressClickRef.current = true;
+      haptic("snap");
+      action();
+    }, 450);
+  };
+  const cancelLongPress = () => {
+    if (pressTimerRef.current != null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+  const consumeSuppressedClick = (): boolean => {
+    if (!suppressClickRef.current) return false;
+    suppressClickRef.current = false;
+    return true;
+  };
+
+
 
   useEffect(() => {
     if (skipSearchRef.current) {
@@ -242,6 +306,16 @@ export function PlacePicker({
   }, [selectedLabel]);
 
   function choose(r: Result) {
+    // In assign mode the next picked place becomes home / work instead
+    // of filling the input.
+    if (assigning) {
+      haptic("snap");
+      if (assigning === "home") onAssignHome?.(r);
+      else onAssignWork?.(r);
+      setAssigning?.(null);
+      setOpen(false);
+      return;
+    }
     editingRef.current = false;
     skipSearchRef.current = true;
     setQ(r.name);
@@ -321,6 +395,17 @@ export function PlacePicker({
     open && (results.length > 0 || Boolean(error) || (q.trim().length >= 2 && !busy));
   const activeOption = results[highlight];
   const recents = visibleQuickPlaces(quickPlaces);
+  const starActive = favorite || (selectedPlace && isSavedPlace
+    ? isSavedPlace(selectedPlace)
+    : false);
+  const toggleStar = () => {
+    if (!selectedPlace) return;
+    if (onToggleFavorite) {
+      onToggleFavorite();
+      return;
+    }
+    onToggleSaved?.(selectedPlace);
+  };
   const actionCount =
     (!selectedPlace ? 1 : 0) +
     (!selectedPlace && onPickOnMap ? 1 : 0) +
@@ -423,7 +508,90 @@ export function PlacePicker({
       </div>
       </div>
 
-      {(recents.length > 0 || (selectedPlace && onToggleFavorite)) && (
+      {(onAssignHome || onAssignWork || savedPlaces.length > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {onAssignHome && (
+            <button
+              type="button"
+              data-active={assigning === "home" || undefined}
+              className="ui-chip max-w-[160px]"
+              onPointerDown={() => {
+                if (home) startLongPress(() => onAssignHome(null));
+              }}
+              onPointerUp={cancelLongPress}
+              onPointerLeave={cancelLongPress}
+              onPointerCancel={cancelLongPress}
+              onClick={() => {
+                if (consumeSuppressedClick()) return;
+                haptic("tap");
+                if (home) choose(home);
+                else setAssigning?.(assigning === "home" ? null : "home");
+              }}
+              title={home
+                ? "Tap to route home · hold to clear"
+                : "Tap, then pick a place to save as home"}
+            >
+              <HomeIcon size={13} className="shrink-0" />
+              <span className="truncate">
+                {assigning === "home"
+                  ? "Pick a place…"
+                  : (home?.name ?? "Home")}
+              </span>
+            </button>
+          )}
+          {onAssignWork && (
+            <button
+              type="button"
+              data-active={assigning === "work" || undefined}
+              className="ui-chip max-w-[160px]"
+              onPointerDown={() => {
+                if (work) startLongPress(() => onAssignWork(null));
+              }}
+              onPointerUp={cancelLongPress}
+              onPointerLeave={cancelLongPress}
+              onPointerCancel={cancelLongPress}
+              onClick={() => {
+                if (consumeSuppressedClick()) return;
+                haptic("tap");
+                if (work) choose(work);
+                else setAssigning?.(assigning === "work" ? null : "work");
+              }}
+              title={work
+                ? "Tap to route to work · hold to clear"
+                : "Tap, then pick a place to save as work"}
+            >
+              <WorkIcon size={13} className="shrink-0" />
+              <span className="truncate">
+                {assigning === "work"
+                  ? "Pick a place…"
+                  : (work?.name ?? "Work")}
+              </span>
+            </button>
+          )}
+          {savedPlaces.map((place) => (
+            <button
+              key={`saved-${savedPlaceKey(place)}`}
+              type="button"
+              className="ui-chip max-w-[140px]"
+              onPointerDown={() => startLongPress(() => onToggleSaved?.(place))}
+              onPointerUp={cancelLongPress}
+              onPointerLeave={cancelLongPress}
+              onPointerCancel={cancelLongPress}
+              onClick={() => {
+                if (consumeSuppressedClick()) return;
+                haptic("tap");
+                choose(place);
+              }}
+              title={`${place.name} · hold to remove`}
+            >
+              <StarIcon size={12} filled className="shrink-0" />
+              <span className="truncate">{place.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(recents.length > 0 || (selectedPlace && (onToggleFavorite || onToggleSaved))) && (
         <div className="mt-1">
           <div className="flex items-center justify-between gap-2">
             {recents.length > 0 ? (
@@ -444,17 +612,20 @@ export function PlacePicker({
             ) : (
               <span />
             )}
-            {selectedPlace && onToggleFavorite && (
+            {(selectedPlace && (onToggleFavorite || onToggleSaved)) && (
               <button
                 type="button"
-                onClick={onToggleFavorite}
-                aria-pressed={favorite}
-                aria-label={favorite ? "Remove saved place" : "Save place"}
-                title={favorite ? "Remove saved place" : "Save place"}
+                onClick={() => {
+                  haptic("tap");
+                  toggleStar();
+                }}
+                aria-pressed={starActive}
+                aria-label={starActive ? "Remove saved place" : "Save place"}
+                title={starActive ? "Remove saved place" : "Save place"}
                 className="ui-input-action"
-                data-active={favorite}
+                data-active={starActive}
               >
-                <StarIcon size={15} filled={favorite} />
+                <StarIcon size={15} filled={starActive} />
               </button>
             )}
           </div>

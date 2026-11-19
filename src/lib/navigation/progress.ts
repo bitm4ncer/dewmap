@@ -27,6 +27,10 @@ export interface RouteProgress {
   next: Maneuver | null;
   /** Distance from the snapped position to the next maneuver, metres. */
   nextDistanceM: number;
+  /** Bearing of the route segment under the position, degrees clockwise.
+   *  Far more stable than raw GPS heading at walking speed, so the
+   *  camera uses this as its course-up source of truth. */
+  courseBearing: number;
 }
 
 type Coord = readonly [number, number, number?];
@@ -108,7 +112,55 @@ export function computeRouteProgress(
     fraction,
     next,
     nextDistanceM,
+    courseBearing: bearingDeg(coords[best.index], coords[best.index + 1]),
   };
+}
+
+/** Shortest signed angle from `a` to `b`, in degrees (−180..180]. */
+export function angleDelta(a: number, b: number): number {
+  let delta = (b - a) % 360;
+  if (delta > 180) delta -= 360;
+  if (delta <= -180) delta += 360;
+  return delta;
+}
+
+/** Below this speed (m/s) GPS heading is too noisy to steer the camera. */
+export const HEADING_MIN_SPEED_MPS = 1.8;
+
+/**
+ * Exponential low-pass for the camera bearing, moving along the shortest
+ * arc. `k` in 0..1 — higher follows faster. This is what keeps course-up
+ * navigation calm: raw GPS headings jump ±40° between fixes at walking
+ * speed, and easing to each of them made the map spin hectically.
+ */
+export function smoothedBearing(
+  current: number,
+  target: number,
+  k = 0.25,
+): number {
+  return current + angleDelta(current, target) * Math.min(1, Math.max(0, k));
+}
+
+/**
+ * Choose the bearing source for course-up follow. GPS heading is only
+ * trusted while actually moving fast enough; otherwise the route course
+ * (direction of the segment under the position) is used, which is what
+ * Google Maps-style guidance does for pedestrian routes.
+ */
+export function cameraBearing(
+  progress: RouteProgress | null,
+  heading: number | null,
+  speedMps: number | null,
+): number {
+  if (
+    heading != null
+    && !Number.isNaN(heading)
+    && speedMps != null
+    && speedMps >= HEADING_MIN_SPEED_MPS
+  ) {
+    return heading;
+  }
+  return progress?.courseBearing ?? heading ?? 0;
 }
 
 export interface SampledPoint {

@@ -215,11 +215,13 @@ export function transferMinutes(from: TransitLeg, to: TransitLeg): number | null
   return minutes >= 0 ? minutes : null;
 }
 
-/** Shortest layover in a journey, or null when there is no transfer. */
+/** Shortest layover between two ride legs, or null when there is none. */
 export function minTransferMinutes(journey: RoutePlan): number | null {
   const legs = journey.transit?.legs ?? [];
   let min: number | null = null;
   for (let i = 1; i < legs.length; i++) {
+    // Walk gaps are not transfers; only ride→ride layovers count.
+    if (legs[i - 1].mode !== "transit" || legs[i].mode !== "transit") continue;
     const gap = transferMinutes(legs[i - 1], legs[i]);
     if (gap == null) continue;
     min = min == null ? gap : Math.min(min, gap);

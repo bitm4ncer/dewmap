@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Maneuver, RoutePlan } from "../routing";
 import {
+  angleDelta,
+  cameraBearing,
   computeRouteProgress,
   previewSpeedMps,
   sampleRouteAtDistance,
+  smoothedBearing,
 } from "./progress";
 
 function maneuver(overrides: Partial<Maneuver>): Maneuver {
@@ -106,5 +109,50 @@ describe("previewSpeedMps", () => {
 
   it("keeps walking previews near walking speed", () => {
     expect(previewSpeedMps({ mode: "walk", distanceKm: 0.05 })).toBe(1.5);
+  });
+});
+
+describe("angleDelta", () => {
+  it("takes the shortest arc across zero", () => {
+    expect(angleDelta(10, 350)).toBe(-20);
+    expect(angleDelta(350, 10)).toBe(20);
+  });
+
+  it("is zero for equal bearings", () => {
+    expect(angleDelta(179, 179)).toBe(0);
+  });
+});
+
+describe("smoothedBearing", () => {
+  it("moves a fraction of the shortest arc, wrapping correctly", () => {
+    const next = smoothedBearing(350, 10, 0.5);
+    expect(angleDelta(350, next)).toBeCloseTo(10, 5);
+    expect(next).toBeCloseTo(360, 5);
+  });
+
+  it("converges onto the target", () => {
+    let bearing = 0;
+    for (let i = 0; i < 40; i += 1) bearing = smoothedBearing(bearing, 90);
+    expect(Math.abs(angleDelta(bearing, 90))).toBeLessThan(0.1);
+  });
+
+  it("ignores invalid k", () => {
+    expect(smoothedBearing(0, 100, 5)).toBe(100);
+    expect(smoothedBearing(0, 100, -1)).toBe(0);
+  });
+});
+
+describe("cameraBearing", () => {
+  const progress = { courseBearing: 90 } as never;
+
+  it("trusts GPS heading only above the noise floor", () => {
+    expect(cameraBearing(progress, 45, 0.5)).toBe(90);
+    expect(cameraBearing(progress, 45, 3)).toBe(45);
+  });
+
+  it("falls back to route course, then raw heading, then north", () => {
+    expect(cameraBearing(null, null, null)).toBe(0);
+    expect(cameraBearing(null, 123, 0.2)).toBe(123);
+    expect(cameraBearing(progress, null, null)).toBe(90);
   });
 });

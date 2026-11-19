@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ManeuverIcon, RecenterIcon, SpeakerIcon } from "@/components/ui/icons";
+import { ManeuverIcon, RecenterIcon, SpeakerIcon, CloseIcon } from "@/components/ui/icons";
+import { haptic } from "@/lib/haptics";
 import { useNavigation } from "@/lib/navigation/store";
+import { useHiking } from "@/lib/hiking/store";
+import { useCar } from "@/lib/planner/carStore";
+import { useTransit } from "@/lib/planner/transitStore";
 import type { RouteProgress } from "@/lib/navigation/progress";
 import type { LivePosition } from "@/lib/navigation/useNavigation";
 import {
@@ -42,13 +46,29 @@ export function NavigationOverlay({
   const plan = useNavigation((s) => s.plan);
   const muted = useNavigation((s) => s.muted);
   const follow = useNavigation((s) => s.follow);
+  const freeCamera = useNavigation((s) => s.freeCamera);
   const simulate = useNavigation((s) => s.simulate);
   const guidance = useNavigation((s) => s.guidance);
   const stop = useNavigation((s) => s.stop);
   const start = useNavigation((s) => s.start);
   const setMuted = useNavigation((s) => s.setMuted);
   const setFollow = useNavigation((s) => s.setFollow);
+  const setFreeCamera = useNavigation((s) => s.setFreeCamera);
   const setGuidance = useNavigation((s) => s.setGuidance);
+
+  /**
+   * Ending navigation also takes the planned route off the map — the
+   * drawn line, alternatives and the journey selection are cleared in
+   * the planner store that owns the active route. Start/destination
+   * fields keep their values so re-planning is one tap.
+   */
+  const endNavigation = () => {
+    const mode = plan?.mode;
+    stop();
+    if (mode === "car") useCar.getState().setRoutes([]);
+    else if (mode === "transit") useTransit.getState().setJourneys([]);
+    else useHiking.getState().setCandidates([]);
+  };
   const [now, setNow] = useState(() => Date.now());
   const [recalculating, setRecalculating] = useState(false);
   const [recalcError, setRecalcError] = useState<string | null>(null);
@@ -279,6 +299,18 @@ export function NavigationOverlay({
               </div>
             )}
           </div>
+          {/* Always-visible way out: an X on the instruction banner, so
+           * ending navigation never depends on spotting the small "End"
+           * button in the bottom bar. */}
+          <button
+            type="button"
+            onClick={endNavigation}
+            aria-label="End navigation"
+            title="End navigation"
+            className="hud-icon-btn !h-9 !w-9 shrink-0"
+          >
+            <CloseIcon size={18} />
+          </button>
         </div>
       </div>
 
@@ -337,13 +369,31 @@ export function NavigationOverlay({
               <button
                 type="button"
                 onClick={() => {
-                  setFollow(follow === "course" ? "north" : "course");
+                  haptic("tap");
+                  if (freeCamera) {
+                    // Re-engage follow on the current bearing mode.
+                    setFreeCamera(false);
+                  } else {
+                    setFollow(follow === "course" ? "north" : "course");
+                  }
                   onRecenter();
                 }}
-                aria-label="Recenter map"
+                aria-label={
+                  freeCamera
+                    ? "Follow current position"
+                    : follow === "course"
+                      ? "Switch to north-up"
+                      : "Switch to course-up"
+                }
+                aria-pressed={!freeCamera}
                 className="hud-icon-btn"
+                data-active={!freeCamera}
               >
-                {follow === "course" ? <RecenterIcon size={19} /> : "N"}
+                {follow === "course" || freeCamera ? (
+                  <RecenterIcon size={19} />
+                ) : (
+                  "N"
+                )}
               </button>
               {(offRoute || recalcError || plan.mode === "transit") && (
                 <button
@@ -358,8 +408,8 @@ export function NavigationOverlay({
               )}
               <button
                 type="button"
-                onClick={stop}
-                aria-label="End navigation"
+                onClick={endNavigation}
+                aria-label="End navigation and clear route"
                 className="hud-btn-primary !min-h-10 !px-4"
               >
                 End

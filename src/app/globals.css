@@ -565,6 +565,9 @@ body {
   color: var(--ink);
 }
 .hud-icon-btn:active { background: var(--surf-3); }
+/* Toggled state (e.g. navigation follow engaged vs. free camera). */
+.hud-icon-btn[data-active] { color: var(--ink); }
+.hud-icon-btn[data-active="false"] { color: var(--ink-mute); }
 
 /* ────────────────────────────────────────────────────────────────────────
    Phone overrides — bigger tap targets where required
