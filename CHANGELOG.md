@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-11-19 — Two detents and over-scroll collapse
+
+- The mobile panel now has exactly two positions: half (48dvh) and full
+  (100dvh). The collapsed mini bar and the intermediate modes step are
+  gone — the panel opens at half, the grabber tap and the chevron toggle
+  between the two, and pulls past a detent stretch the sheet (rubber
+  band) instead of reaching a third state.
+- Scrolling the panel content against its top edge now gives way: the
+  content rubber-bands under the finger, and once the pull passes a
+  threshold a full panel collapses to half (velocity-aware flick works
+  too). At half the same pull just bounces.
+- Consequences drawn: the mobile sheet-close button is gone (nothing to
+  close to), the map locate/zoom stacks float just above the 50% panel
+  edge, active-overlay badges sit above the edge and fade only for a
+  full panel, and map search results collapse the panel to half.
+
 ## 2026-11-19 — Sticky travel-mode bar
 
 - The Transit/Walk/Bike/Car bar pins to the top of the panel while the

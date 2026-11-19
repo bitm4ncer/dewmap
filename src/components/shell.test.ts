@@ -16,10 +16,10 @@ describe("shell", () => {
     expect(css).not.toContain(".ui-logo");
   });
 
-  it("starts on the dark vector map with a collapsed panel", () => {
+  it("starts on the dark vector map with the panel at half height", () => {
     const settings = readFileSync(new URL("../lib/settings.ts", import.meta.url), "utf8");
     expect(settings).toContain('basemapMode: "vector"');
-    expect(map).toMatch(/useState<SheetState>\(\(\) => \{[\s\S]*?return "peek"/);
+    expect(map).toMatch(/useState<SheetState>\(\(\) => \{[\s\S]*?return "half"/);
   });
 
   it("opens on the Routes pane", () => {

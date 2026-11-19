@@ -35,7 +35,7 @@ import { SettingsGear } from "./SettingsGear";
 import { SearchBox } from "./SearchBox";
 import { Spinner } from "./ui/Spinner";
 import { PoiDetail } from "./poi/PoiDetail";
-import { prefersReducedMotion } from "@/lib/motion";
+import { createSpring, prefersReducedMotion, rubberband, SPRING, VelocityTracker, type SpringHandle } from "@/lib/motion";
 import type { PoiSelection } from "@/lib/poi";
 import type { GeocodeResult } from "@/lib/geocode";
 import { gibsDateNDaysAgo, gibsTileUrl } from "@/lib/gibs";
@@ -75,7 +75,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
-  CloseIcon,
   AirQualityIcon,
   FlatIcon,
   ForestLossIcon,
@@ -1724,8 +1723,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     }
   }, [routesMode]);
   const [sheetState, setSheetState] = useState<SheetState>(() => {
-    if (typeof window === "undefined") return "peek";
-    return "peek";
+    if (typeof window === "undefined") return "half";
+    return "half";
   });
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1758,7 +1757,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // state on desktop or a closed drawer on a phone.
     setSheetState("half");
   }, [isMobile]);
-  const sidebarOpen = sheetState !== "peek";
+  // Mobile panel positions are half and full — the panel is always open.
+  // On desktop the same state doubles as the drawer open/close flag.
+  const sidebarOpen = isMobile || sheetState === "full";
   const [mapInstance, setMapInstance] = useState<MLMap | null>(null);
 
   // Regional basemaps are tied to their coverage. If the user pans out of
@@ -1891,6 +1892,110 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, []);
 
+  // Pull the panel body against its scrolled-off top edge: the content
+  // rubber-bands against a spring until the pull passes a threshold, then
+  // a full panel collapses to half. At half there is only the bounce.
+  useEffect(() => {
+    const el = panelBodyRef.current;
+    if (!el || !isMobile) return;
+    let touch: { id: number; startY: number; pulling: boolean } | null = null;
+    let lastShift = 0;
+    let raf: number | null = null;
+    let spring: SpringHandle | null = null;
+
+    const tracker = new VelocityTracker();
+    const vh = () => window.visualViewport?.height ?? window.innerHeight;
+
+    const applyShift = (px: number) => {
+      lastShift = px;
+      el.style.transform = px === 0 ? "" : `translateY(${px}px)`;
+    };
+    const stopSpring = () => {
+      spring?.stop();
+      spring = null;
+    };
+    const collapse = () => {
+      stopSpring();
+      applyShift(0);
+      haptic("snap");
+      snapTo("half");
+    };
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        touch = null;
+        return;
+      }
+      const t = e.touches[0];
+      touch = { id: t.identifier, startY: t.clientY, pulling: false };
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!touch) return;
+      const t = Array.from(e.touches).find((x) => x.identifier === touch!.id);
+      if (!t) return;
+      const dy = t.clientY - touch.startY;
+      if (!touch.pulling) {
+        if (dy < 2 || el.scrollTop > 0) return;
+        // Claim downward over-scroll only at the very top of the content.
+        touch.pulling = true;
+        touch.startY = t.clientY;
+        tracker.reset();
+        tracker.add(t.clientY, e.timeStamp);
+      }
+      if (e.cancelable) e.preventDefault();
+      tracker.add(t.clientY, e.timeStamp);
+      const pull = Math.max(0, t.clientY - touch.startY);
+      const next = Math.max(0, rubberband(pull, 0, 96, vh()));
+      if (raf != null) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => applyShift(next));
+    };
+
+    const onEnd = (e: TouchEvent) => {
+      if (!touch) return;
+      const pulling = touch.pulling;
+      touch = null;
+      if (!pulling) return;
+      if (raf != null) {
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+      const shift = lastShift;
+      const velocity = tracker.velocity(e.timeStamp);
+      if (shift >= 56 || (shift >= 16 && velocity > 700)) {
+        collapse();
+        return;
+      }
+      stopSpring();
+      if (prefersReducedMotion() || shift < 0.5) {
+        applyShift(0);
+        return;
+      }
+      spring = createSpring({
+        from: shift,
+        to: 0,
+        config: SPRING.sheetSnap,
+        onUpdate: applyShift,
+        onComplete: () => {
+          spring = null;
+        },
+      });
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onEnd);
+    return () => {
+      stopSpring();
+      if (raf != null) cancelAnimationFrame(raf);
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [isMobile, sheetState, snapTo]);
+
   // A/B markers for points chosen with the "Map" button.
   useEffect(() => {
     const map = mapInstance;
@@ -1987,24 +2092,24 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const navActive = useNavigation((s) => s.active);
 
   // Half is the default: map and panel are visible together so changes
-  // land on the map immediately. Full is an explicit option; peek is the
+  // land on the map immediately. Full is an explicit option; half is the
   // collapsed state reached by the close button or a downward drag.
   const selectPane = (pane: SidebarPane) => {
     haptic("tap");
     if (pane === activePane) {
-      snapTo(sheetState === "peek" ? "half" : "peek");
+      snapTo(sheetState === "full" ? "half" : "full");
       return;
     }
     setActivePane(pane);
-    if (sheetState === "peek") snapTo("half");
   };
 
   const toggleFull = () => {
     haptic("tap");
     snapTo(sheetState === "full" ? "half" : "full");
-  };  const collapseToPeek = useCallback(() => {
+  };
+  const collapseToHalf = useCallback(() => {
     haptic("tap");
-    snapTo("peek");
+    snapTo("half");
   }, [snapTo]);
 
   /** Opening a place card clears the sheet out of the way, then restores
@@ -2015,10 +2120,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (
         isMobile
         && sheetBeforePoiRef.current == null
-        && sheetState !== "peek"
+        && sheetState !== "half"
       ) {
         sheetBeforePoiRef.current = sheetState;
-        snapTo("peek");
+        snapTo("half");
       }
       setPoiSelection(selection);
     },
@@ -2109,9 +2214,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         );
       }
       if (activePane !== "hiking") setActivePane("hiking");
-      snapTo(isMobile ? "modes" : "half");
+      snapTo("half");
     },
-    [activePane, isMobile, livePos, snapTo],
+    [activePane, livePos, snapTo],
   );
 
   /** A search result opens its place card, with Plan Route as the action. */
@@ -2129,7 +2234,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         category: result.category,
         city: result.city,
       });
-      if (isMobile) snapTo("peek");
+      if (isMobile) snapTo("half");
     },
     [isMobile, snapTo],
   );
@@ -3507,11 +3612,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
     if (!isMobile) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") collapseToPeek();
+      if (e.key === "Escape") collapseToHalf();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sidebarOpen, collapseToPeek]);
+  }, [sidebarOpen, collapseToHalf]);
 
   const loadSnapshot = useCallback(
     async (lockedBbox: Bbox, snapshot: Snapshot) => {
@@ -3920,7 +4025,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           <button
             type="button"
             {...handleProps}
-            aria-label={sheetState === "peek" ? "Open panel" : "Resize panel"}
+            aria-label={sheetState === "half" ? "Expand panel" : "Shrink panel"}
             aria-expanded={sidebarOpen}
             className="hud-bottom-sheet-grabber"
           >
@@ -3934,14 +4039,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               className="sheet-expand hud-icon-btn"
             >
               {sheetState === "full" ? <ChevronDownIcon size={17} /> : <ChevronUpIcon size={17} />}
-            </button>
-            <button
-              type="button"
-              onClick={collapseToPeek}
-              aria-label="Close panel"
-              className="sheet-close hud-icon-btn"
-            >
-              <CloseIcon size={17} />
             </button>
           </div>
         </div>
@@ -3980,7 +4077,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={collapseToPeek}
+                onClick={collapseToHalf}
                 aria-label={isMobile ? "Collapse panel" : "Close panel"}
                 className="hud-icon-btn"
               >
