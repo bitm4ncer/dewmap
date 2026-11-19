@@ -514,10 +514,15 @@ body {
   position: absolute;
   top: 2px;
   left: var(--sp-2);
+  right: var(--sp-2);
   display: flex;
+  justify-content: space-between;
   gap: 2px;
+  pointer-events: none;
 }
+.hud-sheet-actions .hud-icon-btn { pointer-events: auto; }
 .hud-sheet-actions .hud-icon-btn {
+  flex: 0 0 32px;
   width: 32px;
   height: 32px;
 }
