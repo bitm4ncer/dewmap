@@ -341,6 +341,47 @@ describe("planMotis", () => {
     expect(url.searchParams.get("requireBikesAllowed")).toBe("true");
   });
 
+  it("retries with coordinates when persisted stop ids are stale", async () => {
+    // MOTIS ids carry the GTFS feed tag; after a feed rollover saved
+    // ids 404. The retry must fall back to plain coordinates so the
+    // search still yields journeys instead of "no route".
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("unknown place id", { status: 404 }),
+      )
+      .mockResolvedValueOnce(okResponse({ itineraries: [ITINERARY] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const plans = await planMotis(
+      transitRequest({
+        fromPlace: "de-DELFI_stale-from",
+        toPlace: "de-DELFI_stale-to",
+      }),
+    );
+
+    expect(plans).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retry = fetchMock.mock.calls[1] as unknown as [
+      RequestInfo | URL,
+      RequestInit?,
+    ];
+    const url = new URL(String(retry[0]));
+    expect(url.searchParams.get("fromPlace")).toBe("49.41,8.68");
+    expect(url.searchParams.get("toPlace")).toBe("49.42,8.69");
+  });
+
+  it("does not retry coordinate-only requests on no-route", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response("no route", { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const err = await captureError(planMotis(transitRequest()));
+    expect(err.kind).toBe("no-route");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("sends ordered via stops and a minimum stay", async () => {
     const fetchMock = vi.fn(
       async () =>

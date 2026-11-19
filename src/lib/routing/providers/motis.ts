@@ -556,15 +556,46 @@ export async function planMotis(request: RouteRequest): Promise<RoutePlan[]> {
     }
   }
 
-  const data = await fetchJson<unknown>(
-    `${MOTIS_BASE}/plan?${params.toString()}`,
-    {
+  const planUrl = `${MOTIS_BASE}/plan?${params.toString()}`;
+  const fetchPlan = () =>
+    fetchJson<unknown>(planUrl, {
       signal: request.signal,
       timeoutMs: PLAN_TIMEOUT_MS,
       provider: "motis",
       noRouteStatuses: [400, 404, 422],
-    },
-  );
+    });
+
+  let data: unknown;
+  try {
+    data = await fetchPlan();
+  } catch (err) {
+    // Saved stop ids embed the GTFS feed tag (e.g. "...-2026_de:…").
+    // When the feed rolls over, MOTIS rejects those ids with 400/404 —
+    // every search with a persisted from/to then silently found no
+    // route. Retry once with plain coordinates; MOTIS snaps them to the
+    // nearest stop and persisted selections keep working.
+    const usedStopIds =
+      request.fromPlace !== undefined || request.toPlace !== undefined;
+    if (
+      !usedStopIds
+      || !(err instanceof ProviderError)
+      || err.kind !== "no-route"
+    ) {
+      throw err;
+    }
+    const fallback = new URLSearchParams(params);
+    fallback.set("fromPlace", `${from.lat},${from.lon}`);
+    fallback.set("toPlace", `${to.lat},${to.lon}`);
+    data = await fetchJson<unknown>(
+      `${MOTIS_BASE}/plan?${fallback.toString()}`,
+      {
+        signal: request.signal,
+        timeoutMs: PLAN_TIMEOUT_MS,
+        provider: "motis",
+        noRouteStatuses: [400, 404, 422],
+      },
+    );
+  }
 
   const root = isRecord(data) ? data : undefined;
   const itineraries = readArray(root, "itineraries").filter(isRecord);
