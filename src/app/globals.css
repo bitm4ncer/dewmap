@@ -365,14 +365,16 @@ body {
     background: var(--surf-0);
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     contain: layout paint;
-    /* Height is driven by the spring driver in useSheetGesture. */
-    transition: none;
+    /* Height is driven by the spring driver in useSheetGesture. Only the
+       full-state safe-area inset and corner radius are CSS transitions —
+       their slow-start curve tracks the spring's pace so the content
+       rides with the sheet instead of jumping mid-flight. */
+    transition: padding-top 480ms cubic-bezier(0.5, 0, 0.2, 1), border-radius 480ms cubic-bezier(0.5, 0, 0.2, 1);
     --hud-peek-h: calc(88px + var(--safe-bottom));
   }
 
   .hud-bottom-sheet[data-dragging="true"],
   .hud-bottom-sheet[data-springing="true"] {
-    transition: none;
     user-select: none;
   }
 
