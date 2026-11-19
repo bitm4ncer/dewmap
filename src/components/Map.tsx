@@ -26,7 +26,6 @@ import {
 import {
   useSettings,
   type BasemapMode,
-  type OrientationMode,
 } from "@/lib/settings";
 import { getAccessToken } from "@/lib/sentinel/auth";
 import { fetchDayOverlay } from "@/lib/sentinel/latest-overlay";
@@ -57,7 +56,6 @@ import {
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
-import { bearingAlongRoute } from "@/lib/orientation";
 import { haptic } from "@/lib/haptics";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
@@ -67,6 +65,7 @@ import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
 import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
+import { OrientationControl } from "./OrientationControl";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
 import {
@@ -78,17 +77,14 @@ import {
   ChevronUpIcon,
   CloseIcon,
   AirQualityIcon,
-  CompassIcon,
   FlatIcon,
   ForestLossIcon,
   GlobeIcon,
-  HeadingIcon,
   HybridIcon,
   ImageIcon,
   LandCoverIcon,
   NaturaIcon,
   NdviIcon,
-  RouteIcon,
   SpeciesIcon,
   VectorIcon,
 } from "./ui/icons";
@@ -1550,6 +1546,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
   const crosshairMarkerRef = useRef<maplibregl.Marker | null>(null);
   const scalerRef = useRef<HTMLDivElement | null>(null);
+  const orientationControlRef = useRef<OrientationControl | null>(null);
   const coneRef = useRef<HTMLDivElement | null>(null);
   const arrowRef = useRef<HTMLDivElement | null>(null);
   const compassUnsubRef = useRef<(() => void) | null>(null);
@@ -1615,7 +1612,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setBasemapVariant,
     setLiveBasemapDayOffset,
     setProjection,
-    setOrientationMode,
     setRailOn,
     setRailwayOpacity,
     setPoiOn,
@@ -2213,6 +2209,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
     map.addControl(geolocate, "bottom-left");
     geolocateRef.current = geolocate;
+    const orientation = new OrientationControl({
+      initial: useSettings.getState().orientationMode,
+      onChange: (mode) => {
+        if (mode === "heading") void requestCompassPermission();
+        useSettings.getState().setOrientationMode(mode);
+      },
+    });
+    map.addControl(orientation, "bottom-left");
+    orientationControlRef.current = orientation;
+
 
     // MapLibre opens the compact attribution on first paint. Keep the
     // phone map clean: start collapsed, and let the info button expand it.
@@ -2679,14 +2685,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [projection]);
 
-  // Pull the currently-selected hiking route coordinates so the route-up
-  // bearing effect can find the segment under the user's GPS position.
-  const activeRouteCoords = useHiking((s) => {
-    const id = s.selectedCandidateId;
-    if (!id) return null;
-    return s.candidates.find((c) => c.id === id)?.coordinates ?? null;
-  });
-
   // Track user-initiated camera interactions so the auto-rotation in the
   // bearing effect can step out of the way. Without this, every compass /
   // GPS tick fires a map.easeTo that interrupts an in-progress finger
@@ -2744,9 +2742,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (orientationMode === "heading") {
       if (liveHeadingDeg == null) return;
       target = liveHeadingDeg;
-    } else if (orientationMode === "route") {
-      if (!activeRouteCoords || activeRouteCoords.length < 2 || !livePos) return;
-      target = bearingAlongRoute(activeRouteCoords, livePos);
     }
     if (target == null) return;
 
@@ -2773,7 +2768,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     orientationMode,
     livePos,
     liveHeadingDeg,
-    activeRouteCoords,
   ]);
 
   useEffect(() => {
@@ -4113,8 +4107,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 <ViewPanel
                   projection={projection}
                   onProjectionChange={setProjection}
-                  orientationMode={orientationMode}
-                  onOrientationChange={setOrientationMode}
                   basemapMode={basemapMode}
                   onBasemapModeChange={setBasemapMode}
                   poiOn={poiOn}
@@ -4685,8 +4677,6 @@ function MapReadout({ map }: { map: MLMap | null }) {
 interface ViewPanelProps {
   projection: "mercator" | "globe";
   onProjectionChange: (p: "mercator" | "globe") => void;
-  orientationMode: OrientationMode;
-  onOrientationChange: (m: OrientationMode) => void;
   basemapMode: BasemapMode;
   onBasemapModeChange: (m: BasemapMode) => void;
   poiOn: boolean;
@@ -4696,8 +4686,6 @@ interface ViewPanelProps {
 function ViewPanel({
   projection,
   onProjectionChange,
-  orientationMode,
-  onOrientationChange,
   basemapMode,
   onBasemapModeChange,
   poiOn,
@@ -4750,32 +4738,6 @@ function ViewPanel({
                 aria-label={label}
                 title={label}
                 onClick={() => onProjectionChange(key)}
-              >
-                <Icon size={18} />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <span className="ui-row-title">Orientation</span>
-          <div className="ui-segmented w-[156px]" role="group" aria-label="Map orientation">
-            {(
-              [
-                ["north", "North", CompassIcon],
-                ["route", "Route", RouteIcon],
-                ["heading", "Heading", HeadingIcon],
-              ] as const
-            ).map(([key, label, Icon]) => (
-              <button
-                key={key}
-                type="button"
-                className="ui-seg"
-                data-active={orientationMode === key}
-                aria-pressed={orientationMode === key}
-                aria-label={label}
-                title={label}
-                onClick={() => onOrientationChange(key)}
               >
                 <Icon size={18} />
               </button>

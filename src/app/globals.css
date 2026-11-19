@@ -736,7 +736,11 @@ input[type="range"].hud-slider::-moz-range-thumb {
   filter: invert(1) brightness(0.92);
 }
 
-.maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active,
+.maplibregl-ctrl-group button.maplibregl-ctrl-orientation.orientation-heading {
+  color: var(--accent) !important;
+  background: var(--accent-soft) !important;
+}
+.maplibregl-ctrl-geolocate-active,
 .maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-background {
   background: var(--accent-soft) !important;
 }
