@@ -96,6 +96,9 @@ function PoiDetailContent({
   const closeTimerRef = useRef<number | null>(null);
   const trackerRef = useRef(new VelocityTracker());
   const suppressTapRef = useRef(false);
+  /** Armed on a button target: the gesture stays a tap unless it passes
+      the axis lock, then it is promoted to a real drag. */
+  const pendingRef = useRef<{ pointerId: number; startY: number } | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -262,6 +265,8 @@ function PoiDetailContent({
   const beginResize = (
     mode: "compact" | "expanded",
     event: React.PointerEvent<HTMLElement>,
+    startYOverride?: number,
+    promoted = false,
   ) => {
     const el = cardRef.current;
     if (!el || closing) return;
@@ -269,12 +274,13 @@ function PoiDetailContent({
     const height = el.getBoundingClientRect().height;
     if (mode === "compact") compactHeightRef.current = height;
     trackerRef.current.reset();
-    trackerRef.current.add(event.clientY, event.timeStamp);
+    const startY = startYOverride ?? event.clientY;
+    trackerRef.current.add(startY, event.timeStamp);
     dragRef.current = {
       mode,
-      startY: event.clientY,
+      startY,
       startHeight: height,
-      moved: false,
+      moved: promoted,
     };
     el.setAttribute("data-resizing", "true");
     try {
@@ -282,6 +288,16 @@ function PoiDetailContent({
     } catch {
       // Synthetic pointers may not be capturable.
     }
+  };
+
+  /**
+   * Deferred-drag gesture state: a press on interactive content arms the
+   * gesture — until the finger passes the axis lock it stays a tap (the
+   * button's click fires), past it the press is promoted to a real resize
+   * and the trailing click is suppressed via onClickCapture.
+   */
+  const armPending = (e: React.PointerEvent<HTMLElement>) => {
+    pendingRef.current = { pointerId: e.pointerId, startY: e.clientY };
   };
 
   const moveResize = (y: number, timeStamp: number) => {
@@ -304,6 +320,7 @@ function PoiDetailContent({
   };
 
   const clearResize = () => {
+    pendingRef.current = null;
     dragRef.current = null;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -383,6 +400,7 @@ function PoiDetailContent({
   const closeCard = () => {
     if (closing) return;
     const el = cardRef.current;
+    pendingRef.current = null;
     dragRef.current = null;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -447,18 +465,39 @@ function PoiDetailContent({
         <div
           className="poi-mini"
           onPointerDown={(e) => {
-            if ((e.target as HTMLElement).closest("button, a")) return;
+            if ((e.target as HTMLElement).closest("button, a")) {
+              armPending(e);
+              return;
+            }
             beginResize("compact", e);
           }}
           onPointerMove={(e) => {
+            const pending = pendingRef.current;
+            if (pending && pending.pointerId === e.pointerId) {
+              if (Math.abs(e.clientY - pending.startY) < 10) return;
+              pendingRef.current = null;
+              beginResize("compact", e, pending.startY, true);
+              return;
+            }
             if (dragRef.current?.mode === "compact") {
               moveResize(e.clientY, e.timeStamp);
             }
           }}
           onPointerUp={(e) => {
+            if (pendingRef.current?.pointerId === e.pointerId) {
+              pendingRef.current = null; // never promoted — a plain tap
+              return;
+            }
             if (dragRef.current?.mode === "compact") finishResize(e);
           }}
           onPointerCancel={clearResize}
+          onClickCapture={(e) => {
+            if (suppressTapRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              suppressTapRef.current = false;
+            }
+          }}
         >
           <span className="poi-grip" aria-hidden />
           <button
@@ -546,18 +585,39 @@ function PoiDetailContent({
             <div
               className="poi-hero"
               onPointerDown={(e) => {
-                if ((e.target as HTMLElement).closest("button, a")) return;
+                if ((e.target as HTMLElement).closest("button, a")) {
+                  armPending(e);
+                  return;
+                }
                 beginResize("expanded", e);
               }}
               onPointerMove={(e) => {
+                const pending = pendingRef.current;
+                if (pending && pending.pointerId === e.pointerId) {
+                  if (Math.abs(e.clientY - pending.startY) < 10) return;
+                  pendingRef.current = null;
+                  beginResize("expanded", e, pending.startY, true);
+                  return;
+                }
                 if (dragRef.current?.mode === "expanded") {
                   moveResize(e.clientY, e.timeStamp);
                 }
               }}
               onPointerUp={(e) => {
+                if (pendingRef.current?.pointerId === e.pointerId) {
+                  pendingRef.current = null; // never promoted — a plain tap
+                  return;
+                }
                 if (dragRef.current?.mode === "expanded") finishResize(e);
               }}
               onPointerCancel={clearResize}
+              onClickCapture={(e) => {
+                if (suppressTapRef.current) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  suppressTapRef.current = false;
+                }
+              }}
             >
               <img
                 key={current.url}
@@ -635,18 +695,39 @@ function PoiDetailContent({
               <div
                 className="poi-head poi-head--actions"
                 onPointerDown={(e) => {
-                  if ((e.target as HTMLElement).closest("button, a")) return;
+                  if ((e.target as HTMLElement).closest("button, a")) {
+                    armPending(e);
+                    return;
+                  }
                   beginResize("expanded", e);
                 }}
                 onPointerMove={(e) => {
+                  const pending = pendingRef.current;
+                  if (pending && pending.pointerId === e.pointerId) {
+                    if (Math.abs(e.clientY - pending.startY) < 10) return;
+                    pendingRef.current = null;
+                    beginResize("expanded", e, pending.startY, true);
+                    return;
+                  }
                   if (dragRef.current?.mode === "expanded") {
                     moveResize(e.clientY, e.timeStamp);
                   }
                 }}
                 onPointerUp={(e) => {
+                  if (pendingRef.current?.pointerId === e.pointerId) {
+                    pendingRef.current = null; // never promoted — a plain tap
+                    return;
+                  }
                   if (dragRef.current?.mode === "expanded") finishResize(e);
                 }}
                 onPointerCancel={clearResize}
+                onClickCapture={(e) => {
+                  if (suppressTapRef.current) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    suppressTapRef.current = false;
+                  }
+                }}
               >
                 <p className="ui-kicker">
                   {category}

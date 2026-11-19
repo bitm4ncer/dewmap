@@ -2063,7 +2063,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   min-height: 32px;
   margin-bottom: var(--sp-3);
 }
-.poi-head--actions { min-height: 40px; }
+.poi-head--actions { min-height: 40px; touch-action: none; }
 .poi-head-controls {
   display: flex;
   align-items: center;

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-11-19 — Card slide gestures
+
+- The place detail card now takes slide gestures across its whole
+  surface: a press on the text, thumbnail or action buttons stays a tap
+  until the finger passes a 10px axis lock, then promotes to the resize
+  drag (expand, collapse, dismiss) and suppresses the trailing click —
+  previously only the narrow grip/padding strip dragged and swipes on
+  the button areas did nothing.
+- The no-image expanded card's drag header gained `touch-action: none`,
+  so the browser scroll no longer cancels the gesture there.
+
 ## 2026-11-19 — Touch feel and interaction polish
 
 ### Changed
