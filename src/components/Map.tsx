@@ -73,7 +73,7 @@ import type { RoutePoint } from "@/lib/routing/routeInput";
 import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
-import { useSheetGesture, type SheetState } from "./shell/useSheetGesture";
+import { measureSafeBottom, sheetMetrics, useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { OrientationControl } from "./OrientationControl";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
@@ -1878,6 +1878,24 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     enabled: isMobile,
   });
 
+  // Ride the map up with the sheet: pad the camera bottom by the panel
+  // height so routes, pins and fly targets stay centered in the visible
+  // part when the panel moves. Full keeps the half pad — the map is
+  // covered anyway — so collapsing back re-lands exactly on half.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMobile) return;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const m = sheetMetrics(vh, measureSafeBottom());
+    const bottom = sheetState === "peek" ? m.peek : m.half;
+    const padding = { top: 0, right: 0, bottom, left: 0 };
+    if (!map.loaded()) {
+      map.jumpTo({ padding });
+      return;
+    }
+    map.easeTo({ padding, duration: 450 });
+  }, [sheetState, isMobile, mapInstance]);
+
   // Panel scroll state for the sticky travel-mode bar. Written as an
   // attribute on the scroll container itself — a scrolling panel must not
   // re-render the map, same rule as the sheet gestures.
@@ -3061,7 +3079,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const unregisterTaps = registerFeatureTaps(map, {
       id: "poi-dots",
       layers: [POI_HIT_LAYER_ID, POI_ICON_LAYER_ID, POI_LABEL_LAYER_ID],
-      tolerancePx: 24,
+      // Generous grab radius: a tap a few dozen pixels off still picks
+      // the nearest place instead of falling through to the bare-map
+      // address card.
+      tolerancePx: 40,
       onFeature: openPlace,
     });
     map.on("mouseenter", POI_HIT_LAYER_ID, showPointer);

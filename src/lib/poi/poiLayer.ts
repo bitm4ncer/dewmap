@@ -355,7 +355,8 @@ export function ensurePoiLayers(map: MLMap) {
   }
 
   // Invisible, larger touch target. Keep it above the icons so a tap
-  // does not have to land on the 18–24 px glyph itself.
+  // does not have to land on the 18–24 px glyph itself. On top of this,
+  // the feature-tap pipeline adds extra pixel tolerance around it.
   if (!map.getLayer(POI_HIT_LAYER_ID)) {
     map.addLayer({
       id: POI_HIT_LAYER_ID,
@@ -370,9 +371,9 @@ export function ensurePoiLayers(map: MLMap) {
           ["linear"],
           ["zoom"],
           15,
-          18,
-          18,
           22,
+          18,
+          26,
         ],
         "circle-color": "rgba(0,0,0,0.01)",
         "circle-stroke-width": 0,

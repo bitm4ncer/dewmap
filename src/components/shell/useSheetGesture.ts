@@ -26,7 +26,8 @@ function clampVelocity(value: number): number {
   return Math.max(-1200, Math.min(1200, value));
 }
 
-function measureSafeBottom(): number {
+/** Safe-area bottom inset in px, measured via a temporary probe element. */
+export function measureSafeBottom(): number {
   if (typeof document === "undefined") return 0;
   const probe = document.createElement("div");
   probe.style.cssText =
