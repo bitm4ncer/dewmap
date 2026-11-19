@@ -82,14 +82,12 @@ function PoiDetailContent({
   const [imageFailed, setImageFailed] = useState(false);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [resizing, setResizing] = useState(false);
   const [closing, setClosing] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{
     mode: "compact" | "expanded";
     startY: number;
     startHeight: number;
-    lastHeight: number;
     moved: boolean;
   } | null>(null);
   const compactHeightRef = useRef<number | null>(null);
@@ -247,7 +245,7 @@ function PoiDetailContent({
     const handle: SpringHandle = createSpring({
       from,
       to: target,
-      velocity: Math.max(-6000, Math.min(6000, velocity)),
+      velocity: Math.max(-1200, Math.min(1200, velocity)),
       config: SPRING.card,
       onUpdate: (value) => {
         el.style.height = `${value}px`;
@@ -276,10 +274,9 @@ function PoiDetailContent({
       mode,
       startY: event.clientY,
       startHeight: height,
-      lastHeight: height,
       moved: false,
     };
-    setResizing(true);
+    el.setAttribute("data-resizing", "true");
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
@@ -300,7 +297,6 @@ function PoiDetailContent({
     const max = expandedHeight();
     const raw = drag.startHeight + (drag.startY - y);
     const next = rubberband(raw, compact, max, vh);
-    drag.lastHeight = next;
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       el.style.height = `${next}px`;
@@ -313,7 +309,7 @@ function PoiDetailContent({
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-    setResizing(false);
+    cardRef.current?.removeAttribute("data-resizing");
     animateHeight(expanded ? expandedHeight() : compactHeight(), 0);
   };
 
@@ -322,7 +318,6 @@ function PoiDetailContent({
     const el = cardRef.current;
     if (!drag || !el) return;
     const moved = drag.moved;
-    const height = drag.lastHeight || el.getBoundingClientRect().height;
     const heightVelocity = -trackerRef.current.velocity(event.timeStamp);
     const compact = compactHeightRef.current ?? drag.startHeight;
     const max = expandedHeight();
@@ -331,12 +326,21 @@ function PoiDetailContent({
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-    setResizing(false);
+    el.removeAttribute("data-resizing");
     if (!moved) {
       el.style.removeProperty("height");
       return;
     }
 
+    // Recompute from the release position — never from a buffered value,
+    // so the card cannot jump after the finger lifts.
+    const raw = drag.startHeight + (drag.startY - event.clientY);
+    const height = rubberband(
+      raw,
+      compact,
+      max,
+      window.visualViewport?.height ?? window.innerHeight,
+    );
     el.style.height = `${height}px`;
     suppressNextTap();
     if (drag.mode === "compact") {
@@ -385,7 +389,7 @@ function PoiDetailContent({
       rafRef.current = null;
     }
     stopCardSpring();
-    setResizing(false);
+    cardRef.current?.removeAttribute("data-resizing");
     if (!el || prefersReducedMotion()) {
       onClose();
       return;
@@ -437,7 +441,6 @@ function PoiDetailContent({
       aria-label="Place details"
       data-loading={loading ? "true" : "false"}
       data-expanded={expanded ? "true" : "false"}
-      data-resizing={resizing ? "true" : "false"}
       data-closing={closing ? "true" : "false"}
     >
       {!expanded ? (

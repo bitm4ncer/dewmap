@@ -6,6 +6,7 @@ import {
   gestureDirection,
   pickSnap,
   rubberband,
+  sheetMetrics,
 } from "./useSheetGesture";
 
 describe("sheet gesture", () => {
@@ -42,7 +43,7 @@ describe("sheet gesture", () => {
     expect(canOverscroll("full", "up")).toBe(true);
     expect(canOverscroll("full", "down")).toBe(false);
     expect(canOverscroll("half", "down")).toBe(false);
-    expect(canStartDrag("peek", "down", false, 0)).toBe(true);
+    expect(canStartDrag("peek", "down", false)).toBe(true);
   });
 
   it("applies bounded rubber-band resistance", () => {
@@ -60,14 +61,22 @@ describe("sheet gesture", () => {
     expect(harder).toBeGreaterThanOrEqual(0);
   });
 
-  it("hands vertical body gestures at the top to the sheet", () => {
-    expect(canStartDrag("half", "up", true, 0)).toBe(true);
-    expect(canStartDrag("half", "up", true, 40)).toBe(false);
-    expect(canStartDrag("half", "down", true, 40)).toBe(false);
-    expect(canStartDrag("half", "down", true, 0)).toBe(true);
-    expect(canStartDrag("full", "up", true, 0)).toBe(false);
-    expect(canStartDrag("full", "down", true, 0)).toBe(true);
-    expect(canStartDrag("full", "up", false, 0)).toBe(true);
-    expect(canStartDrag("half", "up", false, 0)).toBe(true);
+  it("leaves panel-body scrolling to the native scroll view", () => {
+    expect(canStartDrag("half", "up", true)).toBe(false);
+    expect(canStartDrag("half", "down", true)).toBe(false);
+    expect(canStartDrag("full", "up", true)).toBe(false);
+    expect(canStartDrag("full", "down", true)).toBe(false);
+    expect(canStartDrag("full", "up", false)).toBe(true);
+    expect(canStartDrag("half", "up", false)).toBe(true);
+    expect(canStartDrag("peek", "down", false)).toBe(true);
+  });
+
+  it("keeps the full detent equal to the CSS viewport height", () => {
+    const m = sheetMetrics(844, 0);
+    expect(m.full).toBe(844);
+    expect(m.peek).toBe(88);
+    expect(m.modes).toBe(148);
+    expect(m.half).toBe(405);
+    expect(sheetMetrics(700, 34).peek).toBe(122);
   });
 });

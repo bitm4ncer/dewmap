@@ -338,7 +338,7 @@ function RouteCard({
       onClick={onSelect}
       data-active={active}
       className={[
-        "flex w-full flex-col gap-2 rounded-[12px] p-3 text-left transition-colors",
+        "journey-card flex w-full flex-col gap-2 rounded-[12px] p-3 text-left",
         active
           ? "bg-[color:var(--accent-soft)]"
           : "bg-[color:var(--surf-0)] hover:bg-[color:var(--surf-2)]",

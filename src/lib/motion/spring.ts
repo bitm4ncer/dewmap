@@ -30,8 +30,8 @@ export interface SpringHandle {
 
 const SUBSTEP = 1 / 240;
 const MAX_STEP = 0.064;
-const SETTLE_DISTANCE = 0.1;
-const SETTLE_VELOCITY = 2;
+const SETTLE_DISTANCE = 0.5;
+const SETTLE_VELOCITY = 4;
 
 /** One semi-implicit Euler integration step, sub-stepped for stability. */
 export function stepSpring(

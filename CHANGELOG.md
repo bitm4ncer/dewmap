@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 2026-11-19 — Touch feel and interaction polish
+
+### Changed
+
+- The bottom sheet and POI card gestures no longer touch React state:
+  the dragging/resizing flags are written as `data-*` attributes directly
+  on the element and viewport metrics are measured once per gesture, so
+  starting a drag neither re-renders the map nor interleaves DOM reads
+  with the per-frame height writes.
+- Sheet release recomputes the snap from the actual release position
+  (`changedTouches`) instead of a buffered per-move value, removing the
+  last-frame lag between finger-up and the spring start.
+- One press language across the UI: `--press-btn` (0.96) for buttons and
+  chips, `--press-card` (0.98) for large result cards, press-in at
+  `--dur-press` (90 ms). Journey/transit result cards, journey chips,
+  variant chips, basemap switch, history toggle and search rows gained
+  explicit press feedback; the map overlay badges no longer snap
+  (transform transition added).
+- Haptic tap on pane-tab switches, sheet expand/collapse and close
+  (no-op where the Vibration API is unavailable), matching the haptic
+  snap the drag gestures already fire.
+- Consistent easing: hardcoded `180ms ease` control-stack/badge
+  transitions now use the `--dur-base`/`--ease` tokens, and the desktop
+  drawer uses the shared `--ease` curve.
+- Removed dead animation logic: unused `.hud-bottom-nav*` and `.ui-fab`
+  blocks, a duplicate `touch-action` on `.poi-mini`, and the redundant
+  per-tab `:active` scale that the unified press group already covers.
+
 ## 2026-11-18 — History worldwide heritage layer
 
 ### Added

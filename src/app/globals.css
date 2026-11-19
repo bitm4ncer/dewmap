@@ -97,6 +97,9 @@ body {
   --dur-slow:  300ms;
   --dur-snap:  260ms;
   --dur-press: 90ms;
+  /* One press language: small controls at 0.96, large cards subtler. */
+  --press-btn: 0.96;
+  --press-card: 0.98;
 
   /* Topology */
   --topbar-h:     calc(56px + var(--safe-top));
@@ -338,50 +341,12 @@ body {
   height: 12px;
   border-radius: 50%;
   background: var(--ink-dim);
-  transition: transform var(--dur-base) var(--ease), background var(--dur-fast) ease;
+  transition: transform var(--dur-base) var(--ease), background var(--dur-fast) var(--ease);
   transform: translateX(0);
 }
 .led-toggle[data-on="true"] .led-pip {
   background: var(--accent-ink);
   transform: translateX(12px);
-}
-
-/* ────────────────────────────────────────────────────────────────────────
-   Mobile bottom-nav (desktop hidden — handled by side-handles)
-   ──────────────────────────────────────────────────────────────────── */
-.hud-bottom-nav {
-  position: fixed;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
-  transform: translateX(-50%);
-  z-index: 12;
-  display: none;
-  gap: 10px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  pointer-events: auto;
-}
-
-.hud-bottom-nav-btn {
-  width: 56px;
-  height: 56px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink);
-  background: var(--glass);
-  border: 0;
-  border-radius: 9999px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(18px) saturate(1.08);
-  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
-}
-.hud-bottom-nav-btn:active { transform: scale(0.96); }
-.hud-bottom-nav-btn[data-active="true"] {
-  color: var(--accent-ink);
-  background: var(--accent);
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -481,8 +446,6 @@ body {
   white-space: nowrap;
 }
 
-.hud-sheet-tab:active { transform: scale(0.97); }
-
 .hud-sheet-tab[data-active="true"],
 .hud-panel-tab[data-active="true"] {
   color: var(--accent);
@@ -578,7 +541,7 @@ body {
   border-radius: 999px;
   background: var(--ink-mute);
   opacity: 0.55;
-  transition: opacity var(--dur-fast) ease, background var(--dur-fast) ease;
+  transition: opacity var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .hud-bottom-sheet-grabber:hover::before,
 .hud-bottom-sheet-grabber:active::before { opacity: 0.95; background: var(--ink-dim); }
@@ -644,14 +607,14 @@ body {
     right: 12px;
     align-items: flex-end;
     margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
-    transition: opacity 180ms ease, margin-bottom 180ms ease;
+    transition: opacity var(--dur-base) var(--ease), margin-bottom var(--dur-base) var(--ease);
   }
   .maplibregl-ctrl-bottom-right {
     left: 12px !important;
     right: auto !important;
     align-items: flex-start;
     margin-bottom: calc(var(--hud-peek-h) + 12px) !important;
-    transition: opacity 180ms ease, margin-bottom 180ms ease;
+    transition: opacity var(--dur-base) var(--ease), margin-bottom var(--dur-base) var(--ease);
   }
   .maplibregl-ctrl-scale { display: none !important; }
 
@@ -894,10 +857,10 @@ input[type="range"].hud-slider::-moz-range-thumb {
   backdrop-filter: blur(22px) saturate(1.1);
   color: var(--ink);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-press) var(--ease);
 }
 .hud-drawer-open:hover { background: var(--surf-2); }
-.hud-drawer-open:active { transform: scale(0.96); }
+.hud-drawer-open:active { transform: scale(var(--press-btn)); }
 @media (min-width: 768px) { .hud-drawer-open { display: inline-flex; } }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -1194,7 +1157,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   height: 18px;
   border-radius: 50%;
   background: var(--ink);
-  transition: transform var(--dur-base) var(--ease), background var(--dur-fast) ease;
+  transition: transform var(--dur-base) var(--ease), background var(--dur-fast) var(--ease);
 }
 
 .hud-switch[data-on="true"] .hud-switch-thumb {
@@ -1705,27 +1668,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-input-date { max-width: 240px; }
 .ui-input:focus { box-shadow: 0 0 0 2px var(--surf-0), 0 0 0 4px var(--accent); background: var(--surf-3); }
 
-/* FAB ------------------------------------------------------------------ */
-.ui-fab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 999px;
-  background: var(--surf-2);
-  color: var(--ink);
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
-}
-.ui-fab:hover { background: var(--surf-3); }
-.ui-fab:active { transform: scale(0.96); }
-.ui-fab[data-variant="primary"] {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-.ui-fab[data-variant="primary"]:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
-
 /* Badges & status ------------------------------------------------------ */
 .ui-badge {
   display: inline-flex;
@@ -1901,7 +1843,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .poi-mini {
   position: relative;
   display: flex;
-  touch-action: none;
   flex: 1;
   min-height: 0;
   align-items: center;
@@ -2224,10 +2165,10 @@ input[type="range"].hud-slider::-moz-range-thumb {
   font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  transition: filter var(--dur-fast) var(--ease), transform var(--dur-press) var(--ease);
 }
 .poi-plan-route:hover { filter: brightness(1.06); }
-.poi-plan-route:active { transform: scale(0.99); }
+.poi-plan-route:active { transform: scale(var(--press-btn)); }
 
 /* Selected place — warm red crosshair over the map. */
 .poi-crosshair {
@@ -2523,27 +2464,53 @@ input[type="range"].hud-slider::-moz-range-thumb {
   -webkit-overflow-scrolling: touch;
 }
 
+/* One press language for every tappable control: fast colour feedback,
+   a snappy 90 ms press-in scale, and a spring-free release. */
 .hud-sheet-tab,
 .hud-icon-btn,
 .poi-action,
 .poi-mini-btn,
 .ui-seg,
 .hud-btn-primary,
-.hud-btn-ghost {
+.hud-btn-ghost,
+.journey-chip,
+.ui-chip,
+.hud-variant-chip,
+.hud-basemap-switch-btn,
+.ui-history-toggle,
+.ui-search-row {
   transition:
     background var(--dur-fast) var(--ease),
     color var(--dur-fast) var(--ease),
+    filter var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
     transform var(--dur-press) var(--ease);
 }
 
+.hud-sheet-tab:active,
 .hud-icon-btn:active,
 .poi-action:active,
 .poi-mini-btn:active,
 .ui-seg:active,
 .hud-btn-primary:active:not(:disabled),
-.hud-btn-ghost:active:not(:disabled) {
-  transform: scale(0.97);
+.hud-btn-ghost:active:not(:disabled),
+.journey-chip:active,
+.ui-chip:active:not(:disabled),
+.hud-variant-chip:active,
+.hud-basemap-switch-btn:active,
+.ui-history-toggle:active,
+.ui-search-row:active {
+  transform: scale(var(--press-btn));
 }
+
+/* Large tappable cards press more subtly so the scale never reads as a
+   rendering glitch at that size. */
+.journey-card {
+  transition:
+    background var(--dur-fast) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.journey-card:active { transform: scale(var(--press-card)); }
 
 /* Inputs keep text selection and the native caret. */
 input,
@@ -2646,7 +2613,7 @@ select {
     align-items: center;
     gap: 6px;
     pointer-events: none;
-    transition: opacity 180ms ease, bottom 180ms ease;
+    transition: opacity var(--dur-base) var(--ease), bottom var(--dur-base) var(--ease);
   }
   .map-overlay-badge {
     width: 28px;
@@ -2659,10 +2626,11 @@ select {
     color: var(--accent);
     pointer-events: auto;
     cursor: pointer;
-    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+      transform var(--dur-press) var(--ease);
   }
   .map-overlay-badge:hover { background: var(--surf-2); color: var(--ink); }
-  .map-overlay-badge:active { transform: scale(0.94); }
+  .map-overlay-badge:active { transform: scale(var(--press-btn)); }
   body:has(.hud-bottom-sheet[data-sheet-state="modes"]) .map-overlay-badges,
   body:has(.hud-bottom-sheet[data-sheet-state="half"]) .map-overlay-badges,
   body:has(.hud-bottom-sheet[data-sheet-state="full"]) .map-overlay-badges {

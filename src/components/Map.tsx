@@ -58,6 +58,7 @@ import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { bearingAlongRoute } from "@/lib/orientation";
+import { haptic } from "@/lib/haptics";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
 import { formatCoordinates } from "@/lib/map/coordinates";
@@ -1862,7 +1863,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     historyPopupRef.current = null;
   }, [activePane]);
 
-  const { sheetRef, dragging, snapTo, handleProps } = useSheetGesture({
+  const { sheetRef, snapTo, handleProps } = useSheetGesture({
     state: sheetState,
     onChange: setSheetState,
     enabled: isMobile,
@@ -1967,6 +1968,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // land on the map immediately. Full is an explicit option; peek is the
   // collapsed state reached by the close button or a downward drag.
   const selectPane = (pane: SidebarPane) => {
+    haptic("tap");
     if (pane === activePane) {
       snapTo(sheetState === "peek" ? "half" : "peek");
       return;
@@ -1975,8 +1977,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (sheetState === "peek") snapTo("half");
   };
 
-  const toggleFull = () => snapTo(sheetState === "full" ? "half" : "full");
-  const collapseToPeek = useCallback(() => snapTo("peek"), [snapTo]);
+  const toggleFull = () => {
+    haptic("tap");
+    snapTo(sheetState === "full" ? "half" : "full");
+  };
+  const collapseToPeek = useCallback(() => {
+    haptic("tap");
+    snapTo("peek");
+  }, [snapTo]);
 
   /** Opening a place card clears the sheet out of the way, then restores
    *  the previous sheet size when the card is closed. */
@@ -3876,13 +3884,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         ref={sheetRef}
         aria-label="Map panel"
         data-sheet-state={sheetState}
-        data-dragging={dragging}
         className={[
           "hud-bottom-sheet",
           "flex w-full flex-col",
           "md:absolute md:right-3 md:top-3 md:bottom-3",
           "md:left-auto md:w-[var(--panel-w)] md:max-w-[var(--panel-w)]",
-          "md:transition-transform md:duration-300 md:ease-out",
+          "md:transition-transform md:duration-300 md:ease-[cubic-bezier(0.32,0.72,0,1)]",
           sidebarOpen
             ? "md:translate-x-0"
             : "md:translate-x-[calc(100%+12px)]",
