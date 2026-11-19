@@ -198,6 +198,9 @@ describe("sheet chrome and compact date field", () => {
       "display: none",
     );
     expect(block(".hud-sheet-actions")?.body).toContain("left: var(--sp-2)");
+    expect(block(".hud-sheet-actions")?.body).toContain(
+      "justify-content: space-between",
+    );
   });
 
   it("keeps a fixed gap under the mobile sheet tabs", () => {
