@@ -1881,19 +1881,28 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // Ride the map up with the sheet: pad the camera bottom by the panel
   // height so routes, pins and fly targets stay centered in the visible
   // part when the panel moves. Full keeps the half pad — the map is
-  // covered anyway — so collapsing back re-lands exactly on half.
+  // covered anyway — so collapsing back re-lands exactly on half. The
+  // padding is animated by our own spring: easeTo does not interpolate
+  // padding reliably and jumpTo would snap state to state.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMobile) return;
     const vh = window.visualViewport?.height ?? window.innerHeight;
     const m = sheetMetrics(vh, measureSafeBottom());
-    const bottom = sheetState === "peek" ? m.peek : m.half;
-    const padding = { top: 0, right: 0, bottom, left: 0 };
-    if (!map.loaded()) {
-      map.jumpTo({ padding });
-      return;
-    }
-    map.easeTo({ padding, duration: 450 });
+    const target = sheetState === "peek" ? m.peek : m.half;
+    const from = map.getPadding().bottom;
+    if (Math.abs(target - from) < 0.5) return;
+    const spring = createSpring({
+      from,
+      to: target,
+      config: SPRING.sheetSnap,
+      onUpdate: (value) => {
+        map.setPadding({ top: 0, right: 0, bottom: value, left: 0 });
+      },
+    });
+    return () => {
+      spring.stop();
+    };
   }, [sheetState, isMobile, mapInstance]);
 
   // Panel scroll state for the sticky travel-mode bar. Written as an
