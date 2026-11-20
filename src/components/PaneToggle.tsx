@@ -5,8 +5,8 @@ interface PaneToggleProps {
   label: string;
   onToggle: () => void;
   /** Visual variant — `tab` is the large mobile sheet tab, `panel` is
-   *  the desktop panel tab. `handle` remains for legacy callers. */
-  variant: "handle" | "tab" | "panel";
+   *  the desktop panel tab. */
+  variant: "tab" | "panel";
   children: ReactNode;
 }
 
@@ -17,12 +17,7 @@ export function PaneToggle({
   variant,
   children,
 }: PaneToggleProps) {
-  const className =
-    variant === "handle"
-      ? "hud-handle"
-      : variant === "panel"
-        ? "hud-panel-tab"
-        : "hud-sheet-tab";
+  const className = variant === "panel" ? "hud-panel-tab" : "hud-sheet-tab";
   return (
     <button
       type="button"
@@ -33,7 +28,7 @@ export function PaneToggle({
       className={`${className} pointer-events-auto`}
     >
       {children}
-      {variant !== "handle" && <span className="hud-tab-label">{label}</span>}
+      <span className="hud-tab-label">{label}</span>
     </button>
   );
 }

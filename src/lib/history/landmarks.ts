@@ -490,6 +490,8 @@ interface CachedTile {
   cachedAt: number;
 }
 const tileCache = new Map<string, CachedTile>();
+/** Two hours of panning is far more than a session ever revisits. */
+const TILE_CACHE_MAX = 64;
 interface InFlightTile {
   promise: Promise<LandmarkFeature[]>;
   /** The request that started this load; aborted entries must not be reused. */
@@ -636,9 +638,6 @@ async function loadTile(
         return features;
       }),
     ]);
-    if (signal?.aborted) {
-      throw abortError();
-    }
     if (osmRes.status === "fulfilled") osmFeatures = osmRes.value;
     else if (isRateLimitError(osmRes.reason)) {
       rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
@@ -661,14 +660,23 @@ async function loadTile(
         wdRes.status === "rejected" ? wdRes.reason : undefined,
       );
     }
-    if (!signal?.aborted && answered) {
+    if (answered) {
       tileCache.set(key, {
         features: deduped,
         partial:
           osmRes.status !== "fulfilled" || wdRes.status !== "fulfilled",
         cachedAt: Date.now(),
       });
+      // The cache is per session and the caller may have panned away, so it
+      // is capped rather than left to grow with every visited tile.
+      while (tileCache.size > TILE_CACHE_MAX) {
+        const oldest = tileCache.keys().next().value;
+        if (oldest === undefined) break;
+        tileCache.delete(oldest);
+      }
     }
+    // The work is done and paid for; only now is it safe to abandon it.
+    if (signal?.aborted) throw abortError();
     return deduped;
   })();
   tileInFlight.set(key, { promise, signal });

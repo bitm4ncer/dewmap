@@ -179,6 +179,13 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     ?? visibleJourneys[0]
     ?? null;
   const detailRef = useRef<HTMLDivElement>(null);
+  // Only an explicit tap may move the panel; an automatic result swap must
+  // not yank the form out from under the fingers.
+  const scrollToDetailRef = useRef(false);
+  const selectFromUi = (id: string) => {
+    scrollToDetailRef.current = true;
+    selectJourney(id);
+  };
 
   // Whenever the selected connection is filtered out (or nothing was
   // selected yet), the fastest connection becomes the visible route on the
@@ -192,7 +199,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   }, [bestId, selectJourney, selectedId, visibleJourneys]);
 
   useEffect(() => {
-    if (!journey?.id) return;
+    if (!journey?.id || !scrollToDetailRef.current) return;
+    scrollToDetailRef.current = false;
     const el = detailRef.current;
     if (!el) return;
     const frame = requestAnimationFrame(() => {
@@ -472,8 +480,16 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     bike,
   });
   useEffect(() => {
-    if (!autoKey || autoKey === lastRunRef.current) return;
+    if (!autoKey) {
+      // Clearing a field drops the results; forget the last question so
+      // picking the same place again runs a fresh search.
+      lastRunRef.current = null;
+      return;
+    }
+    if (autoKey === lastRunRef.current) return;
     const id = window.setTimeout(() => {
+      // The token/swap triggers may have answered this exact question already.
+      if (autoKey === lastRunRef.current) return;
       lastRunRef.current = autoKey;
       void searchRef.current({ silent: true });
     }, 550);
@@ -748,7 +764,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                   type="button"
                   aria-pressed={entry.id === journey.id}
                   data-active={entry.id === journey.id}
-                  onClick={() => selectJourney(entry.id)}
+                  onClick={() => selectFromUi(entry.id)}
                   className="journey-chip"
                   title={`${departure} · ${formatDuration(transit.durationMin)}`}
                 >
@@ -1171,7 +1187,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                   journey={entry}
                   best={entry.id === bestId}
                   active={entry.id === journey?.id}
-                  onSelect={() => selectJourney(entry.id)}
+                  onSelect={() => selectFromUi(entry.id)}
                 />
               ))
             )}
@@ -1185,9 +1201,19 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         </p>
       )}
       {phase.kind === "error" && (
-        <p className="px-1 text-[12px] text-[color:var(--danger)]">
-          {phase.message}
-        </p>
+        <div className="flex items-start gap-2 px-1">
+          <p className="flex-1 text-[12px] text-[color:var(--danger)]">
+            {phase.message}
+          </p>
+          <button
+            type="button"
+            onClick={() => void search()}
+            disabled={!from || !to}
+            className="ui-badge shrink-0"
+          >
+            Try again
+          </button>
+        </div>
       )}
       {notice && phase.kind !== "error" && (
         <p className="px-1 text-[12px] text-[color:var(--warn)]">{notice}</p>

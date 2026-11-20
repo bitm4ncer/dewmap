@@ -1765,6 +1765,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const poiSheetRef = useRef<PoiSheetState>({ saved: null });
   const [poiDismissing, setPoiDismissing] = useState(false);
   const [poiResolved, setPoiResolved] = useState<PoiSelection | null>(null);
+  const [poiOpenSeq, setPoiOpenSeq] = useState(0);
   const [geoNotice, setGeoNotice] = useState<string | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
@@ -1968,18 +1969,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     return window.matchMedia("(max-width: 767px)").matches;
   });
   useEffect(() => {
-    // Track the visual viewport (mobile keyboards + URL bar) so a "full"
-    // sheet never extends under the keyboard.
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      document.documentElement.style.setProperty("--app-vh", `${vv.height}px`);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
-  }, []);
-  useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
     const sync = () => setIsMobile(mq.matches);
     sync();
@@ -2154,11 +2143,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, []);
 
-  // A new travel mode starts at the top of the panel: the length of the
-  // previous mode's list must not decide where the next one begins.
+  // A new pane or travel mode starts at the top of the panel: the length of
+  // the previous one must not decide where the next begins.
   useEffect(() => {
     panelBodyRef.current?.scrollTo({ top: 0, behavior: "auto" });
-  }, [routesMode]);
+  }, [activePane, routesMode]);
 
   // Pull the panel body against its scrolled-off top edge: the content
   // rubber-bands against a spring until the pull passes a threshold, then
@@ -2399,6 +2388,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (!options?.keepCrosshair) setCrosshair(null);
       setPoiDismissing(false);
       setPoiResolved(null);
+      setPoiOpenSeq((n) => n + 1);
       applyPoiSheet({ type: "open-poi", isMobile, sheetState });
       setPoiSelection(selection);
     },
@@ -2505,6 +2495,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
   }, []);
 
+  // Every plan invalidates the previous one: a late GPS answer from a route
+  // the user has already abandoned must not overwrite the current pin.
+  const planReqRef = useRef(0);
+
   /** A POI detail becomes the destination in the expanded route planner. */
   const planPoiRoute = useCallback(
     (poi: PoiSelection) => {
@@ -2529,6 +2523,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
       // Open the planner right away; the pin follows as soon as the start is
       // known, so a permission prompt never holds the sheet shut.
+      const req = ++planReqRef.current;
       if (activePane !== "hiking") setActivePane("hiking");
       snapTo("half");
 
@@ -2546,6 +2541,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           requestStartPoint(),
           new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
         ]);
+        if (req !== planReqRef.current) {
+          // Superseded while asking: this plan is gone, and so is its notice.
+          setGeoNotice(null);
+          return;
+        }
         setPendingPin({ dest, start: asked ?? centerStart });
       })();
     },
@@ -2771,9 +2771,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
       console.warn("[map]", e.error);
     });
-
-    if (process.env.NODE_ENV !== "production") {
-    }
 
     // MapLibre sometimes leaves stale tile-load promises behind after a
     // setStyle swap; the rejected promise tries to read `.signal` off a
@@ -4761,11 +4758,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
     if (!isMobile) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") collapseToPeek();
+      // An open place card owns Escape: one keypress, one close.
+      if (e.key === "Escape" && !poiSelection) collapseToPeek();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sidebarOpen, collapseToPeek]);
+  }, [sidebarOpen, collapseToPeek, poiSelection]);
 
   const loadSnapshot = useCallback(
     async (lockedBbox: Bbox, snapshot: Snapshot) => {
@@ -5498,6 +5496,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       </aside>
 
       <PoiDetail
+        key={poiOpenSeq}
         selection={poiSelection}
         dismissed={poiDismissing}
         onResolved={setPoiResolved}

@@ -41,7 +41,7 @@ export function clusterTileBudget(zoom: number): number {
 }
 
 const TILE_CACHE_TTL_MS = 10 * 60_000;
-const TILE_CACHE_MAX = 700;
+const TILE_CACHE_MAX = 900;
 /** Roughly 90 MB of decoded point objects; keeps a phone PWA bounded. */
 const TILE_CACHE_POINTS_MAX = 600_000;
 
@@ -434,22 +434,52 @@ interface DistrictGroup {
 const QUARTER_CLASSES = new Set<DistrictClass>(["quarter", "neighbourhood"]);
 const RURAL_CLASSES = new Set<DistrictClass>(["village", "hamlet", "town"]);
 
-function nearestDistrict(
-  districts: readonly DistrictPoint[],
+/**
+ * The same lookup, but only over the latitude band that can hold a match.
+ * A city build asks this for tens of thousands of points, and the full scan
+ * over every district is what used to freeze the map for seconds.
+ */
+interface DistrictBand {
+  items: DistrictPoint[];
+  lats: Float64Array;
+}
+
+function buildBand(districts: readonly DistrictPoint[]): DistrictBand {
+  const items = [...districts].sort((a, b) => a.lat - b.lat);
+  return { items, lats: Float64Array.from(items, (d) => d.lat) };
+}
+
+function lowerBound(lats: Float64Array, value: number): number {
+  let lo = 0;
+  let hi = lats.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (lats[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function nearestInBand(
+  band: DistrictBand,
   lon: number,
   lat: number,
   maxKm: number,
 ): { district: DistrictPoint; km: number } | null {
-  if (districts.length === 0) return null;
+  if (band.items.length === 0) return null;
   const cosLat = Math.cos((lat * Math.PI) / 180);
+  const dLat = maxKm / 111.32;
   let best: DistrictPoint | null = null;
   let bestKm = maxKm;
-  for (const district of districts) {
+  for (let i = lowerBound(band.lats, lat - dLat); i < band.items.length; i += 1) {
+    const district = band.items[i];
+    if (district.lat > lat + dLat) break;
     const dx = (district.lon - lon) * 111.32 * cosLat;
     const dy = (district.lat - lat) * 111.32;
-    const km = Math.hypot(dx, dy);
-    if (km < bestKm) {
-      bestKm = km;
+    // Skip the square root for the many candidates that cannot win.
+    const km2 = dx * dx + dy * dy;
+    if (km2 < bestKm * bestKm) {
+      bestKm = Math.sqrt(km2);
       best = district;
     }
   }
@@ -512,11 +542,15 @@ export function aggregatePoiDistricts(
     });
   };
 
+  const suburbBand = buildBand(suburbs);
+  const quarterBand = buildBand(quarters);
+  const ruralBand = buildBand(rural);
+
   for (const point of data.points) {
     if (!Number.isFinite(point.lon) || !Number.isFinite(point.lat)) continue;
-    const fine = nearestDistrict(suburbs, point.lon, point.lat, SUBURB_MAX_KM);
-    const quarter = nearestDistrict(quarters, point.lon, point.lat, QUARTER_MAX_KM);
-    const coarse = nearestDistrict(rural, point.lon, point.lat, RURAL_MAX_KM);
+    const fine = nearestInBand(suburbBand, point.lon, point.lat, SUBURB_MAX_KM);
+    const quarter = nearestInBand(quarterBand, point.lon, point.lat, QUARTER_MAX_KM);
+    const coarse = nearestInBand(ruralBand, point.lon, point.lat, RURAL_MAX_KM);
 
     // Prefer the Stadtteil, but do not drag a rural place to a suburb
     // that happens to be much farther away than a nearby village.

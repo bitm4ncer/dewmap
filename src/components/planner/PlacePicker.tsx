@@ -317,6 +317,12 @@ export function PlacePicker({
       else onAssignWork?.(r);
       setAssigning?.(null);
       setOpen(false);
+      setResults([]);
+      setError(null);
+      // The text belonged to the home/work slot, not to this field.
+      editingRef.current = false;
+      skipSearchRef.current = true;
+      setQ(selectedPlace ? selectedLabel ?? selectedPlace.name : "");
       return;
     }
     editingRef.current = false;
@@ -430,7 +436,9 @@ export function PlacePicker({
         value={q}
         onChange={(e) => {
           const value = e.target.value;
-          if (selectedPlace && !editingRef.current) {
+          // Typing for a home/work slot is not an edit of this field, so the
+          // place already in it must stay.
+          if (selectedPlace && !editingRef.current && !assigning) {
             editingRef.current = true;
             onClear?.();
           }

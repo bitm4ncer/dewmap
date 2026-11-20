@@ -109,7 +109,8 @@ export function RoutesPanel({
       if (next === "transit") useTransit.getState().requestSearch();
     } else if (next !== mode) {
       const input = readInput(mode);
-      if (input.start) writeInput(next, input);
+      // A destination that was picked first must survive the switch.
+      if (input.start || input.end || input.via.length > 0) writeInput(next, input);
     }
     onModeChange(next);
     if (next === "walk" || next === "bike") {

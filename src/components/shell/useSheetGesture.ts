@@ -276,7 +276,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
       frameRef.current = requestAnimationFrame(() => {
         const raw = drag.startHeight + (drag.startY - e.clientY);
-        const next = rubberband(raw, m.half, m.full, m.vh);
+        const next = rubberband(raw, m.peek, m.full, m.vh);
         el.style.height = `${next}px`;
       });
     },
@@ -440,7 +440,7 @@ export function useSheetGesture({ state, onChange, enabled }: Options) {
       const m = touch.metrics;
       const endY = e.changedTouches[0]?.clientY ?? touch.startY;
       const raw = touch.startHeight + (touch.startY - endY);
-      const height = rubberband(raw, m.half, m.full, m.vh);
+      const height = rubberband(raw, m.peek, m.full, m.vh);
       const heightVelocity = -touch.tracker.velocity(e.timeStamp);
       const target = nearest(m, height, heightVelocity);
       el.style.height = `${height}px`;

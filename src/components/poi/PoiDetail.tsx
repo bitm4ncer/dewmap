@@ -144,7 +144,11 @@ function PoiDetailContent({
   }, [selection, reload]);
 
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     cardRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+    };
   }, []);
 
   useEffect(() => {
@@ -278,12 +282,33 @@ function PoiDetailContent({
     }, 400);
   };
 
+  // The expand drag asks for this on every pointermove, so the two CSS
+  // lengths are measured once per layout change instead of per frame.
+  const metricsRef = useRef({ peek: 0, topbar: 0, desktop: false });
+  useEffect(() => {
+    const measure = () => {
+      metricsRef.current = {
+        peek: cssLength("--hud-peek-h"),
+        topbar: cssLength("--topbar-h"),
+        desktop: window.matchMedia("(min-width: 768px)").matches,
+      };
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, []);
+
   const expandedHeight = () => {
     const vh = window.visualViewport?.height ?? window.innerHeight;
+    const cached = metricsRef.current;
     return expandedCardHeight(vh, {
-      desktop: window.matchMedia("(min-width: 768px)").matches,
-      peek: cssLength("--hud-peek-h"),
-      topbar: cssLength("--topbar-h"),
+      desktop: cached.desktop,
+      peek: cached.peek || cssLength("--hud-peek-h"),
+      topbar: cached.topbar || cssLength("--topbar-h"),
     });
   };
 
@@ -574,7 +599,7 @@ function PoiDetailContent({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || closing) return;
       if (expanded) {
         setExpanded(false);
         animateHeight(compactHeight(), 0);

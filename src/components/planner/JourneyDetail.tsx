@@ -136,6 +136,8 @@ export function JourneyDetail({
         <button
           type="button"
           onClick={onPreview}
+          disabled={startDisabled}
+          title={startDisabled ? startHint : "Simulate this journey"}
           className="hud-btn-ghost !w-auto justify-center px-3 text-[12px] font-medium"
         >
           Preview

@@ -4,9 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ManeuverIcon, RecenterIcon, SpeakerIcon, CloseIcon } from "@/components/ui/icons";
 import { haptic } from "@/lib/haptics";
 import { useNavigation } from "@/lib/navigation/store";
-import { useHiking } from "@/lib/hiking/store";
-import { useCar } from "@/lib/planner/carStore";
-import { useTransit } from "@/lib/planner/transitStore";
 import type { RouteProgress } from "@/lib/navigation/progress";
 import type { LivePosition } from "@/lib/navigation/useNavigation";
 import {
@@ -57,17 +54,12 @@ export function NavigationOverlay({
   const setGuidance = useNavigation((s) => s.setGuidance);
 
   /**
-   * Ending navigation also takes the planned route off the map — the
-   * drawn line, alternatives and the journey selection are cleared in
-   * the planner store that owns the active route. Start/destination
-   * fields keep their values so re-planning is one tap.
+   * Ending guidance leaves the plan in the panel: the results, their line on
+   * the map and the start/destination stay, so looking around after a trip
+   * does not cost a new search. Only the guidance itself stops.
    */
   const endNavigation = () => {
-    const mode = plan?.mode;
     stop();
-    if (mode === "car") useCar.getState().setRoutes([]);
-    else if (mode === "transit") useTransit.getState().setJourneys([]);
-    else useHiking.getState().setCandidates([]);
   };
   const [now, setNow] = useState(() => Date.now());
   const [recalculating, setRecalculating] = useState(false);

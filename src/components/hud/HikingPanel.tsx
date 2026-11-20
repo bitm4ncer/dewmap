@@ -256,9 +256,11 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
   }, [selectedCand]);
 
   // The summary card is the way in: one tap commits the route and hands the
-  // map over to turn-by-turn guidance.
+  // map over to turn-by-turn guidance. While a new route is still computing
+  // the old one must not be started by accident.
+  const canStart = Boolean(navPlan) && phase.kind === "routed";
   const startRoute = () => {
-    if (!navPlan) return;
+    if (!navPlan || !canStart) return;
     haptic("tap");
     finalizeRoute();
     startNavigation(navPlan);
@@ -268,7 +270,7 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
     <div className="flex flex-col gap-3">
       {/* Route summary card */}
       <HudPanel label="Route">
-        {navPlan ? (
+        {navPlan && canStart ? (
           <button
             type="button"
             onClick={startRoute}

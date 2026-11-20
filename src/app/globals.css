@@ -672,6 +672,16 @@ body {
 
 .geo-notice span { flex: 1; }
 
+/* The notice floats above the sheet, so it has to clear whichever detent is
+   open instead of sitting on the panel's content. */
+body:has(.hud-bottom-sheet[data-sheet-state="half"]) .geo-notice {
+  bottom: calc(48dvh + 12px);
+}
+body:has(.hud-bottom-sheet[data-sheet-state="full"]) .geo-notice {
+  top: calc(var(--topbar-h) + 12px);
+  bottom: auto;
+}
+
 @media (min-width: 768px) {
   .geo-notice {
     left: auto;
@@ -1995,7 +2005,6 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 /* Sheet content safe area --------------------------------------------- */
-.ui-safe-bottom { padding-bottom: var(--safe-bottom); }
 
 @media (min-width: 768px) {
   .ui-topbar { padding: calc(var(--safe-top) + 12px) 14px 0; }

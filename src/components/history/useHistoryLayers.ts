@@ -221,8 +221,10 @@ export function useHistoryLayers(
       // leaving the panel stuck at 0. Update as soon as that source settles.
       if (event.sourceId === siteSource && event.isSourceLoaded) updateCount();
     };
-    // A render-triggered, throttled update also catches the frame after the
-    // first tiles become visible, even when no further `idle` is emitted.
+    // A throttled update also catches the frame after the first tiles become
+    // visible, even when no further `idle` is emitted. It is driven by source
+    // data and viewport changes, never by `render`: a per-frame feature query
+    // would run for as long as the pane is open.
     let countTimer: number | null = null;
     const scheduleCount = () => {
       if (countTimer !== null) return;
@@ -233,7 +235,7 @@ export function useHistoryLayers(
     };
     map.on("idle", updateCount);
     map.on("sourcedata", onSourceData);
-    map.on("render", scheduleCount);
+    map.on("moveend", scheduleCount);
     map.on("mouseenter", hoverLayers, onEnter);
     map.on("mouseleave", hoverLayers, onLeave);
     map.on("style.load", onStyleLoad);
@@ -348,7 +350,7 @@ export function useHistoryLayers(
       unregisterTaps();
       map.off("idle", updateCount);
       map.off("sourcedata", onSourceData);
-      map.off("render", scheduleCount);
+      map.off("moveend", scheduleCount);
       map.off("mouseenter", hoverLayers, onEnter);
       map.off("mouseleave", hoverLayers, onLeave);
       map.off("style.load", onStyleLoad);
