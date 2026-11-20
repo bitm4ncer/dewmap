@@ -4,10 +4,14 @@ import type { OverpassElement } from "../overpass";
 import {
   BUS_STOP_LAYER_ID,
   bboxContains,
+  busPrefetchCells,
   busStopPoiSelection,
   ensureBusLayers,
+  estimateBusNetworkBytes,
   isEmptyBusNetwork,
+  orderBusPrefetchCells,
   parseBusNetwork,
+  selectBusCacheEvictions,
   snapBboxToGrid,
 } from "./busRoutes";
 
@@ -275,5 +279,72 @@ describe("bus cache coverage", () => {
     expect(bboxContains(cached, [51.35, 6.75, 51.4, 6.8])).toBe(false);
     expect(bboxContains(cached, [51.0, 6.75, 51.2, 6.8])).toBe(false);
     expect(bboxContains(cached, [51.22, 6.6, 51.24, 6.8])).toBe(false);
+  });
+});
+
+describe("bus prefetch buffer", () => {
+  it("estimates transfer size from routes and stops", () => {
+    const network = parseBusNetwork([
+      { type: "way", id: 1, geometry: [{ lat: 1, lon: 1 }, { lat: 2, lon: 2 }] },
+      { type: "way", id: 2, geometry: [{ lat: 2, lon: 2 }, { lat: 3, lon: 3 }] },
+      { type: "node", id: 10, lat: 1, lon: 1 },
+      { type: "node", id: 11, lat: 2, lon: 2 },
+      { type: "node", id: 12, lat: 3, lon: 3 },
+    ]);
+    expect(estimateBusNetworkBytes(network)).toBe(2 * 520 + 3 * 120);
+  });
+
+  it("rings a cell with exact neighbours", () => {
+    const cells = busPrefetchCells([0, 0, 1, 1], 1);
+    expect(cells).toHaveLength(8);
+    expect(cells).toContainEqual([-1, -1, 0, 0]);
+    expect(cells).toContainEqual([-1, 0, 0, 1]);
+    expect(cells).toContainEqual([0, 1, 1, 2]);
+    expect(cells).toContainEqual([1, 0, 2, 1]);
+    expect(cells).not.toContainEqual([0, 0, 1, 1]);
+  });
+
+  it("adds rings without duplicate cells", () => {
+    const cells = busPrefetchCells([0, 0, 1, 1], 2);
+    expect(cells).toHaveLength(8 + 16);
+    expect(new Set(cells.map((cell) => cell.join(","))).size).toBe(cells.length);
+  });
+
+  it("prioritises the direction of travel", () => {
+    const cell: [number, number, number, number] = [0, 0, 1, 1];
+    const ordered = orderBusPrefetchCells(
+      cell,
+      busPrefetchCells(cell, 1),
+      [1, 0],
+    );
+    expect(ordered[0]).toEqual([0, 1, 1, 2]);
+    const west = ordered.findIndex((cell) => cell.join(",") === "0,-1,1,0");
+    expect(west).toBeGreaterThan(0);
+  });
+
+  it("keeps ring order when there is no direction", () => {
+    const cell: [number, number, number, number] = [0, 0, 1, 1];
+    const cells = busPrefetchCells(cell, 1);
+    expect(orderBusPrefetchCells(cell, cells, [0, 0])).toEqual(cells);
+  });
+
+  it("evicts the farthest cells first and never the viewport cell", () => {
+    const center: [number, number, number, number] = [0, 0, 1, 1];
+    const entries = [
+      { key: "near", bbox: [-0.1, -0.1, 0.9, 0.9] as [number, number, number, number], size: 10 },
+      { key: "mid", bbox: [1, 1, 2, 2] as [number, number, number, number], size: 10 },
+      { key: "far", bbox: [5, 5, 6, 6] as [number, number, number, number], size: 10 },
+    ];
+    expect(selectBusCacheEvictions(entries, center, 25)).toEqual(["far"]);
+    expect(selectBusCacheEvictions(entries, center, 15)).toEqual(["far", "mid"]);
+  });
+
+  it("keeps the current viewport cell even when it is alone over budget", () => {
+    const center: [number, number, number, number] = [0, 0, 1, 1];
+    const entries = [
+      { key: "current", bbox: [0, 0, 1, 1] as [number, number, number, number], size: 60 },
+      { key: "far", bbox: [5, 5, 6, 6] as [number, number, number, number], size: 10 },
+    ];
+    expect(selectBusCacheEvictions(entries, center, 48, center)).toEqual(["far"]);
   });
 });

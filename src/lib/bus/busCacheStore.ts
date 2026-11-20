@@ -67,7 +67,45 @@ export async function readBusCache(): Promise<StoredBusNetwork[]> {
   });
 }
 
-/** Replace the persisted set. Never throws. */
+/** Persist one cell without rewriting the rest of the cache. */
+export async function saveBusCacheEntry(entry: StoredBusNetwork): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(entry);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/** Remove evicted cells from persistence. Never throws. */
+export async function deleteBusCacheEntries(
+  keys: readonly string[],
+): Promise<void> {
+  if (keys.length === 0) return;
+  const db = await openDb();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+      for (const key of keys) store.delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/** Replace the persisted set. Used for the one-time legacy migration. */
 export async function writeBusCache(entries: StoredBusNetwork[]): Promise<void> {
   const db = await openDb();
   if (!db) return;

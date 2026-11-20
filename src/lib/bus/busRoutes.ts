@@ -2,7 +2,13 @@ import type { Map as MLMap } from "maplibre-gl";
 import type { PoiSelection } from "../poi/types";
 import { THEME } from "../theme";
 import { overpassQuery, type OverpassElement, type OverpassRelation } from "../overpass";
-import { readBusCache, writeBusCache, type StoredBusNetwork } from "./busCacheStore";
+import {
+  deleteBusCacheEntries,
+  readBusCache,
+  saveBusCacheEntry,
+  writeBusCache,
+  type StoredBusNetwork,
+} from "./busCacheStore";
 
 /**
  * Bus overlay: dedicated bus routes (OSM `route=bus` relations) as thin
@@ -30,9 +36,12 @@ export const BUS_MIN_ZOOM = 12;
 const CACHE_TTL_MS = 30 * 60_000;
 /** An empty response is often a mirror hiccup — retry it soon. */
 const EMPTY_CACHE_TTL_MS = 45_000;
-const CACHE_MAX = 32;
+const CACHE_MAX = 64;
 /** ~5.5 km grid: one fetched cell covers several pans at city zoom. */
 const GRID_STEP = 0.05;
+/** Rough transfer size of one cell in the prefetch budget. */
+const BUS_ROUTE_BYTES = 520;
+const BUS_STOP_BYTES = 120;
 /** Legacy localStorage key, migrated into IndexedDB on first load. */
 const LEGACY_PERSIST_KEY = "kugelmaps.bus-cache.v1";
 const PERSIST_MAX_ENTRIES = 6;
@@ -86,7 +95,13 @@ export function busStopPoiSelection(
 
 const cache = new Map<
   string,
-  { at: number; bbox: [number, number, number, number]; data: BusNetwork }
+  {
+    at: number;
+    bbox: [number, number, number, number];
+    data: BusNetwork;
+    /** Estimated transfer size, used by the moving prefetch buffer. */
+    size: number;
+  }
 >();
 
 export type Bbox = [number, number, number, number];
@@ -122,6 +137,110 @@ export function isEmptyBusNetwork(network: BusNetwork): boolean {
   return network.routes.features.length === 0 && network.stops.features.length === 0;
 }
 
+/** Rough transfer size, used only for the prefetch budget. */
+export function estimateBusNetworkBytes(network: BusNetwork): number {
+  return (
+    network.routes.features.length * BUS_ROUTE_BYTES +
+    network.stops.features.length * BUS_STOP_BYTES
+  );
+}
+
+function bboxCenter(bbox: Bbox): [number, number] {
+  return [(bbox[1] + bbox[3]) / 2, (bbox[0] + bbox[2]) / 2];
+}
+
+/** Squared distance between cell centres, lon scaled by latitude. */
+function cellDistanceSq(a: Bbox, b: Bbox): number {
+  const [aLon, aLat] = bboxCenter(a);
+  const [bLon, bLat] = bboxCenter(b);
+  const scale = Math.cos(((aLat + bLat) / 2) * (Math.PI / 180)) || 1;
+  const dx = (aLon - bLon) * scale;
+  const dy = aLat - bLat;
+  return dx * dx + dy * dy;
+}
+
+/**
+ * Cells that ring a fetched cell, nearest ring first. Neighbours are the
+ * same size as the current cell, so they tile the map without gaps.
+ */
+export function busPrefetchCells(cell: Bbox, rings: number): Bbox[] {
+  const [s, w, n, e] = cell;
+  const height = n - s;
+  const width = e - w;
+  if (height <= 0 || width <= 0 || rings < 1) return [];
+  const cells: Bbox[] = [];
+  for (let ring = 1; ring <= rings; ring += 1) {
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        cells.push([
+          s + dy * height,
+          w + dx * width,
+          n + dy * height,
+          e + dx * width,
+        ]);
+      }
+    }
+  }
+  return cells;
+}
+
+/**
+ * Order prefetched cells so the direction of travel wins ties and can
+ * pull one ring ahead; a stationary map keeps the plain ring order.
+ */
+export function orderBusPrefetchCells(
+  cell: Bbox,
+  cells: readonly Bbox[],
+  direction: readonly [number, number],
+): Bbox[] {
+  const [dirLon, dirLat] = direction;
+  if (
+    !Number.isFinite(dirLon) ||
+    !Number.isFinite(dirLat) ||
+    (dirLon === 0 && dirLat === 0)
+  ) {
+    return [...cells];
+  }
+  const length = Math.hypot(dirLon, dirLat) || 1;
+  const ux = dirLon / length;
+  const uy = dirLat / length;
+  const [originLon, originLat] = bboxCenter(cell);
+  const scale = Math.cos((originLat * Math.PI) / 180) || 1;
+  const score = (bbox: Bbox) => {
+    const [lon, lat] = bboxCenter(bbox);
+    const ox = (lon - originLon) * scale;
+    const oy = lat - originLat;
+    return Math.hypot(ox, oy) - 1.5 * (ox * ux + oy * uy);
+  };
+  return [...cells].sort((a, b) => score(a) - score(b));
+}
+
+/**
+ * Keys to evict from a cache that exceeds `maxBytes`, farthest from the
+ * current viewport first. The cell covering `keep` is never evicted.
+ */
+export function selectBusCacheEvictions(
+  entries: readonly { key: string; bbox: Bbox; size: number }[],
+  center: Bbox,
+  maxBytes: number,
+  keep?: Bbox,
+): string[] {
+  let remaining = entries.reduce((sum, entry) => sum + entry.size, 0);
+  if (remaining <= maxBytes) return [];
+  const candidates = entries
+    .filter((entry) => !(keep && bboxContains(entry.bbox, keep)))
+    .map((entry) => ({ ...entry, distance: cellDistanceSq(entry.bbox, center) }))
+    .sort((a, b) => b.distance - a.distance);
+  const evicted: string[] = [];
+  for (const entry of candidates) {
+    if (remaining <= maxBytes) break;
+    evicted.push(entry.key);
+    remaining -= entry.size;
+  }
+  return evicted;
+}
+
 function isUsableEntry(entry: unknown): entry is { at: number; bbox: Bbox; data: BusNetwork } {
   const e = entry as { at?: unknown; bbox?: unknown; data?: BusNetwork } | null;
   return (
@@ -143,7 +262,12 @@ function acceptPersisted(entry: {
   const key = busBboxKey(entry.bbox);
   const existing = cache.get(key);
   if (!existing || existing.at < entry.at) {
-    cache.set(key, { at: entry.at, bbox: entry.bbox, data: entry.data });
+    cache.set(key, {
+      at: entry.at,
+      bbox: entry.bbox,
+      data: entry.data,
+      size: estimateBusNetworkBytes(entry.data),
+    });
   }
 }
 
@@ -212,8 +336,52 @@ function snapshotEntries(): StoredBusNetwork[] {
     }));
 }
 
-function persistCache(): void {
-  void writeBusCache(snapshotEntries());
+/** Persist one freshly fetched cell without rewriting the whole cache. */
+function persistEntry(bbox: Bbox, at: number, network: BusNetwork): void {
+  void saveBusCacheEntry({
+    key: busBboxKey(bbox),
+    at,
+    bbox,
+    data: network,
+  });
+}
+
+/** Estimated bytes currently held by the in-memory cache. */
+export function busCacheBytes(): number {
+  let total = 0;
+  for (const entry of cache.values()) total += entry.size;
+  return total;
+}
+
+/** True when the cache already covers this viewport (including TTL). */
+export function hasBusCacheCoverage(bbox: Bbox): boolean {
+  return findCached(bbox, Date.now()) !== null;
+}
+
+/**
+ * Drop the cells farthest from the current viewport until the budget is
+ * met. Runs after each background prefetch, so the buffer moves with the
+ * user instead of growing without bound.
+ */
+export function pruneBusCache(center: Bbox, maxBytes: number, keep?: Bbox): void {
+  // Expired cells do not count against the budget; drop them first.
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    const ttl = isEmptyBusNetwork(entry.data) ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS;
+    if (now - entry.at > ttl) {
+      cache.delete(key);
+      void deleteBusCacheEntries([key]);
+    }
+  }
+  const entries = [...cache.entries()].map(([key, entry]) => ({
+    key,
+    bbox: entry.bbox,
+    size: entry.size,
+  }));
+  const evicted = selectBusCacheEvictions(entries, center, maxBytes, keep);
+  if (evicted.length === 0) return;
+  for (const key of evicted) cache.delete(key);
+  void deleteBusCacheEntries(evicted);
 }
 
 /** Newest cached network whose coverage contains the requested bbox. */
@@ -346,18 +514,18 @@ export async function fetchBusNetwork(
   // `findCached` tests the real viewport against the fetched coverage.
   const fetchBbox = snapBboxToGrid(bbox);
   const [s, w, n, e] = fetchBbox;
-  // `way(r.busRoutes)(bbox) + out geom(bbox)` sends each member way once
-  // and clipped to the viewport. The previous `relation … out geom`
-  // returned every member of every intersecting relation with full
-  // geometry — 45 MB for a small Zurich bbox, 73 MB for Düsseldorf.
+  // `way(r.busRoutes)(bbox) + out skel geom(bbox)` sends each member way
+  // once, clipped to the viewport, with IDs + geometry but without tags
+  // we do not render. That halves a city cell (9.1 MB → 4.6 MB for the
+  // Düsseldorf test box) and makes the background buffer affordable.
   const query = `
     [out:json][timeout:25];
     relation[route=bus](${s},${w},${n},${e})->.busRoutes;
     way(r.busRoutes)(${s},${w},${n},${e});
-    out geom(${s},${w},${n},${e});
+    out skel geom(${s},${w},${n},${e});
     node[highway=bus_stop](${s},${w},${n},${e});
     node[public_transport=stop_position][bus=yes](${s},${w},${n},${e});
-    out;
+    out body;
   `;
   // Client timeout stays above the server's 25 s so a slow-but-valid
   // answer (a city cell is several MB) is not discarded mid-flight.
@@ -367,14 +535,23 @@ export async function fetchBusNetwork(
   });
   const network = parseBusNetwork(data.elements);
   const key = busBboxKey(fetchBbox);
-  cache.set(key, { at: Date.now(), bbox: fetchBbox, data: network });
+  const at = Date.now();
+  cache.set(key, {
+    at,
+    bbox: fetchBbox,
+    data: network,
+    size: estimateBusNetworkBytes(network),
+  });
   if (cache.size > CACHE_MAX) {
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
-    if (oldest) cache.delete(oldest[0]);
+    if (oldest) {
+      cache.delete(oldest[0]);
+      void deleteBusCacheEntries([oldest[0]]);
+    }
   }
   // Empty cells are retried soon; persisting them would only poison a
   // warm start with data that is about to expire.
-  if (!isEmptyBusNetwork(network)) persistCache();
+  if (!isEmptyBusNetwork(network)) persistEntry(fetchBbox, at, network);
   return network;
 }
 
