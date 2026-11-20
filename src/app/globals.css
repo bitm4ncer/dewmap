@@ -17,13 +17,20 @@
   --color-info: var(--info);
 }
 
-html,
-body {
+html {
   font-family: var(--font-sans), system-ui, sans-serif;
-  background: var(--bg);
+  /* iOS reserves the home-indicator strip below the layout viewport and paints
+     it with the propagated page background. Keep that background on the sheet
+     surface (--surf-0), not on --bg, so the strip reads as part of the panel
+     instead of a darker bar under it. The map surface is --surf-0 as well. */
+  background: var(--surf-0);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg);
 }
 
 body {
