@@ -627,8 +627,8 @@ export const BASEMAPS: Basemap[] = [
   // ── DACH · official ────────────────────────────────────────────────
   {
     id: "de-basemap-col",
-    label: "basemap.de · Farbe",
-    subtitle: "BKG · amtliche Webkarte · z19",
+    label: "basemap.de · Color",
+    subtitle: "BKG · official web map · z19",
     kind: "raster",
     category: "photo",
     presentation: "drawn",
@@ -644,8 +644,8 @@ export const BASEMAPS: Basemap[] = [
   },
   {
     id: "de-basemap-gry",
-    label: "basemap.de · Grau",
-    subtitle: "BKG · amtliche Webkarte · z19",
+    label: "basemap.de · Grey",
+    subtitle: "BKG · official web map · z19",
     kind: "raster",
     category: "photo",
     presentation: "drawn",
@@ -662,7 +662,7 @@ export const BASEMAPS: Basemap[] = [
   {
     id: "de-topplusopen",
     label: "TopPlusOpen",
-    subtitle: "BKG · DE + Nachbarn · z17",
+    subtitle: "BKG · DE + neighbours · z17",
     kind: "raster",
     category: "photo",
     presentation: "drawn",
@@ -679,8 +679,8 @@ export const BASEMAPS: Basemap[] = [
   },
   {
     id: "de-by-webkarte",
-    label: "Bayern",
-    subtitle: "Bayerische Webkarte · z19",
+    label: "Bavaria",
+    subtitle: "Bavarian web map · z19",
     kind: "raster",
     category: "photo",
     presentation: "drawn",
@@ -696,8 +696,8 @@ export const BASEMAPS: Basemap[] = [
   },
   {
     id: "de-by-amtl",
-    label: "Bayern · amtlich",
-    subtitle: "Topo mit Flurstücken · z19",
+    label: "Bavaria · official",
+    subtitle: "Topo with parcels · z19",
     kind: "raster",
     category: "photo",
     presentation: "drawn",
@@ -714,7 +714,7 @@ export const BASEMAPS: Basemap[] = [
   {
     id: "at-geoland",
     label: "basemap.at",
-    subtitle: "amtliche Österreich-Karte · z18",
+    subtitle: "Official Austria map · z18",
     kind: "raster",
     category: "photo",
     presentation: "drawn",
@@ -730,8 +730,8 @@ export const BASEMAPS: Basemap[] = [
   },
   {
     id: "at-grau",
-    label: "basemap.at · Grau",
-    subtitle: "amtlich · overlay-freundlich",
+    label: "basemap.at · Grey",
+    subtitle: "Official · overlay-friendly",
     kind: "raster",
     category: "photo",
     presentation: "drawn",

@@ -5770,7 +5770,7 @@ function ViewPanel({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-                Stationen
+                Stations
               </span>
               {RAIL_STATION_LABELS.map(({ kind, label }) => (
                 <span

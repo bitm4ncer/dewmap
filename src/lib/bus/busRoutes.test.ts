@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { OverpassElement } from "../overpass";
-import { bboxContains, parseBusNetwork, snapBboxToGrid } from "./busRoutes";
+import {
+  bboxContains,
+  isEmptyBusNetwork,
+  parseBusNetwork,
+  snapBboxToGrid,
+} from "./busRoutes";
 
 function relation(
   id: number,
@@ -95,12 +100,89 @@ describe("parseBusNetwork", () => {
     expect(network.routes.features).toHaveLength(0);
   });
 
-  it("ignores non-relation, non-node elements", () => {
+  it("turns top-level way elements into LineStrings", () => {
     const network = parseBusNetwork([
-      { type: "way", id: 5, geometry: [{ lat: 1, lon: 1 }, { lat: 2, lon: 2 }] },
+      {
+        type: "way",
+        id: 5,
+        geometry: [{ lat: 1, lon: 1 }, { lat: 2, lon: 2 }],
+      },
+    ]);
+    expect(network.routes.features).toHaveLength(1);
+    expect(network.routes.features[0].properties.wayId).toBe(5);
+    expect(network.routes.features[0].geometry.coordinates).toEqual([
+      [1, 1],
+      [2, 2],
+    ]);
+    expect(network.stops.features).toHaveLength(0);
+  });
+
+  it("deduplicates a way that appears both top-level and as a relation member", () => {
+    const geometry = [
+      { lat: 51.2, lon: 6.8 },
+      { lat: 51.21, lon: 6.81 },
+    ];
+    const network = parseBusNetwork([
+      { type: "way", id: 11, geometry },
+      relation(1, "703", [{ ref: 11, geometry }]),
+    ]);
+    expect(network.routes.features).toHaveLength(1);
+  });
+
+  it("drops null and invalid points instead of throwing", () => {
+    const geometry = [
+      { lat: 51.2, lon: 6.8 },
+      null,
+      { lat: Number.NaN, lon: 6.805 },
+      { lat: 51.21, lon: 6.81 },
+    ] as unknown as { lat: number; lon: number }[];
+    const network = parseBusNetwork([relation(1, "703", [{ ref: 11, geometry }])]);
+    expect(network.routes.features).toHaveLength(1);
+    expect(network.routes.features[0].geometry.coordinates).toEqual([
+      [6.8, 51.2],
+      [6.81, 51.21],
+    ]);
+  });
+
+  it("skips ways with fewer than two valid points", () => {
+    const allNull = [null, null] as unknown as { lat: number; lon: number }[];
+    const onePoint = [
+      { lat: 51.2, lon: 6.8 },
+      null,
+    ] as unknown as { lat: number; lon: number }[];
+    const network = parseBusNetwork([
+      relation(1, "703", [
+        { ref: 11, geometry: allNull },
+        { ref: 12, geometry: onePoint },
+      ]),
+      {
+        type: "way",
+        id: 13,
+        geometry: [null, { lat: 51.2, lon: 6.8 }] as unknown as {
+          lat: number;
+          lon: number;
+        }[],
+      },
     ]);
     expect(network.routes.features).toHaveLength(0);
-    expect(network.stops.features).toHaveLength(0);
+  });
+});
+
+describe("isEmptyBusNetwork", () => {
+  it("is true only when routes and stops are both empty", () => {
+    expect(
+      isEmptyBusNetwork({
+        routes: { type: "FeatureCollection", features: [] },
+        stops: { type: "FeatureCollection", features: [] },
+      }),
+    ).toBe(true);
+    expect(
+      isEmptyBusNetwork(
+        parseBusNetwork([
+          { type: "way", id: 1, geometry: [{ lat: 1, lon: 1 }, { lat: 2, lon: 2 }] },
+        ]),
+      ),
+    ).toBe(false);
   });
 });
 

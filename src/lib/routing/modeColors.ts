@@ -40,13 +40,13 @@ export const RAIL_KIND_COLORS: Record<RailKind, string> = {
 
 /** Line colours are grouped: urban rail vs. heavy rail. */
 export const RAIL_LINE_GROUPS = [
-  { id: "urban", label: "Tram & U-Bahn", color: MODE_COLORS.TRAM },
-  { id: "heavy", label: "Regio, S-Bahn & Fernverkehr", color: MODE_COLORS.REGIONAL_RAIL },
+  { id: "urban", label: "Tram & subway", color: MODE_COLORS.TRAM },
+  { id: "heavy", label: "Regional, S-Bahn & long-distance", color: MODE_COLORS.REGIONAL_RAIL },
 ] as const;
 
 /** Station marker colours stay per mode so combined stations read clearly. */
 export const RAIL_STATION_LABELS: { kind: "rail" | "subway" | "tram"; label: string }[] = [
-  { kind: "rail", label: "Bahn" },
-  { kind: "subway", label: "U-Bahn" },
+  { kind: "rail", label: "Rail" },
+  { kind: "subway", label: "Subway" },
   { kind: "tram", label: "Tram" },
 ];
