@@ -1,6 +1,7 @@
 import type { Map as MLMap } from "maplibre-gl";
 import { THEME } from "../theme";
 import { overpassQuery, type OverpassElement, type OverpassRelation } from "../overpass";
+import { readBusCache, writeBusCache, type StoredBusNetwork } from "./busCacheStore";
 
 /**
  * Bus overlay: dedicated bus routes (OSM `route=bus` relations) as thin
@@ -30,13 +31,16 @@ const EMPTY_CACHE_TTL_MS = 45_000;
 const CACHE_MAX = 32;
 /** ~5.5 km grid: the same cell survives typical pans and pinch zooms. */
 const GRID_STEP = 0.05;
-const PERSIST_KEY = "kugelmaps.bus-cache.v1";
-const PERSIST_MAX_ENTRIES = 4;
-const PERSIST_MAX_BYTES = 1_800_000;
+/** Legacy localStorage key, migrated into IndexedDB on first load. */
+const LEGACY_PERSIST_KEY = "kugelmaps.bus-cache.v1";
+const PERSIST_MAX_ENTRIES = 6;
 
 export interface BusRouteFeature extends GeoJSON.Feature<GeoJSON.LineString> {
   properties: {
-    routeId: number;
+    /** Present for ways taken from a relation (kept for old payloads). */
+    routeId?: number;
+    /** The OSM way id; used to deduplicate shared streets. */
+    wayId: number;
     ref?: string;
     route?: string;
     colour?: string;
@@ -88,49 +92,102 @@ function bboxKey(bbox: Bbox): string {
   return bbox.map((n) => n.toFixed(4)).join(",");
 }
 
-function isEmptyNetwork(network: BusNetwork): boolean {
+export function isEmptyBusNetwork(network: BusNetwork): boolean {
   return network.routes.features.length === 0 && network.stops.features.length === 0;
 }
 
-let persistedLoaded = false;
+function isUsableEntry(entry: unknown): entry is { at: number; bbox: Bbox; data: BusNetwork } {
+  const e = entry as { at?: unknown; bbox?: unknown; data?: BusNetwork } | null;
+  return (
+    typeof e?.at === "number" &&
+    Array.isArray(e.bbox) &&
+    e.bbox.length === 4 &&
+    Array.isArray(e.data?.routes?.features) &&
+    Array.isArray(e.data?.stops?.features)
+  );
+}
 
-function loadPersistedCache(): void {
-  if (persistedLoaded) return;
-  persistedLoaded = true;
-  if (typeof window === "undefined") return;
+/** Fold one persisted entry into the in-memory cache. */
+function acceptPersisted(entry: {
+  at: number;
+  bbox: Bbox;
+  data: BusNetwork;
+}): void {
+  if (!isUsableEntry(entry)) return;
+  const key = bboxKey(entry.bbox);
+  const existing = cache.get(key);
+  if (!existing || existing.at < entry.at) {
+    cache.set(key, { at: entry.at, bbox: entry.bbox, data: entry.data });
+  }
+}
+
+function readLegacyCache(): StoredBusNetwork[] {
+  if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(PERSIST_KEY);
-    if (!raw) return;
+    const raw = window.localStorage.getItem(LEGACY_PERSIST_KEY);
+    if (!raw) return [];
     const parsed = JSON.parse(raw) as {
       v?: number;
       entries?: { at: number; bbox: Bbox; data: BusNetwork }[];
     };
-    if (parsed?.v !== 1 || !Array.isArray(parsed.entries)) return;
-    for (const entry of parsed.entries) {
-      if (!entry?.bbox || !entry.data?.routes || !entry.data?.stops) continue;
-      cache.set(bboxKey(entry.bbox), entry);
-    }
+    if (parsed?.v !== 1 || !Array.isArray(parsed.entries)) return [];
+    return parsed.entries.filter(isUsableEntry).map((entry) => ({
+      key: bboxKey(entry.bbox),
+      at: entry.at,
+      bbox: entry.bbox,
+      data: entry.data,
+    }));
   } catch {
-    // Storage disabled or malformed — the in-memory cache still works.
+    return [];
   }
 }
 
-function persistCache(): void {
-  if (typeof window === "undefined") return;
-  try {
-    const entries = [...cache.values()]
-      .sort((a, b) => b.at - a.at)
-      .slice(0, PERSIST_MAX_ENTRIES);
-    let payload = JSON.stringify({ v: 1, entries });
-    while (payload.length > PERSIST_MAX_BYTES && entries.length > 1) {
-      entries.pop();
-      payload = JSON.stringify({ v: 1, entries });
+let persistedLoad: Promise<void> | null = null;
+
+/**
+ * Load the persisted cells once per session. The first fetch awaits this
+ * so a warm start can answer without the network; later calls reuse the
+ * settled promise.
+ */
+function loadPersistedCache(): Promise<void> {
+  if (persistedLoad) return persistedLoad;
+  persistedLoad = (async () => {
+    try {
+      for (const entry of await readBusCache()) acceptPersisted(entry);
+
+      // One-way migration from the old localStorage format.
+      const legacy = readLegacyCache();
+      if (legacy.length > 0) {
+        for (const entry of legacy) acceptPersisted(entry);
+        await writeBusCache(snapshotEntries());
+        try {
+          window.localStorage.removeItem(LEGACY_PERSIST_KEY);
+        } catch {
+          // Storage disabled: the IndexedDB copy is already written.
+        }
+      }
+    } catch {
+      // Storage disabled or blocked: the session cache still works.
     }
-    if (payload.length > PERSIST_MAX_BYTES) return;
-    window.localStorage.setItem(PERSIST_KEY, payload);
-  } catch {
-    // Quota or privacy mode: silently keep the session cache.
-  }
+  })();
+  return persistedLoad;
+}
+
+function snapshotEntries(): StoredBusNetwork[] {
+  return [...cache.values()]
+    .filter((entry) => !isEmptyBusNetwork(entry.data))
+    .sort((a, b) => b.at - a.at)
+    .slice(0, PERSIST_MAX_ENTRIES)
+    .map((entry) => ({
+      key: bboxKey(entry.bbox),
+      at: entry.at,
+      bbox: entry.bbox,
+      data: entry.data,
+    }));
+}
+
+function persistCache(): void {
+  void writeBusCache(snapshotEntries());
 }
 
 /** Newest cached network whose coverage contains the requested bbox. */
@@ -138,7 +195,7 @@ function findCached(bbox: Bbox, now: number): BusNetwork | null {
   const wanted = snapBboxToGrid(bbox);
   let best: { at: number; data: BusNetwork } | null = null;
   for (const entry of cache.values()) {
-    const ttl = isEmptyNetwork(entry.data) ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS;
+    const ttl = isEmptyBusNetwork(entry.data) ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS;
     if (now - entry.at > ttl) continue;
     if (!bboxContains(entry.bbox, wanted)) continue;
     if (!best || entry.at > best.at) best = entry;
@@ -146,11 +203,43 @@ function findCached(bbox: Bbox, now: number): BusNetwork | null {
   return best?.data ?? null;
 }
 
+type GeometryPoint = { lat: number; lon: number };
+
 /**
- * Turn an Overpass `out geom` response into deduplicated route
- * LineStrings plus stop points. The same way often belongs to several
- * bus relations (shared streets); drawing each copy again only adds
- * overdraw, so ways are deduplicated by their member ref.
+ * Convert Overpass geometry to GeoJSON coordinates.
+ *
+ * `out geom` inserts `null` for points it cannot resolve (deleted nodes,
+ * incomplete member ways). Dropping those points keeps every usable
+ * segment instead of aborting the whole response, and the bounds check
+ * guards against corrupt payloads.
+ */
+function toLineCoordinates(
+  geometry: readonly (GeometryPoint | null | undefined)[],
+): [number, number][] {
+  const coordinates: [number, number][] = [];
+  for (const point of geometry) {
+    if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon)) {
+      continue;
+    }
+    if (point.lat < -90 || point.lat > 90 || point.lon < -180 || point.lon > 180) {
+      continue;
+    }
+    const last = coordinates[coordinates.length - 1];
+    if (last && last[0] === point.lon && last[1] === point.lat) continue;
+    coordinates.push([point.lon, point.lat]);
+  }
+  return coordinates;
+}
+
+/**
+ * Turn an Overpass response into deduplicated route LineStrings plus stop
+ * points.
+ *
+ * The current query returns clipped ways from `way(r.busRoutes)(bbox)`
+ * (one element per way) and stop nodes. Relation members are still
+ * understood so payloads cached by older builds keep working. The same
+ * street often belongs to several lines; drawing each copy again only
+ * adds overdraw, so ways are deduplicated by their OSM way id.
  */
 export function parseBusNetwork(
   elements: readonly OverpassElement[],
@@ -158,6 +247,22 @@ export function parseBusNetwork(
   const seenWays = new Set<number>();
   const routeFeatures: BusRouteFeature[] = [];
   const stopFeatures: BusStopFeature[] = [];
+
+  const pushWay = (
+    wayId: number,
+    geometry: readonly (GeometryPoint | null | undefined)[],
+    properties: Omit<BusRouteFeature["properties"], "wayId">,
+  ) => {
+    if (seenWays.has(wayId)) return;
+    const coordinates = toLineCoordinates(geometry);
+    if (coordinates.length < 2) return;
+    seenWays.add(wayId);
+    routeFeatures.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates },
+      properties: { wayId, ...properties },
+    });
+  };
 
   for (const el of elements) {
     if (el.type === "node") {
@@ -172,30 +277,24 @@ export function parseBusNetwork(
       });
       continue;
     }
+    if (el.type === "way") {
+      if (el.geometry) pushWay(el.id, el.geometry, {});
+      continue;
+    }
     if (el.type !== "relation") continue;
     const relation = el as OverpassRelation;
     const ref = relation.tags?.ref;
     const route = relation.tags?.route;
     const colour = relation.tags?.colour;
+    const properties = {
+      routeId: relation.id,
+      ...(ref ? { ref } : {}),
+      ...(route ? { route } : {}),
+      ...(colour ? { colour } : {}),
+    };
     for (const member of relation.members ?? []) {
-      if (member.type !== "way" || !member.geometry || member.geometry.length < 2) {
-        continue;
-      }
-      if (seenWays.has(member.ref)) continue;
-      seenWays.add(member.ref);
-      routeFeatures.push({
-        type: "Feature",
-        geometry: {
-          type: "LineString",
-          coordinates: member.geometry.map((g) => [g.lon, g.lat]),
-        },
-        properties: {
-          routeId: relation.id,
-          ...(ref ? { ref } : {}),
-          ...(route ? { route } : {}),
-          ...(colour ? { colour } : {}),
-        },
-      });
+      if (member.type !== "way" || !member.geometry) continue;
+      pushWay(member.ref, member.geometry, properties);
     }
   }
 
@@ -211,7 +310,7 @@ export async function fetchBusNetwork(
   signal?: AbortSignal,
   force = false,
 ): Promise<BusNetwork> {
-  loadPersistedCache();
+  await loadPersistedCache();
   const now = Date.now();
   if (!force) {
     const cached = findCached(bbox, now);
@@ -220,17 +319,25 @@ export async function fetchBusNetwork(
 
   const fetchBbox = snapBboxToGrid(bbox);
   const [s, w, n, e] = fetchBbox;
-  // One request: route relations carry their geometry, stops are nodes.
+  // `way(r.busRoutes)(bbox) + out geom(bbox)` sends each member way once
+  // and clipped to the viewport. The previous `relation … out geom`
+  // returned every member of every intersecting relation with full
+  // geometry — 45 MB for a small Zurich bbox, 73 MB for Düsseldorf.
   const query = `
-    [out:json][timeout:25];
-    (
-      relation[route=bus](${s},${w},${n},${e});
-      node[highway=bus_stop](${s},${w},${n},${e});
-      node[public_transport=stop_position][bus=yes](${s},${w},${n},${e});
-    );
-    out geom;
+    [out:json][timeout:20];
+    relation[route=bus](${s},${w},${n},${e})->.busRoutes;
+    way(r.busRoutes)(${s},${w},${n},${e});
+    out geom(${s},${w},${n},${e});
+    node[highway=bus_stop](${s},${w},${n},${e});
+    node[public_transport=stop_position][bus=yes](${s},${w},${n},${e});
+    out;
   `;
-  const data = await overpassQuery(query, signal);
+  // Client timeout stays above the server's 20 s so a slow-but-valid
+  // answer is not discarded mid-flight.
+  const data = await overpassQuery(query, signal, {
+    timeoutMs: 25_000,
+    rejectEmpty: true,
+  });
   const network = parseBusNetwork(data.elements);
   const key = bboxKey(fetchBbox);
   cache.set(key, { at: Date.now(), bbox: fetchBbox, data: network });
@@ -238,7 +345,9 @@ export async function fetchBusNetwork(
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
     if (oldest) cache.delete(oldest[0]);
   }
-  persistCache();
+  // Empty cells are retried soon; persisting them would only poison a
+  // warm start with data that is about to expire.
+  if (!isEmptyBusNetwork(network)) persistCache();
   return network;
 }
 

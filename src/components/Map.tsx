@@ -107,6 +107,7 @@ import {
   BUS_STOP_LAYER_ID,
   ensureBusLayers,
   fetchBusNetwork,
+  isEmptyBusNetwork,
   removeBusLayers,
   snapBboxToGrid,
   type BusNetwork,
@@ -3252,6 +3253,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let inFlightKey: string | null = null;
     /** Last successful payload so layers can be restored without network. */
     let lastNetwork: BusNetwork | null = null;
+    let lastNetworkAt = 0;
+    /**
+     * An empty answer is retried after this long instead of being
+     * treated as the final truth for the viewport. Real rural cells
+     * simply refetch once a minute; a degraded mirror recovers.
+     */
+    const EMPTY_RETRY_MS = 60_000;
 
     // `isStyleLoaded()` waits for every basemap tile, so on a slow or
     // blocked basemap the overlay could never appear. Layer bookkeeping
@@ -3331,10 +3339,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       fetchBusNetwork(bbox, ctrl.signal)
         .then((network) => {
           if (cancelled || ctrl.signal.aborted) return;
-          loadedKey = key;
+          const empty = isEmptyBusNetwork(network);
           lastNetwork = network;
+          lastNetworkAt = Date.now();
           retryCount = 0;
           applyNetwork(network);
+          if (empty) {
+            // Do not pin the cell: a false empty from a degraded mirror
+            // must be retried even if the user never moves the map.
+            scheduleRetry(EMPTY_RETRY_MS);
+          } else {
+            loadedKey = key;
+          }
         })
         .catch((error) => {
           if ((error as Error).name === "AbortError") return;
@@ -3373,15 +3389,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("style.load", onStyle);
     map.on("moveend", onMoveEnd);
 
-    // Safety net: a style swap, a dropped layer or a failed fetch must
-    // not leave the map without bus lines. Reassert from memory first,
-    // refetch when nothing usable is on the map yet.
+    // Safety net: a style swap, a dropped layer, a failed fetch or a
+    // false-empty mirror answer must not leave the map without bus
+    // lines. Reassert from memory first, refetch when nothing usable is
+    // on the map yet.
     const watchdog = window.setInterval(() => {
       if (cancelled || !styleReady()) return;
       if (map.getZoom() < BUS_MIN_ZOOM) return;
-      if (map.getLayer(BUS_LAYER_ID)) return;
       if (lastNetwork && lastNetwork.routes.features.length > 0) {
-        applyNetwork(lastNetwork);
+        if (!map.getLayer(BUS_LAYER_ID)) applyNetwork(lastNetwork);
+        return;
+      }
+      if (lastNetworkAt > 0 && Date.now() - lastNetworkAt < EMPTY_RETRY_MS) {
         return;
       }
       if (inFlightKey === null && retryTimer === null) refresh();

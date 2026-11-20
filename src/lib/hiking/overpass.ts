@@ -18,7 +18,8 @@ export async function fetchGreenPolygons(
     );
     out geom;
   `;
-  const data = await overpassQuery(q, signal);
+  // The query asks the server for 30 s; the client must outlast it.
+  const data = await overpassQuery(q, signal, { timeoutMs: 35_000 });
   const polygons: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
   for (const el of data.elements) {
     if (el.type !== "way" || !el.geometry || el.geometry.length < 3) continue;

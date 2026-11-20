@@ -109,7 +109,7 @@ describe("parseBusNetwork", () => {
       },
     ]);
     expect(network.routes.features).toHaveLength(1);
-    expect(network.routes.features[0].properties.wayId).toBe(5);
+    expect(network.routes.features[0].properties?.wayId).toBe(5);
     expect(network.routes.features[0].geometry.coordinates).toEqual([
       [1, 1],
       [2, 2],
