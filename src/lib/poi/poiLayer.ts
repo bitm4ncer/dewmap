@@ -551,6 +551,18 @@ export const POI_CLUSTER_MAX_ZOOM = POI_MIN_ZOOM;
 /** Stop building at this zoom — clusters hand over to detail dots. */
 export const POI_CLUSTER_BUILD_MAX_ZOOM = POI_CLUSTER_MAX_ZOOM;
 
+/**
+ * A bold-ish font that exists in the active basemap's glyph set.
+ * CARTO serves Open Sans Bold but not Noto Sans Bold; Protomaps serves
+ * Noto Sans Medium but not Bold; OpenFreeMap serves Noto Sans Bold.
+ */
+function clusterCountFont(map: MLMap): string[] {
+  const glyphs = map.getStyle()?.glyphs ?? "";
+  if (glyphs.includes("cartocdn")) return ["Open Sans Bold", "Noto Sans Regular"];
+  if (glyphs.includes("protomaps")) return ["Noto Sans Medium", "Noto Sans Regular"];
+  return ["Noto Sans Bold", "Noto Sans Regular"];
+}
+
 export function ensurePoiClusterLayers(map: MLMap) {
   if (!map.getSource(POI_CLUSTER_DATA_SOURCE_ID)) {
     map.addSource(POI_CLUSTER_DATA_SOURCE_ID, {
@@ -597,9 +609,13 @@ export function ensurePoiClusterLayers(map: MLMap) {
       filter: ["has", "point_count"],
       layout: {
         "text-field": ["get", "point_count_abbreviated"],
-        "text-size": 11.5,
-        // Regular exists in every basemap glyph set the app ships with.
-        "text-font": ["Noto Sans Regular"],
+        "text-size": 12,
+        "text-font": clusterCountFont(map),
+        // Centre the digits in the circle; the font box carries
+        // descender space, which otherwise pushes them slightly high.
+        "text-anchor": "center",
+        "text-justify": "center",
+        "text-offset": [0, 0.08],
         // Larger clusters win placement, so counts never stack up in
         // dense districts (the whole point of the overview).
         "text-padding": 2,
