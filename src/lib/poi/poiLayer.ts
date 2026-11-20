@@ -18,8 +18,7 @@ export const POI_MIN_ZOOM = 14;
 /** Dots carry every place between clusters and icons (no collision). */
 export const POI_DOT_LAYER_ID = "poi-mini-dots";
 export const POI_ICON_MIN_ZOOM = 16.5;
-export const POI_DOT_MAX_ZOOM = POI_ICON_MIN_ZOOM;
-export const POI_LABEL_MIN_ZOOM = 17;
+export const POI_LABEL_MIN_ZOOM = 15;
 export const POI_TILEJSON_URL = "https://tiles.openfreemap.org/planet";
 export const POI_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · &copy; OpenStreetMap contributors';
@@ -299,9 +298,10 @@ export function ensurePoiLayers(map: MLMap) {
 
   ensureIcons(map);
 
-  // Zoom 15 → 16.5: every counted place appears as a small dot, so the
-  // cluster numbers match what the map shows. Icons start once there is
-  // enough room to place them without hiding most of them.
+  // Dots exist at every zoom from 14 on: they are the stable base
+  // marker (and keep places visible when an icon is culled). Icons sit
+  // on top from 16.5, labels join early at 15 so names grow with the
+  // zoom instead of appearing suddenly.
   if (!map.getLayer(POI_DOT_LAYER_ID)) {
     map.addLayer(
       {
@@ -310,7 +310,6 @@ export function ensurePoiLayers(map: MLMap) {
         source: POI_SOURCE_ID,
         "source-layer": "poi",
         minzoom: POI_MIN_ZOOM,
-        maxzoom: POI_DOT_MAX_ZOOM,
         filter: categoryFilter,
         paint: {
           "circle-radius": [
@@ -388,12 +387,14 @@ export function ensurePoiLayers(map: MLMap) {
             "interpolate",
             ["linear"],
             ["zoom"],
-            16,
-            10,
-            18,
-            11.5,
-            20,
+            15,
+            9.5,
+            17,
+            11,
+            19,
             12.5,
+            21,
+            13,
           ],
           "text-max-width": 8,
           "text-offset": [0, 1.35],
