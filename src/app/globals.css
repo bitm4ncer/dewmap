@@ -1693,6 +1693,9 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .ui-input-action:hover { background: var(--surf-3); color: var(--ink); }
 .ui-input-action[data-active="true"] { color: var(--accent); background: var(--accent-soft); }
+/* Home/work icon buttons: accent when a place is stored, muted when empty. */
+.ui-input-action[data-set="true"] { color: var(--accent); }
+.ui-input-action[data-set="false"] { color: var(--ink-mute); }
 .ui-input-action:disabled { opacity: .4; cursor: not-allowed; }
 .ui-history-toggle {
   display: inline-flex;

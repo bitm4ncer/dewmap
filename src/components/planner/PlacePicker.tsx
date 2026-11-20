@@ -338,6 +338,9 @@ export function PlacePicker({
   }
 
   function locate() {
+    // Home/work must come from a typed address, never a GPS fix — the
+    // current position says nothing about where home is.
+    if (assigning) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setError("Location is not available in this browser.");
       return;
@@ -449,8 +452,8 @@ export function PlacePicker({
             choose(activeOption);
           }
         }}
-        placeholder={placeholder}
-        aria-label={placeholder}
+        placeholder={assigning ? `Type an address for ${assigning}` : placeholder}
+        aria-label={assigning ? `Address for ${assigning}` : placeholder}
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={showDropdown}
@@ -471,7 +474,7 @@ export function PlacePicker({
             …
           </span>
         )}
-        {!selectedPlace && (
+        {!selectedPlace && !assigning && (
           <button
             type="button"
             onClick={locate}
@@ -508,13 +511,18 @@ export function PlacePicker({
       </div>
       </div>
 
-      {(onAssignHome || onAssignWork || savedPlaces.length > 0) && (
+      {(onAssignHome
+        || onAssignWork
+        || savedPlaces.length > 0
+        || recents.length > 0
+        || (selectedPlace && (onToggleFavorite || onToggleSaved))) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {onAssignHome && (
             <button
               type="button"
               data-active={assigning === "home" || undefined}
-              className="ui-chip max-w-[160px]"
+              data-set={Boolean(home)}
+              className="ui-input-action"
               onPointerDown={() => {
                 if (home) startLongPress(() => onAssignHome(null));
               }}
@@ -527,23 +535,20 @@ export function PlacePicker({
                 if (home) choose(home);
                 else setAssigning?.(assigning === "home" ? null : "home");
               }}
+              aria-label={home ? "Route home · hold to clear" : "Set home address"}
               title={home
-                ? "Tap to route home · hold to clear"
-                : "Tap, then pick a place to save as home"}
+                ? `Home: ${home.name} · tap to route · hold to clear`
+                : "Set home — then type an address"}
             >
-              <HomeIcon size={13} className="shrink-0" />
-              <span className="truncate">
-                {assigning === "home"
-                  ? "Pick a place…"
-                  : (home?.name ?? "Home")}
-              </span>
+              <HomeIcon size={15} />
             </button>
           )}
           {onAssignWork && (
             <button
               type="button"
               data-active={assigning === "work" || undefined}
-              className="ui-chip max-w-[160px]"
+              data-set={Boolean(work)}
+              className="ui-input-action"
               onPointerDown={() => {
                 if (work) startLongPress(() => onAssignWork(null));
               }}
@@ -556,16 +561,28 @@ export function PlacePicker({
                 if (work) choose(work);
                 else setAssigning?.(assigning === "work" ? null : "work");
               }}
+              aria-label={work ? "Route to work · hold to clear" : "Set work address"}
               title={work
-                ? "Tap to route to work · hold to clear"
-                : "Tap, then pick a place to save as work"}
+                ? `Work: ${work.name} · tap to route · hold to clear`
+                : "Set work — then type an address"}
             >
-              <WorkIcon size={13} className="shrink-0" />
-              <span className="truncate">
-                {assigning === "work"
-                  ? "Pick a place…"
-                  : (work?.name ?? "Work")}
-              </span>
+              <WorkIcon size={15} />
+            </button>
+          )}
+          {recents.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((open) => !open)}
+              aria-expanded={historyOpen}
+              className="ui-history-toggle"
+            >
+              <ClockIcon size={13} />
+              <span>History</span>
+              <span className="ui-history-count">{recents.length}</span>
+              <ChevronDownIcon
+                size={13}
+                className={historyOpen ? "rotate-180 transition-transform" : "transition-transform"}
+              />
             </button>
           )}
           {savedPlaces.map((place) => (
@@ -588,62 +605,38 @@ export function PlacePicker({
               <span className="truncate">{place.name}</span>
             </button>
           ))}
+          {(selectedPlace && (onToggleFavorite || onToggleSaved)) && (
+            <button
+              type="button"
+              onClick={() => {
+                haptic("tap");
+                toggleStar();
+              }}
+              aria-pressed={starActive}
+              aria-label={starActive ? "Remove saved place" : "Save place"}
+              title={starActive ? "Remove saved place" : "Save place"}
+              className="ui-input-action ml-auto"
+              data-active={starActive}
+            >
+              <StarIcon size={15} filled={starActive} />
+            </button>
+          )}
         </div>
       )}
 
-      {(recents.length > 0 || (selectedPlace && (onToggleFavorite || onToggleSaved))) && (
-        <div className="mt-1">
-          <div className="flex items-center justify-between gap-2">
-            {recents.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setHistoryOpen((open) => !open)}
-                aria-expanded={historyOpen}
-                className="ui-history-toggle"
-              >
-                <ClockIcon size={13} />
-                <span>History</span>
-                <span className="ui-history-count">{recents.length}</span>
-                <ChevronDownIcon
-                  size={13}
-                  className={historyOpen ? "rotate-180 transition-transform" : "transition-transform"}
-                />
-              </button>
-            ) : (
-              <span />
-            )}
-            {(selectedPlace && (onToggleFavorite || onToggleSaved)) && (
-              <button
-                type="button"
-                onClick={() => {
-                  haptic("tap");
-                  toggleStar();
-                }}
-                aria-pressed={starActive}
-                aria-label={starActive ? "Remove saved place" : "Save place"}
-                title={starActive ? "Remove saved place" : "Save place"}
-                className="ui-input-action"
-                data-active={starActive}
-              >
-                <StarIcon size={15} filled={starActive} />
-              </button>
-            )}
-          </div>
-          {historyOpen && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {recents.map((place) => (
-                <button
-                  key={`${place.id ?? place.name}-${place.lat}-${place.lon}`}
-                  type="button"
-                  onClick={() => choose(place)}
-                  title={`${place.name}${place.city ? `, ${place.city}` : ""}`}
-                  className="ui-chip max-w-[150px] truncate"
-                >
-                  {place.name}
-                </button>
-              ))}
-            </div>
-          )}
+      {historyOpen && recents.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {recents.map((place) => (
+            <button
+              key={`${place.id ?? place.name}-${place.lat}-${place.lon}`}
+              type="button"
+              onClick={() => choose(place)}
+              title={`${place.name}${place.city ? `, ${place.city}` : ""}`}
+              className="ui-chip max-w-[150px] truncate"
+            >
+              {place.name}
+            </button>
+          ))}
         </div>
       )}
 
