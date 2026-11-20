@@ -281,3 +281,72 @@ export async function fetchPoiClusterPoints(
   }
   return { type: "FeatureCollection", features };
 }
+
+// ── Single-level district aggregation ────────────────────────────────
+/**
+ * Cell size for the one cluster level per zoom. Bigger cells when
+ * zoomed far out, district-sized (~2.5 km) around z12. There is no
+ * second hierarchy: every place belongs to exactly one cell and every
+ * non-empty cell becomes exactly one marker.
+ */
+export function districtCellDeg(zoom: number): number {
+  if (zoom < 11) return 0.06;
+  if (zoom < 12) return 0.04;
+  return 0.025;
+}
+
+/**
+ * Group POIs into square geographic cells. Cells with two or more
+ * places become one counted marker at the mean position; single places
+ * pass through unchanged (and render as an individual dot).
+ */
+export function aggregatePoiDistricts(
+  data: GeoJSON.FeatureCollection<GeoJSON.Point>,
+  cellDeg: number,
+): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  const cells = new Map<
+    string,
+    {
+      sumLon: number;
+      sumLat: number;
+      count: number;
+      first: GeoJSON.Feature<GeoJSON.Point>;
+    }
+  >();
+
+  for (const feature of data.features) {
+    if (feature.geometry?.type !== "Point") continue;
+    const [lon, lat] = feature.geometry.coordinates as [number, number];
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const key = `${Math.floor(lon / cellDeg)}:${Math.floor(lat / cellDeg)}`;
+    const cell = cells.get(key);
+    if (cell) {
+      cell.sumLon += lon;
+      cell.sumLat += lat;
+      cell.count += 1;
+    } else {
+      cells.set(key, { sumLon: lon, sumLat: lat, count: 1, first: feature });
+    }
+  }
+
+  const out: GeoJSON.Feature<GeoJSON.Point>[] = [];
+  for (const cell of cells.values()) {
+    if (cell.count === 1) {
+      // Keep the original place so tapping it opens the right card.
+      out.push(cell.first);
+      continue;
+    }
+    out.push({
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [cell.sumLon / cell.count, cell.sumLat / cell.count],
+      },
+      properties: {
+        point_count: cell.count,
+        cell_deg: cellDeg,
+      },
+    });
+  }
+  return { type: "FeatureCollection", features: out };
+}

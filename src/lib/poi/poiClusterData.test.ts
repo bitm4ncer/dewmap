@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  aggregatePoiDistricts,
+  districtCellDeg,
   MAX_CLUSTER_TILES,
   lonLatToTile,
   tileRangeForBbox,
@@ -60,5 +62,49 @@ describe("tileRangeForBbox", () => {
   it("is a single tile for a tiny bbox", () => {
     const range = tileRangeForBbox([51.2298, 6.8118, 51.2299, 6.8119], 14);
     expect(range.count).toBe(1);
+  });
+});
+
+describe("district aggregation", () => {
+  const point = (lon: number, lat: number, name = ""): GeoJSON.Feature<GeoJSON.Point> => ({
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [lon, lat] },
+    properties: { name },
+  });
+
+  it("groups nearby places into exactly one counted marker", () => {
+    const data: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+      type: "FeatureCollection",
+      features: [point(6.78, 51.23), point(6.781, 51.231), point(6.782, 51.232)],
+    };
+    const out = aggregatePoiDistricts(data, 0.025);
+    expect(out.features).toHaveLength(1);
+    expect(out.features[0].properties?.point_count).toBe(3);
+    expect(out.features[0].properties?.cell_deg).toBe(0.025);
+  });
+
+  it("keeps single places as individual dots with their properties", () => {
+    const data: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+      type: "FeatureCollection",
+      features: [point(6.78, 51.23, "Cafe"), point(6.9, 51.4, "Park")],
+    };
+    const out = aggregatePoiDistricts(data, 0.025);
+    expect(out.features).toHaveLength(2);
+    for (const feature of out.features) {
+      expect(feature.properties?.point_count).toBeUndefined();
+    }
+    expect(out.features.map((f) => f.properties?.name)).toContain("Cafe");
+  });
+
+  it("never nests: a cell is a single feature at any zoom", () => {
+    const data: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+      type: "FeatureCollection",
+      features: Array.from({ length: 20 }, (_, i) =>
+        point(6.78 + i * 0.0001, 51.23 + i * 0.0001),
+      ),
+    };
+    const out = aggregatePoiDistricts(data, districtCellDeg(12));
+    expect(out.features).toHaveLength(1);
+    expect(out.features[0].properties?.point_count).toBe(20);
   });
 });

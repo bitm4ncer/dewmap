@@ -73,7 +73,9 @@ import {
   type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
 import {
+  aggregatePoiDistricts,
   clusterTileBudget,
+  districtCellDeg,
   fetchPoiClusterPoints,
 } from "@/lib/poi/poiClusterData";
 import { useHiking } from "@/lib/hiking/store";
@@ -3297,12 +3299,16 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         // for the last one (a z10 viewport needs hundreds of tiles).
         onPartial: (data) => {
           if (cancelled || ctrl.signal.aborted) return;
-          source.setData?.(data);
+          source.setData?.(
+            aggregatePoiDistricts(data, districtCellDeg(zoom)),
+          );
         },
       })
         .then((data) => {
           if (cancelled || ctrl.signal.aborted) return;
-          source.setData?.(data);
+          source.setData?.(
+            aggregatePoiDistricts(data, districtCellDeg(zoom)),
+          );
         })
         .catch((error) => {
           if ((error as Error).name === "AbortError") return;
@@ -3395,25 +3401,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // Cluster taps either zoom into the cluster or open an unclustered
     // place. The pipeline already fired haptic + ripple.
     const onClusterTap = (feature: MapGeoJSONFeature) => {
-      const clusterId = feature.properties?.cluster_id;
+      const count = Number(feature.properties?.point_count);
       const coords = (feature.geometry as GeoJSON.Point | undefined)?.coordinates as
         | [number, number]
         | undefined;
-      if (typeof clusterId === "number" && coords) {
-        const source = map.getSource(POI_CLUSTER_DATA_SOURCE_ID) as
-          | { getClusterExpansionZoom?: (id: number) => Promise<number> }
-          | undefined;
-        source?.getClusterExpansionZoom?.(clusterId)
-          .then((zoom) => {
-            map.easeTo({
-              center: coords,
-              zoom: Math.max(Math.min(zoom + 0.25, 17), POI_MIN_ZOOM + 0.2),
-              duration: prefersReducedMotion() ? 0 : 550,
-            });
-          })
-          .catch(() => {
-            /* cluster vanished while tapping */
-          });
+      if (Number.isFinite(count) && count >= 2 && coords) {
+        // One level only: zoom until the district cell fits the screen,
+        // which always lands in the individual-dot range.
+        const cellDeg =
+          Number(feature.properties?.cell_deg) || districtCellDeg(map.getZoom());
+        const width = map.getCanvas().width;
+        const fit = Math.log2((0.65 * width * 360) / (512 * cellDeg));
+        map.easeTo({
+          center: coords,
+          zoom: Math.min(17, Math.max(POI_MIN_ZOOM + 0.4, fit)),
+          duration: prefersReducedMotion() ? 0 : 550,
+        });
         return;
       }
       openPlace(feature);

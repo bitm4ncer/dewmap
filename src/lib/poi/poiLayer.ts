@@ -567,10 +567,10 @@ export function ensurePoiClusterLayers(map: MLMap) {
   if (!map.getSource(POI_CLUSTER_DATA_SOURCE_ID)) {
     map.addSource(POI_CLUSTER_DATA_SOURCE_ID, {
       type: "geojson",
+      // Pre-aggregated district cells (see aggregatePoiDistricts):
+      // deliberately no supercluster hierarchy, so each district is
+      // exactly one counted marker.
       data: { type: "FeatureCollection", features: [] },
-      cluster: true,
-      clusterRadius: 36,
-      clusterMaxZoom: POI_CLUSTER_MAX_ZOOM,
     });
   }
 
@@ -608,7 +608,7 @@ export function ensurePoiClusterLayers(map: MLMap) {
       maxzoom: POI_CLUSTER_MAX_ZOOM,
       filter: ["has", "point_count"],
       layout: {
-        "text-field": ["get", "point_count_abbreviated"],
+        "text-field": ["get", "point_count"],
         "text-size": 12,
         "text-font": clusterCountFont(map),
         // Centre the digits in the circle; the font box carries
