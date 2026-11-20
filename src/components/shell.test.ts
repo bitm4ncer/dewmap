@@ -94,15 +94,13 @@ describe("shell", () => {
     expect(map).not.toContain("<RailsPanel");
   });
 
-  it("keeps the search action in the location card", () => {
+  it("searches transit without a submit button", () => {
     const panel = readFileSync(
       new URL("./planner/TransitPanel.tsx", import.meta.url),
       "utf8",
     );
-    const find = panel.indexOf("Find connections");
-    const when = panel.indexOf('"ui-kicker">When');
-    expect(find).toBeGreaterThan(-1);
-    expect(find).toBeLessThan(when);
+    expect(panel).not.toContain("Find connections");
+    expect(panel).toContain("transitSearchKey");
   });
 
   it("gives every travel mode an icon", () => {

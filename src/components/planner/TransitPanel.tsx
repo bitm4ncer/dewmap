@@ -18,7 +18,7 @@ import { JourneyCard } from "./JourneyCard";
 import { JourneyDetail } from "./JourneyDetail";
 import { useNavigation } from "@/lib/navigation/store";
 import { haptic } from "@/lib/haptics";
-import { ChevronDownIcon, RouteIcon, SwapIcon } from "@/components/ui/icons";
+import { ChevronDownIcon, SwapIcon } from "@/components/ui/icons";
 import { formatDuration, planRoutes, isAbortError } from "@/lib/routing";
 import {
   bestJourneyId,
@@ -33,6 +33,7 @@ import {
   type JourneySort,
 } from "@/lib/planner/transitFormat";
 import { prefersReducedMotion } from "@/lib/motion";
+import { transitSearchKey } from "@/lib/planner/autoSearchKey";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -143,6 +144,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
 
   const startNavigation = useNavigation((s) => s.start);
   const abortRef = useRef<AbortController | null>(null);
+  const lastRunRef = useRef<string | null>(null);
   const lastFitRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
   const shareTimerRef = useRef<number | null>(null);
@@ -268,6 +270,18 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         return;
       }
 
+      lastRunRef.current = transitSearchKey({
+        from,
+        to,
+        via: selectedVia,
+        when: effectiveWhen,
+        arriveBy,
+        maxTransfers,
+        maxWalkMin,
+        modes,
+        accessible,
+        bike,
+      });
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
@@ -442,6 +456,30 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     searchRef.current = search;
   }, [search]);
 
+  // Search by itself once both ends are set: the planner should feel like a
+  // live form, not a form plus a submit button. Debounced so typing or
+  // dragging a pin does not fire a request per keystroke.
+  const autoKey = transitSearchKey({
+    from,
+    to,
+    via: selectedVia,
+    when,
+    arriveBy,
+    maxTransfers,
+    maxWalkMin,
+    modes,
+    accessible,
+    bike,
+  });
+  useEffect(() => {
+    if (!autoKey || autoKey === lastRunRef.current) return;
+    const id = window.setTimeout(() => {
+      lastRunRef.current = autoKey;
+      void searchRef.current({ silent: true });
+    }, 550);
+    return () => window.clearTimeout(id);
+  }, [autoKey]);
+
   // Another travel mode handed over a ready-to-run transit search.
   const lastSearchToken = useRef(0);
   useEffect(() => {
@@ -599,6 +637,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           <div className="transit-place-row">
             <div className="transit-place-fields">
               <PlacePicker
+                missing={!from}
                 placeholder="From station or address"
                 kind="transit"
                 cityFilter={cityFilter}
@@ -631,6 +670,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                 }}
               />
               <PlacePicker
+                missing={!to}
                 placeholder="To station or address"
                 kind="transit"
                 cityFilter={cityFilter}
@@ -663,17 +703,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                 }}
               />
             </div>
-            <button
-              type="button"
-              onClick={() => void search()}
-              disabled={phase.kind === "routing" || !from || !to}
-              className="transit-find-btn"
-              aria-label="Find connections"
-              title="Find connections"
-            >
-              <RouteIcon size={17} />
-              <span>{phase.kind === "routing" ? "Searching…" : "Find connections"}</span>
-            </button>
           </div>
 
           {mapPick && (
@@ -1150,6 +1179,11 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         </HudPanel>
       )}
 
+      {phase.kind === "routing" && journeys.length === 0 && (
+        <p className="px-1 text-[12px] text-[color:var(--ink-dim)]">
+          Searching connections…
+        </p>
+      )}
       {phase.kind === "error" && (
         <p className="px-1 text-[12px] text-[color:var(--danger)]">
           {phase.message}

@@ -73,13 +73,17 @@ describe("station input form", () => {
     expect(src).toContain('className="ui-input-action"');
   });
 
-  it("puts a tall, slim find action beside the origin and destination", () => {
+  it("searches on its own once origin and destination are set", () => {
     expect(src).toContain("transit-place-row");
     expect(src).toContain("transit-place-fields");
-    expect(src).toContain('className="transit-find-btn"');
-    expect(src.indexOf("transit-place-row")).toBeLessThan(
-      src.indexOf("Find connections"),
-    );
-    expect(src).not.toContain('className="hud-btn-primary w-full"');
+    // No submit button: the form searches as soon as the question is complete.
+    expect(src).not.toContain("Find connections");
+    expect(src).not.toContain("transit-find-btn");
+    expect(src).toContain("transitSearchKey");
+  });
+
+  it("marks origin and destination while they are still empty", () => {
+    expect(src).toContain("missing={!from}");
+    expect(src).toContain("missing={!to}");
   });
 });

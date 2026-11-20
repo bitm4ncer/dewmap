@@ -29,6 +29,8 @@ export interface PickedPlace {
 
 interface Props {
   placeholder: string;
+  /** Marks the field as still requiring input (empty required field). */
+  missing?: boolean;
   kind: "address" | "stop" | "transit";
   onPick: (place: PickedPlace) => void;
   /** Called when the user edits/clears a previously selected place. */
@@ -77,6 +79,7 @@ function normalize(value: string): string {
 
 export function PlacePicker({
   placeholder,
+  missing,
   kind,
   onPick,
   onClear,
@@ -415,7 +418,11 @@ export function PlacePicker({
     (q ? 1 : 0);
 
   return (
-    <div ref={boxRef} className="relative min-w-0 flex-1">
+    <div
+      ref={boxRef}
+      className="place-picker relative min-w-0 flex-1"
+      data-missing={missing ? "true" : undefined}
+    >
       <div className="relative">
       <input
         ref={inputRef}
