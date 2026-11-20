@@ -1,5 +1,6 @@
-import { fetchWikipediaSummary } from "@/lib/history/wikipedia";
+import { fetchWikipediaSummary } from "../history/wikipedia";
 import { resolveCommonsImage } from "./commons";
+import { poiIdentity } from "./identity";
 import { lookupPoi, reversePoi, type RawPoi } from "./nominatim";
 import { parseOpeningHours } from "./openingHours";
 import { fetchWikidata } from "./wikidata";
@@ -158,11 +159,14 @@ export async function fetchPoiDetails(
   const cached = readCache(key);
   if (cached) return cached;
 
+  const isBusStop = selection.category === "Bus stop";
   let raw: RawPoi | null = null;
   if (selection.osmType && selection.osmId) {
     raw = await lookupPoi(selection.osmType, selection.osmId, signal);
   }
-  if (!raw) {
+  // Never reverse-geocode a stop: the nearest address would replace the
+  // stop the user tapped. A failed lookup keeps the selection card.
+  if (!raw && !isBusStop) {
     raw = await reversePoi(selection.lon, selection.lat, signal);
   }
   if (!raw) return null;
@@ -190,10 +194,7 @@ export async function fetchPoiDetails(
     (brandEntity ? undefined : wiki?.extract) ??
     undefined;
   const opening = parseOpeningHours(raw.openingRaw);
-  const category =
-    raw.category && raw.category !== "Place"
-      ? raw.category
-      : selection.category ?? raw.category;
+  const identity = poiIdentity(selection, raw);
 
   const [osmCommons, wikidataCommons] = await Promise.all([
     raw.commonsFile
@@ -225,11 +226,8 @@ export async function fetchPoiDetails(
 
   const details: PoiDetails = {
     key,
-    name:
-      raw.name === "Unnamed place" && selection.name
-        ? selection.name
-        : raw.name,
-    category,
+    name: identity.name,
+    category: identity.category,
     ...(raw.city || selection.city
       ? { city: raw.city ?? selection.city }
       : {}),

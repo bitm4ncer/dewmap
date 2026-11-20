@@ -41,6 +41,28 @@ const busStop = {
   },
 };
 
+const unnamedBusStop = {
+  osm_type: "node",
+  osm_id: 41751991,
+  lat: "50.98",
+  lon: "6.30",
+  category: "highway",
+  type: "bus_stop",
+  // Nominatim often omits extratags/namedetails for a bare stop and
+  // fills display_name with the nearest street address.
+  extratags: null,
+  namedetails: null,
+  name: "",
+  display_name:
+    "Pfarrer-Reiff-Straße, Welz, Linnich, Kreis Düren, Nordrhein-Westfalen, 52441, Deutschland",
+  address: {
+    road: "Pfarrer-Reiff-Straße",
+    village: "Welz",
+    town: "Linnich",
+    postcode: "52441",
+  },
+};
+
 const building = {
   osm_type: "way",
   osm_id: 99,
@@ -86,6 +108,13 @@ describe("parseNominatimPlace", () => {
     const poi = parseNominatimPlace(busStop);
     expect(poi?.category).toBe("Bus stop");
     expect(poi?.name).toBe("Degerstraße");
+  });
+
+  it("keeps an unnamed bus stop a stop instead of its street address", () => {
+    const poi = parseNominatimPlace(unnamedBusStop);
+    expect(poi?.category).toBe("Bus stop");
+    expect(poi?.name).toBe("Unnamed place");
+    expect(poi?.address).toBe("Pfarrer-Reiff-Straße, 52441 Linnich");
   });
 
   it("turns an unnamed generic building into a clean address", () => {

@@ -209,6 +209,11 @@ function categoryOf(
   ) {
     return "Bus stop";
   }
+  // Nominatim omits extratags for many bare stops; the category/type
+  // pair is then the only signal that this is not a street.
+  if (fallbackCategory === "highway" && fallbackType === "bus_stop") {
+    return "Bus stop";
+  }
   const keys = [
     "amenity",
     "tourism",
@@ -413,14 +418,24 @@ function parsePlace(place: NominatimPlace): RawPoi | null {
   const lon = asNumber(place.lon);
   if (osmId === undefined || lat === undefined || lon === undefined) return null;
 
-  const named =
-    place.namedetails?.["name:de"] ??
-    place.namedetails?.name ??
-    place.name ??
-    place.display_name?.split(",")[0];
+  const isStop =
+    tags.highway === "bus_stop"
+    || (place.category === "highway" && place.type === "bus_stop")
+    || (tags.public_transport === "stop_position" && tags.bus === "yes");
+  const explicitName =
+    asString(place.namedetails?.["name:de"])
+    ?? asString(place.namedetails?.name)
+    ?? asString(place.name)
+    ?? asString(tags.name);
   const { city, address } = addressOf(place);
   const addressName = address?.split(",")[0]?.trim();
-  const name = asString(named) ?? addressName ?? "Address";
+  // A stop without a name must not borrow the nearest street from
+  // display_name: the detail card would turn into an address.
+  const name =
+    explicitName
+    ?? (isStop
+      ? "Unnamed place"
+      : asString(place.display_name?.split(",")[0]) ?? addressName ?? "Address");
   const description =
     asString(tags.description) ??
     asString(tags["description:de"]) ??
