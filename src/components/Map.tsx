@@ -4610,8 +4610,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               />
             ) : (
               <>
-                <MapReadout map={mapInstance} />
-
                 <ViewPanel
                   projection={projection}
                   onProjectionChange={setProjection}
@@ -4696,6 +4694,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                 )}
 
                 <DataSourcesPanel />
+
+                <MapReadout map={mapInstance} />
               </>
             )}
           </div>
