@@ -58,6 +58,7 @@ import {
   POI_CLUSTER_DATA_SOURCE_ID,
   POI_CLUSTER_MIN_ZOOM,
   POI_CLUSTER_POINT_LAYER_ID,
+  POI_DOT_LAYER_ID,
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
   POI_KIND_FILTERS,
@@ -3361,7 +3362,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     const unregisterTaps = registerFeatureTaps(map, {
       id: "poi-dots",
-      layers: [POI_HIT_LAYER_ID, POI_ICON_LAYER_ID, POI_LABEL_LAYER_ID],
+      layers: [
+        POI_HIT_LAYER_ID,
+        POI_DOT_LAYER_ID,
+        POI_ICON_LAYER_ID,
+        POI_LABEL_LAYER_ID,
+      ],
       // Generous grab radius: a tap a few dozen pixels off still picks
       // the nearest place instead of falling through to the bare-map
       // address card.

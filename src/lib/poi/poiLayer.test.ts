@@ -5,6 +5,7 @@ import {
   POI_CLUSTER_COUNT_LAYER_ID,
   POI_CLUSTER_DATA_SOURCE_ID,
   POI_CLUSTER_POINT_LAYER_ID,
+  POI_DOT_LAYER_ID,
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
   POI_LABEL_LAYER_ID,
@@ -76,13 +77,14 @@ describe("POI vector layer", () => {
     vi.unstubAllGlobals();
   });
 
-  it("adds the source, category icons and both symbol layers", () => {
+  it("adds the source, dots, category icons and both symbol layers", () => {
     const { map, sources, layers, images } = fakeMap();
     ensurePoiLayers(map);
 
     expect(sources.has(POI_SOURCE_ID)).toBe(true);
     expect(images.size).toBe(6);
     expect(layers.has(POI_ICON_LAYER_ID)).toBe(true);
+    expect(layers.has(POI_DOT_LAYER_ID)).toBe(true);
     expect(layers.has(POI_LABEL_LAYER_ID)).toBe(true);
     expect(layers.has(POI_HIT_LAYER_ID)).toBe(true);
     // POIs must sit above the basemap, not beneath later fill layers.
@@ -94,7 +96,7 @@ describe("POI vector layer", () => {
     ensurePoiLayers(map);
     ensurePoiLayers(map);
     expect(sources.size).toBe(1);
-    expect(layers.size).toBe(3);
+    expect(layers.size).toBe(4);
     expect(images.size).toBe(6);
 
     removePoiLayers(map);

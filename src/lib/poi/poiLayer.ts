@@ -15,7 +15,11 @@ export const POI_ICON_LAYER_ID = "poi-icons";
 export const POI_LABEL_LAYER_ID = "poi-labels";
 export const POI_HIT_LAYER_ID = "poi-hit";
 export const POI_MIN_ZOOM = 15;
-export const POI_LABEL_MIN_ZOOM = 16;
+/** Dots carry every place between clusters and icons (no collision). */
+export const POI_DOT_LAYER_ID = "poi-mini-dots";
+export const POI_ICON_MIN_ZOOM = 16.5;
+export const POI_DOT_MAX_ZOOM = POI_ICON_MIN_ZOOM;
+export const POI_LABEL_MIN_ZOOM = 17;
 export const POI_TILEJSON_URL = "https://tiles.openfreemap.org/planet";
 export const POI_ATTRIBUTION =
   '<a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · &copy; OpenStreetMap contributors';
@@ -295,6 +299,42 @@ export function ensurePoiLayers(map: MLMap) {
 
   ensureIcons(map);
 
+  // Zoom 15 → 16.5: every counted place appears as a small dot, so the
+  // cluster numbers match what the map shows. Icons start once there is
+  // enough room to place them without hiding most of them.
+  if (!map.getLayer(POI_DOT_LAYER_ID)) {
+    map.addLayer(
+      {
+        id: POI_DOT_LAYER_ID,
+        type: "circle",
+        source: POI_SOURCE_ID,
+        "source-layer": "poi",
+        minzoom: POI_MIN_ZOOM,
+        maxzoom: POI_DOT_MAX_ZOOM,
+        filter: categoryFilter,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            15, 3.2,
+            16.5, 4.6,
+          ],
+          "circle-color": [
+            "case",
+            ["any", ["in", ["get", "class"], ["literal", FOOD]], ["in", ["get", "subclass"], ["literal", FOOD]]], THEME.danger,
+            ["any", ["in", ["get", "class"], ["literal", SHOP]], ["in", ["get", "subclass"], ["literal", SHOP]]], THEME.warn,
+            ["any", ["in", ["get", "class"], ["literal", CULTURE]], ["in", ["get", "subclass"], ["literal", CULTURE]]], THEME.info,
+            ["any", ["in", ["get", "class"], ["literal", SPORT]], ["in", ["get", "subclass"], ["literal", SPORT]]], THEME.accent,
+            THEME.lightRail,
+          ],
+          "circle-stroke-color": THEME.casing,
+          "circle-stroke-width": 1,
+        },
+      },
+    );
+  }
+
   if (!map.getLayer(POI_ICON_LAYER_ID)) {
     map.addLayer(
       {
@@ -302,7 +342,7 @@ export function ensurePoiLayers(map: MLMap) {
         type: "symbol",
         source: POI_SOURCE_ID,
         "source-layer": "poi",
-        minzoom: POI_MIN_ZOOM,
+        minzoom: POI_ICON_MIN_ZOOM,
         filter: categoryFilter,
         layout: {
           "icon-image": iconExpression,
@@ -406,6 +446,7 @@ export function removePoiLayers(map: MLMap) {
     POI_HIT_LAYER_ID,
     POI_LABEL_LAYER_ID,
     POI_ICON_LAYER_ID,
+    POI_DOT_LAYER_ID,
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
@@ -465,6 +506,7 @@ export function applyPoiKindFilters(
 ): void {
   const filter = poiLayerFilter(kinds);
   for (const id of [
+    POI_DOT_LAYER_ID,
     POI_ICON_LAYER_ID,
     POI_LABEL_LAYER_ID,
     POI_HIT_LAYER_ID,
@@ -515,7 +557,7 @@ export function ensurePoiClusterLayers(map: MLMap) {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
       cluster: true,
-      clusterRadius: 44,
+      clusterRadius: 36,
       clusterMaxZoom: POI_CLUSTER_MAX_ZOOM,
     });
   }
