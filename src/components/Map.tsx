@@ -1691,6 +1691,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     lon: number;
     lat: number;
   } | null>(null);
+  /** Last tapped point marker that has no dedicated selection state
+   *  (historic sites, planner stops, vehicles, waypoints). */
+  const [tappedSelection, setTappedSelection] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
   const [crosshair, setCrosshair] = useState<{
     lon: number;
     lat: number;
@@ -3854,12 +3860,20 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     () =>
       buildSelectionRingPoints({
         poi: poiSelection,
+        tapped: tappedSelection,
         station: stationSelection,
         from: transitFrom,
         to: transitTo,
         via: transitVia,
       }),
-    [poiSelection, stationSelection, transitFrom, transitTo, transitVia],
+    [
+      poiSelection,
+      tappedSelection,
+      stationSelection,
+      transitFrom,
+      transitTo,
+      transitVia,
+    ],
   );
 
   useEffect(() => {
@@ -4685,7 +4699,27 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const map = mapInstance;
     if (!map) return;
     installFeatureTapPipeline(map, {
+      onFeatureSelect: (feature, group) => {
+        // These groups set their own, richer selection (detail card,
+        // transit destination, hiking waypoint) which already feeds the
+        // ring; clear the generic marker ring so it cannot go stale.
+        if (
+          group.id === "poi-dots"
+          || group.id === "rail-stations"
+          || group.id === "bus-stops"
+        ) {
+          setTappedSelection(null);
+          return;
+        }
+        const geometry = feature.geometry as GeoJSON.Geometry | undefined;
+        if (geometry?.type !== "Point") return; // routes/lines are not markers
+        const [lon, lat] = geometry.coordinates;
+        if (Number.isFinite(lon) && Number.isFinite(lat)) {
+          setTappedSelection({ lon, lat });
+        }
+      },
       onBareTap: (event) => {
+        setTappedSelection(null);
         openPoi({
           lon: event.lngLat.lng,
           lat: event.lngLat.lat,

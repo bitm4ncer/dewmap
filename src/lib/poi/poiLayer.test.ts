@@ -149,12 +149,13 @@ describe("selection ring points", () => {
   it("includes POI, station, from, to and every via stop once", () => {
     const points = buildSelectionRingPoints({
       poi: { lon: 6.78, lat: 51.23 },
+      tapped: { lon: 6.83, lat: 51.27 },
       station: { lon: 6.79, lat: 51.22 },
       from: { lon: 6.80, lat: 51.24 },
       to: { lon: 6.81, lat: 51.25 },
       via: [{ lon: 6.82, lat: 51.26 }, null, { lon: 6.78, lat: 51.23 }],
     });
-    expect(points).toHaveLength(5);
+    expect(points).toHaveLength(6);
     expect(points[0]).toEqual({ lon: 6.78, lat: 51.23 });
     expect(points.some((p) => p.lon === 6.82 && p.lat === 51.26)).toBe(true);
   });

@@ -300,6 +300,11 @@ const pipelineOptions = new WeakMap<MLMap, FeatureTapPipelineOptions>();
 export interface FeatureTapPipelineOptions {
   /** Bare-map taps: no group claimed the click (open place card, …). */
   onBareTap?: (event: MapMouseEvent) => void;
+  /** A tappable feature was resolved. Used by the generic selection ring. */
+  onFeatureSelect?: (
+    feature: MapGeoJSONFeature,
+    group: FeatureTapGroup,
+  ) => void;
   /** Set false to keep bare taps silent. Defaults to true. */
   bareTapFeedback?: boolean;
   /** Ripple tint for bare taps. */
@@ -384,6 +389,9 @@ export function installFeatureTapPipeline(
       if (best.group.ripple !== false) {
         spawnTapRipple(map, pointXY(event.point), best.group.color);
       }
+      // Let the map mark the selected marker before the group handler
+      // changes panels, popups or route inputs.
+      opts.onFeatureSelect?.(best.feature, best.group);
       best.group.onFeature(best.feature, event);
       return;
     }

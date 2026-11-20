@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GeoJSONFeature } from "maplibre-gl";
 import {
   distanceToSegment,
+  installFeatureTapPipeline,
   nearestRenderedFeature,
   pickNearestFeature,
+  registerFeatureTaps,
   screenDistanceToGeometry,
 } from "./featureTaps";
 
@@ -138,6 +140,48 @@ function mockMap(paddedFeatures: GeoJSONFeature[]) {
     project: ([x, y]: [number, number]) => ({ x, y }),
   } as unknown as Parameters<typeof nearestRenderedFeature>[0];
 }
+
+describe("selection hook", () => {
+  it("notifies onFeatureSelect before the group handler", () => {
+    let click: ((event: unknown) => void) | null = null;
+    const site = feature({ type: "Point", coordinates: [6.78, 51.23] }, "site");
+    const map = {
+      on: (event: string, handler: (event: unknown) => void) => {
+        if (event === "click") click = handler;
+      },
+      getLayer: () => true,
+      queryRenderedFeatures: (point: unknown) =>
+        Array.isArray(point) && typeof point[0] === "number" ? [site] : [],
+      project: ([x, y]: [number, number]) => ({ x, y }),
+      getCanvasContainer: () => ({ appendChild() {} }),
+      getCanvas: () => ({ style: {} }),
+    };
+    const calls: string[] = [];
+    const onFeature = vi.fn(() => calls.push("handler"));
+    const onFeatureSelect = vi.fn(() => calls.push("select"));
+    registerFeatureTaps(map as never, {
+      id: "history-sites",
+      layers: ["l"],
+      hapticKind: null,
+      ripple: false,
+      onFeature,
+    });
+    installFeatureTapPipeline(map as never, { onFeatureSelect });
+
+    click!({
+      point: [100, 100],
+      lngLat: { lng: 6.78, lat: 51.23 },
+      defaultPrevented: false,
+      preventDefault: vi.fn(),
+    });
+
+    expect(calls).toEqual(["select", "handler"]);
+    expect(onFeatureSelect).toHaveBeenCalledWith(
+      site,
+      expect.objectContaining({ id: "history-sites" }),
+    );
+  });
+});
 
 describe("nearestRenderedFeature", () => {
   it("falls back to the nearest feature inside the padded box", () => {

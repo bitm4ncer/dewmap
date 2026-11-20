@@ -519,6 +519,7 @@ export interface SelectionRingPoint {
 /** Collect every active selection into one deduplicated ring list. */
 export function buildSelectionRingPoints(input: {
   poi?: SelectionRingPoint | null;
+  tapped?: SelectionRingPoint | null;
   station?: SelectionRingPoint | null;
   from?: SelectionRingPoint | null;
   to?: SelectionRingPoint | null;
@@ -536,6 +537,7 @@ export function buildSelectionRingPoints(input: {
     points.push({ lon: point.lon, lat: point.lat });
   };
   add(input.poi);
+  add(input.tapped);
   add(input.station);
   add(input.from);
   add(input.to);
