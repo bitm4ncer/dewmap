@@ -3273,6 +3273,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     const onKindsChanged = () => {
       builtBbox = null;
+      renderedMarkers.clear();
       forceNextBuild = true;
       scheduleClusters();
     };
@@ -3283,6 +3284,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let builtBbox: [number, number, number, number] | null = null;
     let builtKinds = "";
     let warmStarted = false;
+    /** Markers ever rendered this session, keyed by cell. Only grows:
+     *  a tile budget cut at low zoom must never remove a district that
+     *  was already on screen (that made the grid look like it jumps). */
+    const renderedMarkers = new Map<string, GeoJSON.Feature<GeoJSON.Point>>();
     const rebuildClusters = (force = false) => {
       if (cancelled || !styleReady()) return;
       const zoom = map.getZoom();
@@ -3335,7 +3340,25 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         .then((data) => {
           if (cancelled || ctrl.signal.aborted) return;
           const aggregated = aggregatePoiDistricts(data, cellDeg);
-          source.setData?.(aggregated);
+          for (const feature of aggregated.features) {
+            const [lon, lat] = feature.geometry.coordinates as [
+              number,
+              number,
+            ];
+            const key = `${Math.round(lon / cellDeg)}:${Math.round(lat / cellDeg)}:${lon.toFixed(5)}:${lat.toFixed(5)}`;
+            const existing = renderedMarkers.get(key);
+            if (!existing) {
+              renderedMarkers.set(key, feature);
+              continue;
+            }
+            const before = Number(existing.properties?.point_count) || 0;
+            const after = Number(feature.properties?.point_count) || 0;
+            if (after > before) renderedMarkers.set(key, feature);
+          }
+          source.setData?.({
+            type: "FeatureCollection",
+            features: [...renderedMarkers.values()],
+          });
           builtBbox = bbox;
           builtKinds = kindsKey;
           if (poiKindsRef.current.length === 0) {
@@ -3354,6 +3377,17 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         ensurePoiLayers(map);
         ensurePoiClusterLayers(map);
         applyPoiKindFilters(map, poiKindsRef.current);
+        // Restore the already rendered districts after a style swap so
+        // nothing blinks away while the next fetch runs.
+        if (renderedMarkers.size > 0) {
+          const clusterSource = map.getSource(POI_CLUSTER_DATA_SOURCE_ID) as
+            | { setData?: (data: GeoJSON.FeatureCollection) => void }
+            | undefined;
+          clusterSource?.setData?.({
+            type: "FeatureCollection",
+            features: [...renderedMarkers.values()],
+          });
+        }
         scheduleClusters();
       } catch (error) {
         // Style not parsed yet (or a swap in flight) — the watchdog and
