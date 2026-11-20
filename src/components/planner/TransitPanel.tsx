@@ -17,7 +17,7 @@ import { JourneyCard } from "./JourneyCard";
 import { JourneyDetail } from "./JourneyDetail";
 import { useNavigation } from "@/lib/navigation/store";
 import { haptic } from "@/lib/haptics";
-import { ChevronDownIcon, SwapIcon } from "@/components/ui/icons";
+import { ChevronDownIcon, RouteIcon, SwapIcon } from "@/components/ui/icons";
 import { formatDuration, planRoutes, isAbortError } from "@/lib/routing";
 import {
   bestJourneyId,
@@ -172,9 +172,21 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const bestId = useMemo(() => bestJourneyId(visibleJourneys), [visibleJourneys]);
   const journey =
     visibleJourneys.find((j) => j.id === selectedId)
+    ?? visibleJourneys.find((j) => j.id === bestId)
     ?? visibleJourneys[0]
     ?? null;
   const detailRef = useRef<HTMLDivElement>(null);
+
+  // Whenever the selected connection is filtered out (or nothing was
+  // selected yet), the fastest connection becomes the visible route on the
+  // map and in the detail card — the same automatic result bike, walk and
+  // car show. A manual selection is kept while it remains visible.
+  useEffect(() => {
+    if (visibleJourneys.length === 0) return;
+    if (selectedId && visibleJourneys.some((j) => j.id === selectedId)) return;
+    const next = bestId ?? visibleJourneys[0]?.id ?? null;
+    if (next && next !== selectedId) selectJourney(next);
+  }, [bestId, selectJourney, selectedId, visibleJourneys]);
 
   useEffect(() => {
     if (!journey?.id) return;
@@ -581,7 +593,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
               <SwapIcon size={16} />
             </button>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="transit-place-row">
+            <div className="transit-place-fields">
               <PlacePicker
                 placeholder="From station or address"
                 kind="transit"
@@ -642,6 +655,18 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                   return [c.lng, c.lat];
                 }}
               />
+            </div>
+            <button
+              type="button"
+              onClick={() => void search()}
+              disabled={phase.kind === "routing" || !from || !to}
+              className="transit-find-btn"
+              aria-label="Find connections"
+              title="Find connections"
+            >
+              <RouteIcon size={17} />
+              <span>{phase.kind === "routing" ? "Searching…" : "Find connections"}</span>
+            </button>
           </div>
 
           {mapPick && (
@@ -660,15 +685,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
               </button>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={() => void search()}
-            disabled={phase.kind === "routing" || !from || !to}
-            className="hud-btn-primary w-full"
-          >
-            {phase.kind === "routing" ? "Searching…" : "Find connections"}
-          </button>
         </div>
       </HudPanel>
 

@@ -117,6 +117,17 @@ describe("transitStore", () => {
     expect(store.useTransit.getState().selectedId).toBe("j2");
   });
 
+  it("auto-selects the best journey when a search returns results", () => {
+    const later = plan("later");
+    later.transit!.arrival = "2026-11-18T10:40:00+01:00";
+    const earlier = plan("earlier");
+    earlier.transit!.arrival = "2026-11-18T10:20:00+01:00";
+
+    store.useTransit.getState().setJourneys([later, earlier]);
+
+    expect(store.useTransit.getState().selectedId).toBe("earlier");
+  });
+
   it("adds up to two via stops and clears previous results", () => {
     const state = store.useTransit.getState();
     state.setFrom({ name: "A", lat: 49.4, lon: 8.6 });

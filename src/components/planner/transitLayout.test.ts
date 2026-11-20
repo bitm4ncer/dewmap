@@ -72,4 +72,14 @@ describe("station input form", () => {
     expect(src).not.toContain("items-stretch gap-2");
     expect(src).toContain('className="ui-input-action"');
   });
+
+  it("puts a tall, slim find action beside the origin and destination", () => {
+    expect(src).toContain("transit-place-row");
+    expect(src).toContain("transit-place-fields");
+    expect(src).toContain('className="transit-find-btn"');
+    expect(src.indexOf("transit-place-row")).toBeLessThan(
+      src.indexOf("Find connections"),
+    );
+    expect(src).not.toContain('className="hud-btn-primary w-full"');
+  });
 });

@@ -11,6 +11,7 @@ import { useCar } from "@/lib/planner/carStore";
 import { useTransit } from "@/lib/planner/transitStore";
 import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import {
+  bestJourneyId,
   lineColor,
   lineLabel,
   lineTextColor,
@@ -431,7 +432,9 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       }
 
       if (mode === "transit") {
-        const journey = transitJourneys.find((j) => j.id === transitSelected);
+        const journey =
+          transitJourneys.find((j) => j.id === transitSelected)
+          ?? transitJourneys.find((j) => j.id === bestJourneyId(transitJourneys));
         if (!journey) return;
         const { ride, walk, stops } = transitFeatures(journey);
         ensureSource(map, SRC, ride);

@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { RoutePlan } from "../routing";
 import type { PlannerPhase } from "./carStore";
-import type { JourneySort } from "./transitFormat";
+import { bestJourneyId, type JourneySort } from "./transitFormat";
 import { migrateLegacyStorage } from "../legacyStorage";
 
 migrateLegacyStorage();
@@ -346,7 +346,7 @@ export const useTransit = create<TransitState>()(
             && journeys.some((j) => j.id === s.selectedId);
           return {
             journeys,
-            selectedId: keep ? s.selectedId : (journeys[0]?.id ?? null),
+            selectedId: keep ? s.selectedId : bestJourneyId(journeys),
             phase: { kind: "routed" },
             stale: false,
             notice: null,

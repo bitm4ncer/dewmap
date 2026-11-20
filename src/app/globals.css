@@ -1724,6 +1724,55 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-input-action[data-set="true"] { color: var(--accent); }
 .ui-input-action[data-set="false"] { color: var(--ink-mute); }
 .ui-input-action:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Transit origin/destination stack with a tall, slim search action on the
+   right. It stretches with the two fields (including their compact
+   home/work row), so it stays beside them instead of below the fold in the
+   half sheet. */
+.transit-place-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+.transit-place-fields {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.transit-find-btn {
+  display: flex;
+  width: 100%;
+  align-self: stretch;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: var(--r-btn);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-align: center;
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease), transform var(--dur-press) var(--ease);
+}
+.transit-find-btn span { overflow-wrap: anywhere; }
+.transit-find-btn svg { flex-shrink: 0; }
+.transit-find-btn:hover:not(:disabled) { filter: brightness(1.08); }
+.transit-find-btn:active:not(:disabled) { transform: translateY(1px); }
+.transit-find-btn:disabled {
+  background: var(--surf-3);
+  color: var(--ink-mute);
+  cursor: not-allowed;
+}
+
 .ui-history-toggle {
   display: inline-flex;
   align-items: center;
