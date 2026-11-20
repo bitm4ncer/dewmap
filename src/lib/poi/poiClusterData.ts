@@ -19,8 +19,21 @@ import {
 export const POI_CLUSTER_TILE_ZOOM = 14;
 /** Guard rail: never fan out into more tiles than this. */
 export const MAX_CLUSTER_TILES = 240;
+
+/**
+ * Low zooms cover a far larger area with the same z14 tiles, so the
+ * tile budget grows as the map zooms out. Phones stay inside these
+ * budgets for a city/region view; large screens fall back to the
+ * centre-first subset.
+ */
+export function clusterTileBudget(zoom: number): number {
+  if (zoom >= 13) return 240;
+  if (zoom >= 12) return 260;
+  if (zoom >= 11) return 320;
+  return 400;
+}
 const TILE_CACHE_TTL_MS = 10 * 60_000;
-const TILE_CACHE_MAX = 320;
+const TILE_CACHE_MAX = 900;
 
 export interface ClusterPoint {
   lon: number;
@@ -136,7 +149,7 @@ async function loadTile(
     .replace("{z}", String(z))
     .replace("{x}", String(x))
     .replace("{y}", String(y));
-  const res = await fetch(url, { signal });
+  const res = await fetch(url, { signal, cache: "force-cache" });
   if (!res.ok) throw new Error(`POI tile ${z}/${x}/${y} → ${res.status}`);
   const buffer = new Uint8Array(await res.arrayBuffer());
   const tile = new VectorTile(new Pbf(buffer));
@@ -175,7 +188,18 @@ export async function fetchPoiClusterPoints(
   /** Tile URL template already known to the map source; avoids a
    *  second TileJSON round-trip and keeps map-level URL overrides. */
   templateOverride?: string,
+  options?: {
+    /** Tile fan-out cap for this call (see clusterTileBudget). */
+    budget?: number;
+    /** Called with the features collected so far while tiles stream in. */
+    onPartial?: (
+      data: GeoJSON.FeatureCollection<GeoJSON.Point>,
+      done: number,
+      total: number,
+    ) => void;
+  },
 ): Promise<GeoJSON.FeatureCollection<GeoJSON.Point>> {
+  const budget = options?.budget ?? MAX_CLUSTER_TILES;
   const range = tileRangeForBbox(bbox, POI_CLUSTER_TILE_ZOOM);
   if (range.count === 0) {
     return { type: "FeatureCollection", features: [] };
@@ -192,7 +216,7 @@ export async function fetchPoiClusterPoints(
   // Never come back empty when the viewport is a little over budget:
   // keep the tiles closest to the viewport centre (these carry the
   // clusters the user actually looks at) and drop the rest.
-  if (coords.length > MAX_CLUSTER_TILES) {
+  if (coords.length > budget) {
     const [s, w, n, e] = bbox;
     const cx = (w + e) / 2;
     const cy = (s + n) / 2;
@@ -202,16 +226,21 @@ export async function fetchPoiClusterPoints(
         Math.hypot(a[0] - centre.x0, a[1] - centre.y0)
         - Math.hypot(b[0] - centre.x0, b[1] - centre.y0),
     );
-    coords.length = MAX_CLUSTER_TILES;
+    coords.length = budget;
     console.warn(
-      `[poi] cluster tile budget: keeping ${MAX_CLUSTER_TILES} of ${range.count} tiles`,
+      `[poi] cluster tile budget: keeping ${budget} of ${range.count} tiles`,
     );
   }
 
-  // Fetch in small batches so a city view does not fire 30 requests at
-  // once (mobile data / server friendliness).
-  const tiles: ClusterPoint[][] = [];
+  // Fetch in small batches so a city view does not fire hundreds of
+  // requests at once (mobile data / server friendliness). The cluster
+  // source is updated every few batches, so the overview fills in
+  // progressively instead of appearing after the last tile.
+  const seen = new Set<string>();
+  const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
   const BATCH = 8;
+  const PARTIAL_EVERY = 5;
+  let done = 0;
   for (let i = 0; i < coords.length; i += BATCH) {
     const batch = coords.slice(i, i + BATCH);
     const loaded = await Promise.all(
@@ -219,32 +248,36 @@ export async function fetchPoiClusterPoints(
         loadTile(template, POI_CLUSTER_TILE_ZOOM, x, y, signal),
       ),
     );
-    tiles.push(...loaded);
+    for (const points of loaded) {
+      for (const point of points) {
+        if (!featureMatchesKinds(
+          { class: point.class, subclass: point.subclass, name: point.name },
+          kinds,
+        )) continue;
+        const key = `${point.lon.toFixed(5)}:${point.lat.toFixed(5)}:${point.name}:${point.class}:${point.subclass}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        features.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [point.lon, point.lat] },
+          properties: {
+            name: point.name,
+            class: point.class,
+            subclass: point.subclass,
+          },
+        });
+      }
+    }
+    done += batch.length;
+    if (options?.onPartial && (i / BATCH) % PARTIAL_EVERY === PARTIAL_EVERY - 1) {
+      options.onPartial(
+        { type: "FeatureCollection", features: [...features] },
+        done,
+        coords.length,
+      );
+    }
     // Hand the main thread back between batches so panning stays fluid.
     await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-
-  const seen = new Set<string>();
-  const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
-  for (const points of tiles) {
-    for (const point of points) {
-      if (!featureMatchesKinds(
-        { class: point.class, subclass: point.subclass, name: point.name },
-        kinds,
-      )) continue;
-      const key = `${point.lon.toFixed(5)}:${point.lat.toFixed(5)}:${point.name}:${point.class}:${point.subclass}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      features.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [point.lon, point.lat] },
-        properties: {
-          name: point.name,
-          class: point.class,
-          subclass: point.subclass,
-        },
-      });
-    }
   }
   return { type: "FeatureCollection", features };
 }

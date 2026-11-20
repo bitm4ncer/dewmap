@@ -469,3 +469,62 @@ export function CheckIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+export function AllPlacesIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.6" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" />
+    </svg>
+  );
+}
+
+export function FoodIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M7 4v6.5a2 2 0 0 0 4 0V4" />
+      <path d="M9 10.5V20" />
+      <path d="M16.5 4c-1.6 1.2-2.5 3-2.5 5.2 0 1.3.7 2.2 2 2.4V20" />
+    </svg>
+  );
+}
+
+export function ShoppingIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M5.5 8h13l-1 12h-11l-1-12Z" />
+      <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+    </svg>
+  );
+}
+
+export function CultureIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M3.5 9 12 4l8.5 5" />
+      <path d="M5 9v8M9.5 9v8M14.5 9v8M19 9v8" />
+      <path d="M3.5 20h17" />
+    </svg>
+  );
+}
+
+export function SportIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M3.5 12h17" />
+      <rect x="2.5" y="8.5" width="3.5" height="7" rx="1.4" />
+      <rect x="18" y="8.5" width="3.5" height="7" rx="1.4" />
+    </svg>
+  );
+}
+
+export function ParkIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 3.5 6.5 10h3L5 16h14l-4.5-6h3L12 3.5Z" />
+      <path d="M12 16v4.5" />
+    </svg>
+  );
+}

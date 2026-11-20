@@ -14,7 +14,7 @@ export const POI_SOURCE_ID = "poi-vector-src";
 export const POI_ICON_LAYER_ID = "poi-icons";
 export const POI_LABEL_LAYER_ID = "poi-labels";
 export const POI_HIT_LAYER_ID = "poi-hit";
-export const POI_MIN_ZOOM = 15;
+export const POI_MIN_ZOOM = 13;
 /** Dots carry every place between clusters and icons (no collision). */
 export const POI_DOT_LAYER_ID = "poi-mini-dots";
 export const POI_ICON_MIN_ZOOM = 16.5;
@@ -546,7 +546,7 @@ export const POI_CLUSTER_DATA_SOURCE_ID = "poi-cluster-data-src";
 export const POI_CLUSTER_CIRCLE_LAYER_ID = "poi-cluster-circles";
 export const POI_CLUSTER_COUNT_LAYER_ID = "poi-cluster-count";
 export const POI_CLUSTER_POINT_LAYER_ID = "poi-cluster-points";
-export const POI_CLUSTER_MIN_ZOOM = 13;
+export const POI_CLUSTER_MIN_ZOOM = 10;
 export const POI_CLUSTER_MAX_ZOOM = POI_MIN_ZOOM;
 /** Stop building at this zoom — clusters hand over to detail dots. */
 export const POI_CLUSTER_BUILD_MAX_ZOOM = POI_CLUSTER_MAX_ZOOM;

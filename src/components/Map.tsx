@@ -72,7 +72,10 @@ import {
   removePoiLayers,
   type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
-import { fetchPoiClusterPoints } from "@/lib/poi/poiClusterData";
+import {
+  clusterTileBudget,
+  fetchPoiClusterPoints,
+} from "@/lib/poi/poiClusterData";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
@@ -110,9 +113,15 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  AllPlacesIcon,
   CloseIcon,
+  CultureIcon,
   AirQualityIcon,
   FlatIcon,
+  FoodIcon,
+  ParkIcon,
+  ShoppingIcon,
+  SportIcon,
   ForestLossIcon,
   GlobeIcon,
   HybridIcon,
@@ -3253,7 +3262,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       clusterTimer = window.setTimeout(() => {
         clusterTimer = null;
         rebuildClusters();
-      }, 250);
+      }, 350);
     };
 
     let clusterController: AbortController | null = null;
@@ -3282,7 +3291,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const template = (
         map.getSource(POI_SOURCE_ID) as { tiles?: string[] } | undefined
       )?.tiles?.[0];
-      fetchPoiClusterPoints(bbox, poiKindsRef.current, ctrl.signal, template)
+      fetchPoiClusterPoints(bbox, poiKindsRef.current, ctrl.signal, template, {
+        budget: clusterTileBudget(zoom),
+        // Fill the overview while tiles stream in instead of waiting
+        // for the last one (a z10 viewport needs hundreds of tiles).
+        onPartial: (data) => {
+          if (cancelled || ctrl.signal.aborted) return;
+          source.setData?.(data);
+        },
+      })
         .then((data) => {
           if (cancelled || ctrl.signal.aborted) return;
           source.setData?.(data);
@@ -5333,22 +5350,36 @@ function ViewPanel({
           >
             <button
               type="button"
-              className="ui-chip min-h-10"
+              className="ui-chip min-h-10 min-w-10 justify-center"
               data-active={poiKinds.length === 0}
               aria-pressed={poiKinds.length === 0}
+              aria-label="All places"
+              title="All places"
               onClick={() => onPoiKindsChange([])}
             >
-              All
+              <AllPlacesIcon size={17} />
             </button>
             {POI_KIND_FILTERS.map((kind) => {
               const active = poiKinds.includes(kind.id);
+              const Icon =
+                kind.id === "food"
+                  ? FoodIcon
+                  : kind.id === "shop"
+                    ? ShoppingIcon
+                    : kind.id === "culture"
+                      ? CultureIcon
+                      : kind.id === "sport"
+                        ? SportIcon
+                        : ParkIcon;
               return (
                 <button
                   key={kind.id}
                   type="button"
-                  className="ui-chip min-h-10"
+                  className="ui-chip min-h-10 min-w-10 justify-center"
                   data-active={active}
                   aria-pressed={active}
+                  aria-label={kind.label}
+                  title={kind.label}
                   onClick={() =>
                     onPoiKindsChange(
                       active
@@ -5357,7 +5388,7 @@ function ViewPanel({
                     )
                   }
                 >
-                  {kind.label}
+                  <Icon size={17} />
                 </button>
               );
             })}
