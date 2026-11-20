@@ -26,6 +26,21 @@ const museum = {
   namedetails: { name: "Bode-Museum" },
 };
 
+const busStop = {
+  osm_type: "node",
+  osm_id: 900,
+  lat: "51.22",
+  lon: "6.79",
+  category: "highway",
+  type: "bus_stop",
+  extratags: { highway: "bus_stop", name: "Degerstraße" },
+  namedetails: { name: "Degerstraße" },
+  address: {
+    road: "Degerstraße",
+    city: "Düsseldorf",
+  },
+};
+
 const building = {
   osm_type: "way",
   osm_id: 99,
@@ -65,6 +80,12 @@ describe("parseNominatimPlace", () => {
       value: "Cards",
     });
     expect(poi?.osmType).toBe("R");
+  });
+
+  it("labels a bus stop as a bus stop, not a street", () => {
+    const poi = parseNominatimPlace(busStop);
+    expect(poi?.category).toBe("Bus stop");
+    expect(poi?.name).toBe("Degerstraße");
   });
 
   it("turns an unnamed generic building into a clean address", () => {

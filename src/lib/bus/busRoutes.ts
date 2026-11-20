@@ -1,4 +1,5 @@
 import type { Map as MLMap } from "maplibre-gl";
+import type { PoiSelection } from "../poi/types";
 import { THEME } from "../theme";
 import { overpassQuery, type OverpassElement, type OverpassRelation } from "../overpass";
 import { readBusCache, writeBusCache, type StoredBusNetwork } from "./busCacheStore";
@@ -58,6 +59,29 @@ export interface BusStopFeature extends GeoJSON.Feature<GeoJSON.Point> {
 export interface BusNetwork {
   routes: GeoJSON.FeatureCollection<GeoJSON.LineString>;
   stops: GeoJSON.FeatureCollection<GeoJSON.Point>;
+}
+
+/**
+ * Place-card selection for a tapped bus stop. Bus stops use the same
+ * detail card as other OSM places; the node id resolves the exact stop
+ * in Nominatim instead of falling back to a reverse-geocoded street.
+ */
+export function busStopPoiSelection(
+  coordinates: readonly [number, number],
+  properties: { id?: unknown; name?: unknown } | null | undefined,
+): PoiSelection {
+  const id = Number(properties?.id);
+  const name =
+    typeof properties?.name === "string" ? properties.name.trim() : "";
+  return {
+    lon: coordinates[0],
+    lat: coordinates[1],
+    ...(Number.isFinite(id) && id > 0
+      ? { osmType: "N" as const, osmId: id }
+      : {}),
+    name: name || "Bus stop",
+    category: "Bus stop",
+  };
 }
 
 const cache = new Map<
@@ -438,13 +462,14 @@ export function ensureBusLayers(map: MLMap, network: BusNetwork): void {
         paint: {
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
-            11, 2.4,
-            14, 3,
-            17, 3.6,
+            10, 4,
+            12, 5,
+            14, 6,
+            17, 7,
           ],
           "circle-color": BUS_LINE_COLOR,
           "circle-stroke-color": THEME.casing,
-          "circle-stroke-width": 1.2,
+          "circle-stroke-width": 1.7,
         },
       },
       beforeId,
@@ -458,7 +483,7 @@ export function ensureBusLayers(map: MLMap, network: BusNetwork): void {
         type: "circle",
         source: BUS_STOP_SOURCE_ID,
         paint: {
-          "circle-radius": 15,
+          "circle-radius": 20,
           "circle-color": THEME.casing,
           "circle-opacity": 0,
           "circle-stroke-width": 0,

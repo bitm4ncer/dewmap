@@ -201,6 +201,14 @@ function categoryOf(
   fallbackCategory?: string,
   fallbackType?: string,
 ): string {
+  if (
+    tags.highway === "bus_stop"
+    || (tags.bus === "yes"
+      && (tags.public_transport === "stop_position"
+        || tags.public_transport === "platform"))
+  ) {
+    return "Bus stop";
+  }
   const keys = [
     "amenity",
     "tourism",

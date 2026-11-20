@@ -1,7 +1,11 @@
+import type { Map as MLMap } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import type { OverpassElement } from "../overpass";
 import {
+  BUS_STOP_LAYER_ID,
   bboxContains,
+  busStopPoiSelection,
+  ensureBusLayers,
   isEmptyBusNetwork,
   parseBusNetwork,
   snapBboxToGrid,
@@ -165,6 +169,68 @@ describe("parseBusNetwork", () => {
       },
     ]);
     expect(network.routes.features).toHaveLength(0);
+  });
+});
+
+describe("busStopPoiSelection", () => {
+  it("opens the exact stop as a bus-stop place card", () => {
+    expect(
+      busStopPoiSelection([6.79, 51.22], {
+        id: 900,
+        name: "Degerstraße",
+      }),
+    ).toMatchObject({
+      osmType: "N",
+      osmId: 900,
+      lon: 6.79,
+      lat: 51.22,
+      name: "Degerstraße",
+      category: "Bus stop",
+    });
+  });
+
+  it("keeps unnamed stops readable", () => {
+    expect(busStopPoiSelection([6.79, 51.22], null)).toMatchObject({
+      name: "Bus stop",
+      category: "Bus stop",
+    });
+  });
+});
+
+describe("bus stop layers", () => {
+  it("draws larger dots so stops read from farther out", () => {
+    const layers = new Map<string, { paint?: Record<string, unknown> }>();
+    const sources = new Set<string>();
+    const map = {
+      getSource: (id: string) => (sources.has(id) ? {} : undefined),
+      addSource: (id: string) => {
+        sources.add(id);
+      },
+      getLayer: (id: string) => layers.get(id),
+      addLayer: (layer: { id: string; paint?: Record<string, unknown> }) => {
+        layers.set(layer.id, layer);
+      },
+      getStyle: () => ({ layers: [] }),
+    } as unknown as MLMap;
+
+    ensureBusLayers(map, {
+      routes: { type: "FeatureCollection", features: [] },
+      stops: { type: "FeatureCollection", features: [] },
+    });
+
+    expect(layers.get(BUS_STOP_LAYER_ID)?.paint?.["circle-radius"]).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      10,
+      4,
+      12,
+      5,
+      14,
+      6,
+      17,
+      7,
+    ]);
   });
 });
 

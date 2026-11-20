@@ -108,6 +108,7 @@ import {
   BUS_STOP_HIT_LAYER_ID,
   BUS_STOP_LAYER_ID,
   busBboxKey,
+  busStopPoiSelection,
   ensureBusLayers,
   fetchBusNetwork,
   isEmptyBusNetwork,
@@ -1685,8 +1686,8 @@ function buildLiveLocationEl(): {
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
   const [poiSelection, setPoiSelection] = useState<PoiSelection | null>(null);
-  /** Last tapped rail/tram/bus stop that does not become a transit input
-   *  (bus stops and walk/bike/car mode). It gets the same ring as a POI. */
+  /** Last tapped rail/tram stop in walk/bike/car mode, where it becomes a
+   *  hiking waypoint. It gets the same ring as a POI. */
   const [stationSelection, setStationSelection] = useState<{
     lon: number;
     lat: number;
@@ -2340,6 +2341,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     },
     [applyPoiSheet, isMobile, sheetState],
   );
+
+  // Map event effects need the opening callback without re-registering
+  // their tap handlers (and losing data) whenever the sheet changes.
+  const openPoiRef = useRef(openPoi);
+  useEffect(() => {
+    openPoiRef.current = openPoi;
+  }, [openPoi]);
 
   // A panel that opens while the card is up takes the bottom edge: the card
   // animates out and the remembered sheet size is dropped, so closing the card
@@ -3565,27 +3573,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (inFlightKey === null && retryTimer === null) refresh();
     }, 6_000);
 
-    // Bus stops are tappable exactly like rail stations: dropping a
-    // hiking waypoint at the stop.
+    // Bus stops are places too: the tap opens the same detail card and
+    // selection ring as any other marker instead of silently dropping a
+    // hiking waypoint.
     const unregisterTaps = registerFeatureTaps(map, {
       id: "bus-stops",
       layers: [BUS_STOP_HIT_LAYER_ID, BUS_STOP_LAYER_ID],
-      tolerancePx: 18,
+      tolerancePx: 20,
       hapticKind: "select",
       onFeature: (feature) => {
         const coords = (feature.geometry as GeoJSON.Point).coordinates as [
           number,
           number,
         ];
-        const name = (feature.properties?.name as string | undefined)
-          ?? "Bus stop";
-        setStationSelection({ lon: coords[0], lat: coords[1] });
-        useHiking.getState().addWaypoint({
-          lat: coords[1],
-          lon: coords[0],
-          label: name,
-          source: "station",
-        });
+        openPoiRef.current(
+          busStopPoiSelection(coords, feature.properties),
+        );
       },
     });
 
@@ -3614,14 +3617,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   useEffect(() => {
     poiKindsRef.current = poiKinds;
   }, [poiKinds]);
-
-  // The tap callback depends on the bottom-sheet state. Keep it in a ref
-  // so opening a place card does not tear down this effect (which would
-  // abort the cluster build and reset the rendered-marker session).
-  const openPoiRef = useRef(openPoi);
-  useEffect(() => {
-    openPoiRef.current = openPoi;
-  }, [openPoi]);
 
   // Google-Maps-style place dots. These ride on the same keyless
   // OpenFreeMap vector tiles as the rail detail, but in their own source
