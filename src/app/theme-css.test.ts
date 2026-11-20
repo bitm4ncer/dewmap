@@ -305,6 +305,12 @@ describe("sheet chrome and compact date field", () => {
     expect(block(".ui-input-date")?.body).toContain("max-width: 240px");
   });
 
+  it("squares the sheet shoulders under the docked place card", () => {
+    expect(css).toMatch(
+      /body:has\(\.poi-detail\) \.hud-bottom-sheet\s*\{[^}]*border-top-left-radius:\s*0/,
+    );
+  });
+
   it("hides the sheet close button while the panel is collapsed", () => {
     expect(css).toMatch(
       /\.hud-bottom-sheet\[data-sheet-state="peek"\] \.sheet-close\s*\{[^}]*display:\s*none/,

@@ -1702,11 +1702,16 @@ input[type="range"].hud-slider::-moz-range-thumb {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .ui-chip:hover { background: var(--surf-3); color: var(--ink); }
+/* Active is a solid accent fill, matching the switches: a 14 % tint was
+   indistinguishable from the inactive surface on the dark theme. */
 .ui-chip[data-active="true"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
-.ui-chip[data-active="true"]:hover { background: var(--accent-strong); }
+.ui-chip[data-active="true"]:hover {
+  background: var(--accent);
+  filter: brightness(1.06);
+}
 .ui-chip:disabled { opacity: .4; cursor: not-allowed; }
 /* Icon-only chips (place filters) need a real touch target. The generic
    .ui-chip min-height would otherwise win over Tailwind's min-h-10. */
@@ -1717,6 +1722,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   padding: 0;
   justify-content: center;
 }
+.ui-chip.ui-chip-icon:not([data-active="true"]) { color: var(--ink-mute); }
 @media (max-width: 767px) {
   .ui-chip { min-height: 32px; padding: 0 var(--sp-3); font-size: 12px; }
   .ui-chip.ui-chip-icon {
@@ -2651,9 +2657,12 @@ input[type="range"].hud-slider::-moz-range-thumb {
     z-index: var(--z-card);
     /* Rise from behind the dock bar instead of the 14px desktop nudge. */
     animation-name: poi-card-rise;
-    /* The card is the panel's top edge while it is up; a radius would show
-       the map through the notches. */
-    border-radius: 0;
+  }
+  /* The docked card sits flush on the sheet. Its straight bottom edge above
+     the sheet's rounded shoulders left a notch on both sides. */
+  body:has(.poi-detail) .hud-bottom-sheet {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
   /* The card sits on the dock, so 78dvh would push its top over the search
      bar on a notched phone. Cap it to the strip that is actually free. */
