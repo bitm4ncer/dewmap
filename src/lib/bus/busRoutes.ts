@@ -8,10 +8,11 @@ import { readBusCache, writeBusCache, type StoredBusNetwork } from "./busCacheSt
  * amber lines plus their stops, next to the blue rail network.
  *
  * Data is viewport-bound via Overpass (routes + stops in one request)
- * and cached per coarse bbox. Rendering is defensive: `ensureBusLayers`
- * can be called repeatedly and restores everything from the current
- * FeatureCollection, which is what the map effect uses to survive style
- * swaps, dropped layers and failed refetches.
+ * and cached by the fetched viewport's coverage, so a pan that stays
+ * inside a known area resolves from memory. Rendering is defensive:
+ * `ensureBusLayers` can be called repeatedly and restores everything
+ * from the current FeatureCollection, which is what the map effect uses
+ * to survive style swaps, dropped layers and failed refetches.
  */
 
 export const BUS_SOURCE_ID = "bus-lines-src";
@@ -29,7 +30,7 @@ const CACHE_TTL_MS = 30 * 60_000;
 /** An empty response is often a mirror hiccup — retry it soon. */
 const EMPTY_CACHE_TTL_MS = 45_000;
 const CACHE_MAX = 32;
-/** ~5.5 km grid: the same cell survives typical pans and pinch zooms. */
+/** ~5.5 km grid: one fetched cell covers several pans at city zoom. */
 const GRID_STEP = 0.05;
 /** Legacy localStorage key, migrated into IndexedDB on first load. */
 const LEGACY_PERSIST_KEY = "kugelmaps.bus-cache.v1";
@@ -67,8 +68,9 @@ const cache = new Map<
 export type Bbox = [number, number, number, number];
 
 /**
- * Snap a bbox outward to a coarse grid. Without this every pan produces
- * a new key and refetches the (expensive) Overpass query.
+ * Snap a bbox outward to a coarse grid. The cache is keyed by coverage,
+ * but fetching whole cells means one request survives several pans
+ * instead of refetching for every small viewport change.
  */
 export function snapBboxToGrid(bbox: Bbox, step = GRID_STEP): Bbox {
   return [
@@ -88,7 +90,7 @@ export function bboxContains(outer: Bbox, inner: Bbox): boolean {
   );
 }
 
-function bboxKey(bbox: Bbox): string {
+export function busBboxKey(bbox: Bbox): string {
   return bbox.map((n) => n.toFixed(4)).join(",");
 }
 
@@ -114,7 +116,7 @@ function acceptPersisted(entry: {
   data: BusNetwork;
 }): void {
   if (!isUsableEntry(entry)) return;
-  const key = bboxKey(entry.bbox);
+  const key = busBboxKey(entry.bbox);
   const existing = cache.get(key);
   if (!existing || existing.at < entry.at) {
     cache.set(key, { at: entry.at, bbox: entry.bbox, data: entry.data });
@@ -132,7 +134,7 @@ function readLegacyCache(): StoredBusNetwork[] {
     };
     if (parsed?.v !== 1 || !Array.isArray(parsed.entries)) return [];
     return parsed.entries.filter(isUsableEntry).map((entry) => ({
-      key: bboxKey(entry.bbox),
+      key: busBboxKey(entry.bbox),
       at: entry.at,
       bbox: entry.bbox,
       data: entry.data,
@@ -179,7 +181,7 @@ function snapshotEntries(): StoredBusNetwork[] {
     .sort((a, b) => b.at - a.at)
     .slice(0, PERSIST_MAX_ENTRIES)
     .map((entry) => ({
-      key: bboxKey(entry.bbox),
+      key: busBboxKey(entry.bbox),
       at: entry.at,
       bbox: entry.bbox,
       data: entry.data,
@@ -192,12 +194,11 @@ function persistCache(): void {
 
 /** Newest cached network whose coverage contains the requested bbox. */
 function findCached(bbox: Bbox, now: number): BusNetwork | null {
-  const wanted = snapBboxToGrid(bbox);
   let best: { at: number; data: BusNetwork } | null = null;
   for (const entry of cache.values()) {
     const ttl = isEmptyBusNetwork(entry.data) ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS;
     if (now - entry.at > ttl) continue;
-    if (!bboxContains(entry.bbox, wanted)) continue;
+    if (!bboxContains(entry.bbox, bbox)) continue;
     if (!best || entry.at > best.at) best = entry;
   }
   return best?.data ?? null;
@@ -317,6 +318,8 @@ export async function fetchBusNetwork(
     if (cached) return cached;
   }
 
+  // Fetch the snapped cell so nearby pans are covered by one request.
+  // `findCached` tests the real viewport against the fetched coverage.
   const fetchBbox = snapBboxToGrid(bbox);
   const [s, w, n, e] = fetchBbox;
   // `way(r.busRoutes)(bbox) + out geom(bbox)` sends each member way once
@@ -339,7 +342,7 @@ export async function fetchBusNetwork(
     rejectEmpty: true,
   });
   const network = parseBusNetwork(data.elements);
-  const key = bboxKey(fetchBbox);
+  const key = busBboxKey(fetchBbox);
   cache.set(key, { at: Date.now(), bbox: fetchBbox, data: network });
   if (cache.size > CACHE_MAX) {
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];

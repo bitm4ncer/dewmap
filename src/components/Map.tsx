@@ -105,11 +105,11 @@ import {
   BUS_MIN_ZOOM,
   BUS_STOP_HIT_LAYER_ID,
   BUS_STOP_LAYER_ID,
+  busBboxKey,
   ensureBusLayers,
   fetchBusNetwork,
   isEmptyBusNetwork,
   removeBusLayers,
-  snapBboxToGrid,
   type BusNetwork,
 } from "@/lib/bus/busRoutes";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
@@ -3247,8 +3247,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let retryTimer: number | null = null;
     let retryCount = 0;
     let controller: AbortController | null = null;
-    /** Bbox whose data is currently rendered. Reset on style swaps. */
-    let loadedKey = "";
     /** Bbox with a request in flight — never set until data arrives. */
     let inFlightKey: string | null = null;
     /** Last successful payload so layers can be restored without network. */
@@ -3310,7 +3308,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         } catch {
           /* style swapping */
         }
-        loadedKey = "";
         return;
       }
       const bounds = map.getBounds();
@@ -3322,15 +3319,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         bounds.getNorth() + padLat,
         bounds.getEast() + padLng,
       ];
-      // Key on the snapped bbox: small pans hit the same cached cell and
-      // never trigger a redundant Overpass query.
-      const key = snapBboxToGrid(bbox)
-        .map((n) => n.toFixed(4))
-        .join(",");
-      if (key === loadedKey) {
-        reassertLayers();
-        return;
-      }
+      // A cache hit resolves without the network; uncovered ground
+      // fetches the padded viewport's cell. The key stays on the raw
+      // bbox, so the coverage check — not a coarse key — decides.
+      const key = busBboxKey(bbox);
       if (inFlightKey === key) return;
       inFlightKey = key;
       controller?.abort();
@@ -3340,16 +3332,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         .then((network) => {
           if (cancelled || ctrl.signal.aborted) return;
           const empty = isEmptyBusNetwork(network);
+          const unchanged = network === lastNetwork;
           lastNetwork = network;
           lastNetworkAt = Date.now();
           retryCount = 0;
-          applyNetwork(network);
+          if (!unchanged || !map.getLayer(BUS_LAYER_ID)) applyNetwork(network);
           if (empty) {
             // Do not pin the cell: a false empty from a degraded mirror
             // must be retried even if the user never moves the map.
             scheduleRetry(EMPTY_RETRY_MS);
-          } else {
-            loadedKey = key;
           }
         })
         .catch((error) => {
@@ -3372,8 +3363,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
     const onStyle = () => {
       // The swap removed our source/layers; the cached payload may be
-      // for another bbox, so refetch — but re-assert instantly first.
-      loadedKey = "";
+      // for another bbox, so re-assert instantly first and let the
+      // coverage check fetch whatever is missing.
       inFlightKey = null;
       reassertLayers();
       refresh();

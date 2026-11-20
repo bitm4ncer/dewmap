@@ -186,31 +186,28 @@ describe("isEmptyBusNetwork", () => {
   });
 });
 
-describe("bus cache geometry", () => {
+describe("bus cache coverage", () => {
+  const cached: [number, number, number, number] = [51.15, 6.65, 51.3, 6.9];
+
   it("snaps a bbox outward to the coarse grid", () => {
     const snapped = snapBboxToGrid([51.221, 6.771, 51.233, 6.789]);
     expect(snapped[0]).toBeLessThanOrEqual(51.221);
     expect(snapped[1]).toBeLessThanOrEqual(6.771);
     expect(snapped[2]).toBeGreaterThanOrEqual(51.233);
     expect(snapped[3]).toBeGreaterThanOrEqual(6.789);
-    // Grid is 0.05° (float-safe integer check).
     for (const value of snapped) {
       const steps = value / 0.05;
       expect(Math.abs(steps - Math.round(steps))).toBeLessThan(1e-6);
     }
   });
 
-  it("keeps small pans inside the same snapped cell", () => {
-    const a = snapBboxToGrid([51.221, 6.771, 51.233, 6.789]);
-    const b = snapBboxToGrid([51.222, 6.772, 51.234, 6.79]);
-    expect(b).toEqual(a);
-    expect(bboxContains(a, b)).toBe(true);
-    expect(bboxContains(b, a)).toBe(true);
+  it("serves a viewport that is fully inside a cached cell", () => {
+    expect(bboxContains(cached, [51.22, 6.75, 51.24, 6.8])).toBe(true);
   });
 
   it("detects when a viewport leaves the cached coverage", () => {
-    const cached = snapBboxToGrid([51.2, 6.7, 51.3, 6.9]);
-    expect(bboxContains(cached, [51.22, 6.75, 51.24, 6.8])).toBe(true);
     expect(bboxContains(cached, [51.35, 6.75, 51.4, 6.8])).toBe(false);
+    expect(bboxContains(cached, [51.0, 6.75, 51.2, 6.8])).toBe(false);
+    expect(bboxContains(cached, [51.22, 6.6, 51.24, 6.8])).toBe(false);
   });
 });
