@@ -573,36 +573,6 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
   }
 }
 
-function updateRailVectorOpacity(map: MLMap, opacity: number) {
-  if (map.getLayer(RAIL_VECTOR_MAIN_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_VECTOR_MAIN_LAYER_ID,
-      "line-opacity",
-      railFade(opacity, RAIL_LINE_FADE),
-    );
-  }
-  if (map.getLayer(RAIL_VECTOR_CASING_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_VECTOR_CASING_LAYER_ID,
-      "line-opacity",
-      railFade(opacity, RAIL_LINE_FADE),
-    );
-  }
-  if (map.getLayer(RAIL_VECTOR_STATION_DOT_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_VECTOR_STATION_DOT_LAYER_ID,
-      "circle-opacity",
-      railFade(opacity, RAIL_STATION_FADE),
-    );
-  }
-  if (map.getLayer(RAIL_VECTOR_STATION_LABEL_LAYER_ID)) {
-    map.setPaintProperty(
-      RAIL_VECTOR_STATION_LABEL_LAYER_ID,
-      "text-opacity",
-      railFade(opacity, RAIL_STATION_LABEL_FADE),
-    );
-  }
-}
 
 function removeRailVectorLayers(map: MLMap) {
   for (const id of [
@@ -1597,7 +1567,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     projection,
     orientationMode,
     railOn,
-    railwayOpacity,
     poiOn,
     ndviOn,
     ndviOpacity,
@@ -1626,7 +1595,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setLiveBasemapDayOffset,
     setProjection,
     setRailOn,
-    setRailwayOpacity,
     setPoiOn,
     setNdviOn,
     setNdviOpacity,
@@ -2948,7 +2916,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     const apply = () => {
       try {
-        ensureRailVectorLayers(map, railwayOpacity);
+        ensureRailVectorLayers(map, 1);
       } catch {
         // A style swap can remove the source between the check and add.
       }
@@ -3002,13 +2970,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
       map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
     };
-  }, [railwayOn, active, railwayOpacity]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !railwayOn) return;
-    updateRailVectorOpacity(map, railwayOpacity);
-  }, [railwayOn, railwayOpacity]);
+  }, [railwayOn, active]);
 
   // Google-Maps-style place dots. These ride on the same keyless
   // OpenFreeMap vector tiles as the rail detail, but in their own source
@@ -4315,6 +4277,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onBasemapModeChange={setBasemapMode}
                   poiOn={poiOn}
                   onPoiChange={setPoiOn}
+                  railOn={railOn}
+                  onRailChange={setRailOn}
                 />
 
                 <BasemapPanel
@@ -4384,13 +4348,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                     onOpacityChange={setOverlayOpacity}
                   />
                 )}
-                <RailsPanel
-                  on={railOn}
-                  onChange={setRailOn}
-                  opacity={railwayOpacity}
-                  onOpacityChange={setRailwayOpacity}
-                />
-
 
                 <DataSourcesPanel />
               </>
@@ -4885,6 +4842,8 @@ interface ViewPanelProps {
   onBasemapModeChange: (m: BasemapMode) => void;
   poiOn: boolean;
   onPoiChange: (on: boolean) => void;
+  railOn: boolean;
+  onRailChange: (on: boolean) => void;
 }
 
 function ViewPanel({
@@ -4894,6 +4853,8 @@ function ViewPanel({
   onBasemapModeChange,
   poiOn,
   onPoiChange,
+  railOn,
+  onRailChange,
 }: ViewPanelProps) {
   return (
     <HudPanel label="View">
@@ -4968,70 +4929,26 @@ function ViewPanel({
             <span className="hud-switch-thumb" aria-hidden />
           </button>
         </div>
-      </div>
-    </HudPanel>
-  );
-}
 
-interface RailsPanelProps {
-  on: boolean;
-  onChange: (on: boolean) => void;
-  opacity: number;
-  onOpacityChange: (o: number) => void;
-}
-
-function RailsPanel({
-  on,
-  onChange,
-  opacity,
-  onOpacityChange,
-}: RailsPanelProps) {
-  const caption = "Vector tiles · OpenFreeMap · OSM";
-
-  return (
-    <HudPanel>
-      <div className="flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
-            Rails
-          </h3>
+          <div className="flex min-w-0 flex-col">
+            <span className="ui-row-title">Rails</span>
+            <span className="text-[10.5px] text-[color:var(--ink-mute)]">
+              Railways &amp; stations · OpenFreeMap
+            </span>
+          </div>
           <button
             type="button"
             role="switch"
-            aria-checked={on}
+            aria-checked={railOn}
             aria-label="Rail overlay on/off"
-            onClick={() => onChange(!on)}
+            onClick={() => onRailChange(!railOn)}
             className="hud-switch"
-            data-on={on}
+            data-on={railOn}
           >
             <span className="hud-switch-thumb" aria-hidden />
           </button>
         </div>
-
-        {on && (
-          <>
-            <div className="flex items-center gap-2">
-              <span className="hud-label w-12 shrink-0">Opacity</span>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={opacity}
-                onChange={(e) => onOpacityChange(Number(e.target.value))}
-                className="hud-slider flex-1"
-                style={{ ["--hud-fill" as string]: `${Math.round(opacity * 100)}%` }}
-                aria-label="Rail overlay opacity"
-              />
-              <span className="hud-mono w-9 shrink-0 text-right text-[11.5px] text-[color:var(--ink-dim)]">
-                {Math.round(opacity * 100)}%
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
-              <span>{caption}</span>
-            </div>
-          </>
-        )}
       </div>
     </HudPanel>
   );

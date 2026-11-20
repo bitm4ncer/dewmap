@@ -87,7 +87,11 @@ describe("shell", () => {
     expect(tabRow).not.toContain("sheet-close");
     expect(tabRow).not.toContain("sheet-expand");
     expect(map.indexOf('"Vector Maps"')).toBeLessThan(map.indexOf('"Image Maps"'));
-    expect(map.indexOf("<TimelinePanel")).toBeLessThan(map.indexOf("<RailsPanel"));
+    expect(map.indexOf("<TimelinePanel")).toBeLessThan(map.indexOf("<DataSourcesPanel"));
+    // The rails toggle lives in the View section; the old standalone
+    // Rails panel with its opacity slider is gone.
+    expect(map).toContain("onRailChange={setRailOn}");
+    expect(map).not.toContain("<RailsPanel");
   });
 
   it("keeps the search action in the location card", () => {

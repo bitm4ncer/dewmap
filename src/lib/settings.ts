@@ -38,7 +38,6 @@ export interface Settings {
   /** Rails panel — toggle the rail-network overlay (independent of the
    * Biosphere stack; only ever zero/one rail style at a time). */
   railOn: boolean;
-  railwayOpacity: number;
   railStyle: RailStyle;
   /** Small POI dots (shops, food, culture, sport) above the basemap. */
   poiOn: boolean;
@@ -84,7 +83,6 @@ export interface Settings {
   setProjection: (p: Projection) => void;
   setOrientationMode: (m: OrientationMode) => void;
   setRailOn: (on: boolean) => void;
-  setRailwayOpacity: (o: number) => void;
   setRailStyle: (style: RailStyle) => void;
   setPoiOn: (on: boolean) => void;
   setNdviOn: (on: boolean) => void;
@@ -126,7 +124,6 @@ export const useSettings = create<Settings>()(
       projection: "mercator",
       orientationMode: "north",
       railOn: false,
-      railwayOpacity: 0.85,
       railStyle: "lines",
       poiOn: true,
       ndviOn: false,
@@ -165,7 +162,6 @@ export const useSettings = create<Settings>()(
       setProjection: (p) => set({ projection: p }),
       setOrientationMode: (m) => set({ orientationMode: m }),
       setRailOn: (on) => set({ railOn: on }),
-      setRailwayOpacity: (o) => set({ railwayOpacity: clamp01(o) }),
       setRailStyle: (style) => set({ railStyle: style }),
       setPoiOn: (on) => set({ poiOn: on }),
       setNdviOn: (on) => set({ ndviOn: on }),
@@ -212,7 +208,6 @@ export const useSettings = create<Settings>()(
         projection: state.projection,
         orientationMode: state.orientationMode,
         railOn: state.railOn,
-        railwayOpacity: state.railwayOpacity,
         railStyle: state.railStyle,
         poiOn: state.poiOn,
         ndviOn: state.ndviOn,
@@ -394,7 +389,6 @@ export const useSettings = create<Settings>()(
         delete p.weatherOn;
         delete p.railwayOn;
         delete p.firesOn;
-        if (typeof p.railwayOpacity !== "number") p.railwayOpacity = 0.85;
         if (typeof p.ndviOpacity !== "number") p.ndviOpacity = 0.7;
         if (p.railStyle !== "tiles" && p.railStyle !== "lines") p.railStyle = "lines";
         // v6 → v7: split single basemapId into image/vector slots + mode.
