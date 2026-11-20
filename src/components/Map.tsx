@@ -6,6 +6,7 @@ import maplibregl, {
   ScaleControl,
   type MapGeoJSONFeature,
   type MapMouseEvent,
+  type MapSourceDataEvent,
 } from "maplibre-gl";
 import { THEME } from "@/lib/theme";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -83,16 +84,15 @@ import {
 } from "@/lib/poi/poiClusterData";
 import { useHiking } from "@/lib/hiking/store";
 import {
-  ensureRailRouteLayers,
-  fetchRailRoutes,
-  RAIL_ROUTE_MIN_ZOOM,
-  removeRailRouteLayers,
-  type RailRouteNetwork,
-} from "@/lib/rail/railRoutes";
-import {
   RAIL_KIND_COLORS,
-  RAIL_KIND_LABELS,
+  RAIL_LINE_GROUPS,
+  RAIL_STATION_LABELS,
 } from "@/lib/routing/modeColors";
+import {
+  classifyStationSubclass,
+  mergeStations,
+  stationsToGeoJson,
+} from "@/lib/rail/stationMarkers";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { haptic } from "@/lib/haptics";
@@ -424,6 +424,19 @@ const RAIL_VECTOR_STATION_DOT_LAYER_ID = "rail-vector-station-dot";
 const RAIL_VECTOR_STATION_LABEL_LAYER_ID = "rail-vector-station-label";
 const RAIL_VECTOR_MIN_ZOOM = 4;
 const RAIL_VECTOR_STATION_MIN_ZOOM = 10;
+const RAIL_STATION_MERGED_SOURCE_ID = "rail-station-merged-src";
+const RAIL_STATION_MERGED_BASE_LAYER_ID = "rail-station-merged-base";
+const RAIL_STATION_MERGED_RING2_LAYER_ID = "rail-station-merged-ring2";
+const RAIL_STATION_MERGED_RING3_LAYER_ID = "rail-station-merged-ring3";
+const RAIL_STATION_MERGED_HIT_LAYER_ID = "rail-station-merged-hit";
+
+const stationKindColor = [
+  "match",
+  ["get", "kind"],
+  "tram", RAIL_KIND_COLORS.tram,
+  "subway", RAIL_KIND_COLORS.subway,
+  RAIL_KIND_COLORS.rail,
+] as ExpressionSpecification;
 
 /** Fade in over the three zoom levels above each layer's minzoom. */
 const RAIL_LINE_FADE: readonly [number, number][] = [
@@ -511,9 +524,10 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
           [
             "match",
             ["get", "subclass"],
-            "tram", RAIL_KIND_COLORS.tram,
-            "light_rail", RAIL_KIND_COLORS.tram,
-            "subway", RAIL_KIND_COLORS.subway,
+            // Urban rail is one group: tram, light rail and subway
+            // share the amber line colour; stations keep their own
+            // colours. Heavy rail (regio, S-Bahn, long distance) is
+            // the blue group.
             "monorail", THEME.narrowGauge,
             "narrow_gauge", THEME.narrowGauge,
             RAIL_KIND_COLORS.tram,
@@ -589,7 +603,9 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
         ],
         "circle-stroke-color": THEME.casing,
         "circle-stroke-width": 1.2,
-        "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
+        // Replaced visually by the merged multi-mode markers below;
+        // kept rendered (transparent) because it feeds their data.
+        "circle-opacity": 0,
       },
     });
   }
@@ -630,11 +646,106 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       },
     });
   }
+
+  // Multi-mode stations: outer ring = highest service class, inner
+  // rings add tram/subway so an interchange reads at a glance.
+  if (!map.getSource(RAIL_STATION_MERGED_SOURCE_ID)) {
+    map.addSource(RAIL_STATION_MERGED_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    });
+  }
+  const ringRadius = (factor: number): ExpressionSpecification =>
+    [
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      10, 2.6 * factor,
+      14, 4 * factor,
+      17, 5.2 * factor,
+    ] as ExpressionSpecification;
+  if (!map.getLayer(RAIL_STATION_MERGED_BASE_LAYER_ID)) {
+    map.addLayer({
+      id: RAIL_STATION_MERGED_BASE_LAYER_ID,
+      type: "circle",
+      source: RAIL_STATION_MERGED_SOURCE_ID,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      paint: {
+        "circle-radius": ringRadius(1),
+        "circle-color": stationKindColor,
+        "circle-stroke-color": THEME.casing,
+        "circle-stroke-width": 1.2,
+        "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
+      },
+    });
+  }
+  if (!map.getLayer(RAIL_STATION_MERGED_RING2_LAYER_ID)) {
+    map.addLayer({
+      id: RAIL_STATION_MERGED_RING2_LAYER_ID,
+      type: "circle",
+      source: RAIL_STATION_MERGED_SOURCE_ID,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      filter: ["has", "kind2"],
+      paint: {
+        "circle-radius": ringRadius(0.6),
+        "circle-color": [
+          "match",
+          ["get", "kind2"],
+          "tram", RAIL_KIND_COLORS.tram,
+          "subway", RAIL_KIND_COLORS.subway,
+          RAIL_KIND_COLORS.rail,
+        ],
+        "circle-stroke-color": THEME.casing,
+        "circle-stroke-width": 0.8,
+        "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
+      },
+    });
+  }
+  if (!map.getLayer(RAIL_STATION_MERGED_RING3_LAYER_ID)) {
+    map.addLayer({
+      id: RAIL_STATION_MERGED_RING3_LAYER_ID,
+      type: "circle",
+      source: RAIL_STATION_MERGED_SOURCE_ID,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      filter: ["has", "kind3"],
+      paint: {
+        "circle-radius": ringRadius(0.3),
+        "circle-color": [
+          "match",
+          ["get", "kind3"],
+          "tram", RAIL_KIND_COLORS.tram,
+          "subway", RAIL_KIND_COLORS.subway,
+          RAIL_KIND_COLORS.rail,
+        ],
+        "circle-stroke-color": THEME.casing,
+        "circle-stroke-width": 0.6,
+        "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
+      },
+    });
+  }
+  if (!map.getLayer(RAIL_STATION_MERGED_HIT_LAYER_ID)) {
+    map.addLayer({
+      id: RAIL_STATION_MERGED_HIT_LAYER_ID,
+      type: "circle",
+      source: RAIL_STATION_MERGED_SOURCE_ID,
+      minzoom: RAIL_VECTOR_STATION_MIN_ZOOM,
+      paint: {
+        "circle-radius": 18,
+        "circle-color": THEME.casing,
+        "circle-opacity": 0,
+        "circle-stroke-width": 0,
+      },
+    });
+  }
 }
 
 
 function removeRailVectorLayers(map: MLMap) {
   for (const id of [
+    RAIL_STATION_MERGED_HIT_LAYER_ID,
+    RAIL_STATION_MERGED_RING3_LAYER_ID,
+    RAIL_STATION_MERGED_RING2_LAYER_ID,
+    RAIL_STATION_MERGED_BASE_LAYER_ID,
     RAIL_VECTOR_STATION_LABEL_LAYER_ID,
     RAIL_VECTOR_STATION_DOT_LAYER_ID,
     RAIL_VECTOR_STATION_HIT_LAYER_ID,
@@ -642,6 +753,9 @@ function removeRailVectorLayers(map: MLMap) {
     RAIL_VECTOR_CASING_LAYER_ID,
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(RAIL_STATION_MERGED_SOURCE_ID)) {
+    map.removeSource(RAIL_STATION_MERGED_SOURCE_ID);
   }
   if (map.getSource(RAIL_VECTOR_SOURCE_ID)) {
     map.removeSource(RAIL_VECTOR_SOURCE_ID);
@@ -2977,12 +3091,59 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       return;
     }
 
+    let cancelled = false;
+    let stationTimer: number | null = null;
+    const rebuildStations = () => {
+      if (cancelled) return;
+      try {
+        if (!map.getStyle()?.layers?.length) return;
+      } catch {
+        return;
+      }
+      const source = map.getSource(RAIL_STATION_MERGED_SOURCE_ID) as
+        | { setData?: (data: GeoJSON.FeatureCollection) => void }
+        | undefined;
+      if (!source?.setData) return;
+      if (!map.getLayer(RAIL_VECTOR_STATION_HIT_LAYER_ID)) return;
+      const canvas = map.getCanvas();
+      const features = map.queryRenderedFeatures(
+        [[0, 0], [canvas.width, canvas.height]],
+        { layers: [RAIL_VECTOR_STATION_HIT_LAYER_ID] },
+      );
+      const inputs = [];
+      for (const feature of features) {
+        if (feature.geometry?.type !== "Point") continue;
+        const kind = classifyStationSubclass(
+          typeof feature.properties?.subclass === "string"
+            ? feature.properties.subclass
+            : undefined,
+        );
+        if (!kind) continue;
+        const [lon, lat] = feature.geometry.coordinates as [number, number];
+        inputs.push({
+          name: String(feature.properties?.name ?? ""),
+          lon,
+          lat,
+          kind,
+        });
+      }
+      source.setData(stationsToGeoJson(mergeStations(inputs)));
+    };
+    const scheduleStations = () => {
+      if (stationTimer !== null) window.clearTimeout(stationTimer);
+      stationTimer = window.setTimeout(() => {
+        stationTimer = null;
+        rebuildStations();
+      }, 300);
+    };
+
     const apply = () => {
       try {
         ensureRailVectorLayers(map, 1);
       } catch {
         // A style swap can remove the source between the check and add.
       }
+      scheduleStations();
     };
     // `isStyleLoaded()` can stay false while tiles are still streaming even
     // though the style and its layers already exist. Apply immediately, then
@@ -3005,8 +3166,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const unregisterTaps = registerFeatureTaps(map, {
       id: "rail-stations",
       layers: [
-        RAIL_VECTOR_STATION_HIT_LAYER_ID,
-        RAIL_VECTOR_STATION_DOT_LAYER_ID,
+        RAIL_STATION_MERGED_HIT_LAYER_ID,
+        RAIL_STATION_MERGED_BASE_LAYER_ID,
       ],
       tolerancePx: 26,
       hapticKind: "select",
@@ -3036,139 +3197,30 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       },
     });
 
-    map.on("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
-    map.on("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
-
-    return () => {
-      unregisterTaps();
-      map.off("style.load", apply);
-      map.off("idle", apply);
-      map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
-      map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
-    };
-  }, [railwayOn, active, routesMode]);
-
-  // Heavy-rail service colours (S-Bahn / regional / long-distance). The
-  // tiles only know infrastructure classes; these lines come from OSM
-  // route relations and sit on top of the neutral tile rail line.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (!railwayOn) {
-      try {
-        removeRailRouteLayers(map);
-      } catch {
-        // Style swapped in the meantime.
-      }
-      return;
-    }
-
-    let cancelled = false;
-    let timer: number | null = null;
-    let retryTimer: number | null = null;
-    let retryCount = 0;
-    let controller: AbortController | null = null;
-    let lastNetwork: RailRouteNetwork | null = null;
-
-    const styleReady = () => {
-      try {
-        return Boolean(map.getStyle()?.layers?.length);
-      } catch {
-        return false;
+    const onStationsMoveEnd = () => scheduleStations();
+    const onStationsSourceData = (event: MapSourceDataEvent) => {
+      if (event.sourceId === RAIL_VECTOR_SOURCE_ID && event.isSourceLoaded) {
+        scheduleStations();
       }
     };
-
-    const scheduleRetry = (delay: number) => {
-      if (retryTimer !== null) window.clearTimeout(retryTimer);
-      retryTimer = window.setTimeout(() => {
-        retryTimer = null;
-        refresh();
-      }, delay);
-    };
-
-    const refresh = () => {
-      if (cancelled) return;
-      if (!styleReady()) {
-        if (retryTimer === null) scheduleRetry(700);
-        return;
-      }
-      if (map.getZoom() < RAIL_ROUTE_MIN_ZOOM) return;
-      const bounds = map.getBounds();
-      const padLng = (bounds.getEast() - bounds.getWest()) * 0.08;
-      const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.08;
-      const bbox: [number, number, number, number] = [
-        Math.max(-85, bounds.getSouth() - padLat),
-        bounds.getWest() - padLng,
-        Math.min(85, bounds.getNorth() + padLat),
-        bounds.getEast() + padLng,
-      ];
-      controller?.abort();
-      const ctrl = new AbortController();
-      controller = ctrl;
-      fetchRailRoutes(bbox, ctrl.signal)
-        .then((network) => {
-          if (cancelled || ctrl.signal.aborted) return;
-          retryCount = 0;
-          if (network === lastNetwork) return;
-          lastNetwork = network;
-          ensureRailRouteLayers(map, network);
-        })
-        .catch((error) => {
-          if ((error as Error).name === "AbortError") return;
-          console.warn("[rail-routes] fetch failed", error);
-          scheduleRetry(Math.min(30_000, 5_000 * 2 ** retryCount));
-          retryCount += 1;
-        });
-    };
-
-    const apply = () => {
-      if (cancelled || !styleReady()) return;
-      if (lastNetwork) {
-        try {
-          ensureRailRouteLayers(map, lastNetwork);
-        } catch {
-          /* style still settling */
-        }
-      }
-      refresh();
-    };
-
-    apply();
-    map.on("style.load", apply);
-    map.once("idle", apply);
-    const onMoveEnd = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(refresh, 500);
-    };
-    map.on("moveend", onMoveEnd);
-    const watchdog = window.setInterval(() => {
-      if (cancelled || !styleReady()) return;
-      if (!lastNetwork) return;
-      if (!map.getLayer("rail-route-sbahn")) {
-        try {
-          ensureRailRouteLayers(map, lastNetwork);
-        } catch {
-          /* style still settling */
-        }
-      }
-    }, 3_000);
+    map.on("moveend", onStationsMoveEnd);
+    map.on("sourcedata", onStationsSourceData);
+    map.on("mouseenter", RAIL_STATION_MERGED_HIT_LAYER_ID, onEnter);
+    map.on("mouseleave", RAIL_STATION_MERGED_HIT_LAYER_ID, onLeave);
 
     return () => {
       cancelled = true;
-      controller?.abort();
-      if (timer !== null) window.clearTimeout(timer);
-      if (retryTimer !== null) window.clearTimeout(retryTimer);
-      window.clearInterval(watchdog);
+      unregisterTaps();
+      if (stationTimer !== null) window.clearTimeout(stationTimer);
       map.off("style.load", apply);
       map.off("idle", apply);
-      map.off("moveend", onMoveEnd);
-      try {
-        removeRailRouteLayers(map);
-      } catch {
-        /* style already swapped */
-      }
+      map.off("moveend", onStationsMoveEnd);
+      map.off("sourcedata", onStationsSourceData);
+      map.off("mouseenter", RAIL_STATION_MERGED_HIT_LAYER_ID, onEnter);
+      map.off("mouseleave", RAIL_STATION_MERGED_HIT_LAYER_ID, onLeave);
     };
-  }, [railwayOn, active]);
+  }, [railwayOn, active, routesMode]);
+
 
   // ── Bus lines overlay ─────────────────────────────────────────────
   // Dedicated bus routes + stops (OSM route=bus relations and
@@ -5698,22 +5750,42 @@ function ViewPanel({
 
         {railOn && (
           <div
-            className="flex flex-wrap items-center gap-2"
+            className="flex flex-col gap-2"
             aria-label="Rail colour key"
           >
-            {RAIL_KIND_LABELS.map(({ kind, label }) => (
-              <span
-                key={kind}
-                className="inline-flex items-center gap-1 text-[10.5px] text-[color:var(--ink-mute)]"
-              >
+            <div className="flex flex-wrap items-center gap-2">
+              {RAIL_LINE_GROUPS.map((group) => (
                 <span
-                  aria-hidden
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: RAIL_KIND_COLORS[kind] }}
-                />
-                {label}
+                  key={group.id}
+                  className="inline-flex items-center gap-1 text-[10.5px] text-[color:var(--ink-mute)]"
+                >
+                  <span
+                    aria-hidden
+                    className="h-[3px] w-4 rounded-full"
+                    style={{ background: group.color }}
+                  />
+                  {group.label}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10.5px] text-[color:var(--ink-mute)]">
+                Stationen
               </span>
-            ))}
+              {RAIL_STATION_LABELS.map(({ kind, label }) => (
+                <span
+                  key={kind}
+                  className="inline-flex items-center gap-1 text-[10.5px] text-[color:var(--ink-mute)]"
+                >
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: RAIL_KIND_COLORS[kind] }}
+                  />
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

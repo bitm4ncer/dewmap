@@ -563,19 +563,23 @@ export const POI_CLUSTER_BUILD_MAX_ZOOM = POI_CLUSTER_MAX_ZOOM;
  */
 export function poiTextFont(map: MLMap, bold = false): string[] {
   const glyphs = map.getStyle()?.glyphs ?? "";
+  // Always a single family. MapLibre interpolates a multi-font array into
+  // one comma-separated URL (`.../Noto Sans Medium,Noto Sans Regular/...`);
+  // several glyph CDNs (protomaps, VersaTiles, OHM) only serve single
+  // family names and return 404 for the combined stack.
   if (glyphs.includes("openhistoricalmap")) {
-    return bold ? ["OpenHistorical Bold", "OpenHistorical"] : ["OpenHistorical"];
+    return bold ? ["OpenHistorical Bold"] : ["OpenHistorical"];
   }
   if (glyphs.includes("versatiles")) {
-    return bold ? ["noto_sans_bold", "noto_sans_regular"] : ["noto_sans_regular"];
+    return bold ? ["noto_sans_bold"] : ["noto_sans_regular"];
   }
   if (glyphs.includes("cartocdn")) {
-    return bold ? ["Open Sans Bold", "Noto Sans Regular"] : ["Noto Sans Regular"];
+    return bold ? ["Open Sans Bold"] : ["Noto Sans Regular"];
   }
   if (glyphs.includes("protomaps")) {
-    return bold ? ["Noto Sans Medium", "Noto Sans Regular"] : ["Noto Sans Regular"];
+    return bold ? ["Noto Sans Medium"] : ["Noto Sans Regular"];
   }
-  return bold ? ["Noto Sans Bold", "Noto Sans Regular"] : ["Noto Sans Regular"];
+  return bold ? ["Noto Sans Bold"] : ["Noto Sans Regular"];
 }
 
 export function ensurePoiClusterLayers(map: MLMap) {
@@ -614,31 +618,27 @@ export function ensurePoiClusterLayers(map: MLMap) {
       },
     });
   }
-  // Vector basemaps already label districts; drawing our own names there
-  // duplicated every visible label and pushed the important ones out via
-  // collision. Show the name only on raster modes (Image/Hybrid), where
-  // the basemap has no labels at all.
-  const isRasterBasemap = Boolean(
-    map.getStyle()?.layers?.some(
-      (layer) => layer.id === "base" && layer.type === "raster",
-    ),
-  );
+  // The Stadtteil name sits just below the circle. Some vector basemaps
+  // label districts themselves and some do not; showing our name in both
+  // cases guarantees the marker is identifiable (with a halo over any
+  // duplicate basemap label).
   if (!map.getLayer(POI_CLUSTER_NAME_LAYER_ID)) {
     map.addLayer({
       id: POI_CLUSTER_NAME_LAYER_ID,
       type: "symbol",
       source: POI_CLUSTER_DATA_SOURCE_ID,
-      minzoom: POI_CLUSTER_MIN_ZOOM,
+      // Counts start at 10; names join at the city view (12) so the
+      // regional band stays calm instead of stacking every district name.
+      minzoom: POI_CLUSTER_MIN_ZOOM + 2,
       maxzoom: POI_CLUSTER_MAX_ZOOM,
       filter: ["all", ["has", "point_count"], ["has", "district_name"]],
       layout: {
-        visibility: isRasterBasemap ? "visible" : "none",
         "text-field": ["get", "district_name"],
         "text-size": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          10,
+          12,
           9,
           13,
           11,
@@ -646,11 +646,13 @@ export function ensurePoiClusterLayers(map: MLMap) {
         "text-font": poiTextFont(map),
         "text-anchor": "top",
         "text-offset": [0, 1.6],
-        "text-allow-overlap": false,
-        "text-optional": true,
+        // A district name must never disappear because a basemap label
+        // (or a neighbouring count) reserved its slot. The halo keeps it
+        // readable over both.
+        "text-allow-overlap": true,
         "text-padding": 3,
         // Lower sort values are placed first. Invert the count so the
-        // biggest districts win the label collision.
+        // biggest districts are drawn first when names overlap.
         "symbol-sort-key": ["-", 0, ["get", "point_count"]],
       },
       paint: {
@@ -678,8 +680,10 @@ export function ensurePoiClusterLayers(map: MLMap) {
         "text-anchor": "center",
         "text-justify": "center",
         "text-offset": [0, 0.08],
-        // Larger clusters win placement, so counts never stack up in
-        // dense districts (the whole point of the overview).
+        // The count is the primary information. It must not be culled
+        // by a basemap label that happens to sit on the same district
+        // point, so allow it to overlap.
+        "text-allow-overlap": true,
         "text-padding": 2,
         "symbol-sort-key": ["-", 0, ["get", "point_count"]],
       },
