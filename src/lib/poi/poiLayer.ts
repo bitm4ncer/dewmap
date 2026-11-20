@@ -14,9 +14,9 @@ export const POI_SOURCE_ID = "poi-vector-src";
 export const POI_ICON_LAYER_ID = "poi-icons";
 export const POI_LABEL_LAYER_ID = "poi-labels";
 export const POI_HIT_LAYER_ID = "poi-hit";
-export const POI_SELECTION_SOURCE_ID = "poi-selection-src";
-export const POI_SELECTION_HALO_LAYER_ID = "poi-selection-halo";
-export const POI_SELECTION_RING_LAYER_ID = "poi-selection-ring";
+export const SELECTION_RING_SOURCE_ID = "selection-ring-src";
+export const SELECTION_RING_HALO_LAYER_ID = "selection-ring-halo";
+export const SELECTION_RING_LAYER_ID = "selection-ring";
 export const POI_MIN_ZOOM = 14;
 /** Dots carry every place between clusters and icons (no collision). */
 export const POI_DOT_LAYER_ID = "poi-mini-dots";
@@ -460,11 +460,12 @@ export function removePoiLayers(map: MLMap) {
   }
 }
 
-// ── Selected-place ring ───────────────────────────────────────────────
-// A static ring around the place whose detail card is open. The dark
-// halo keeps it visible on light basemaps; the light ring does the same
-// on dark/satellite ones. Both are screen-space circles, so they follow
-// the place at every zoom without re-fetching anything.
+// ── Selection ring ────────────────────────────────────────────────────
+// A static ring around every active selection: the place detail, transit
+// from/to/via, and the last tapped rail/tram/bus stop. The dark halo
+// keeps it visible on light basemaps; the light ring does the same on
+// dark/satellite ones. Both are screen-space circles, so they follow the
+// points at every zoom without re-fetching anything.
 
 const selectionRadius = [
   "interpolate",
@@ -474,18 +475,18 @@ const selectionRadius = [
   18, 17,
 ] as ExpressionSpecification;
 
-export function ensurePoiSelectionLayers(map: MLMap) {
-  if (!map.getSource(POI_SELECTION_SOURCE_ID)) {
-    map.addSource(POI_SELECTION_SOURCE_ID, {
+export function ensureSelectionRingLayers(map: MLMap) {
+  if (!map.getSource(SELECTION_RING_SOURCE_ID)) {
+    map.addSource(SELECTION_RING_SOURCE_ID, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
     });
   }
-  if (!map.getLayer(POI_SELECTION_HALO_LAYER_ID)) {
+  if (!map.getLayer(SELECTION_RING_HALO_LAYER_ID)) {
     map.addLayer({
-      id: POI_SELECTION_HALO_LAYER_ID,
+      id: SELECTION_RING_HALO_LAYER_ID,
       type: "circle",
-      source: POI_SELECTION_SOURCE_ID,
+      source: SELECTION_RING_SOURCE_ID,
       paint: {
         "circle-radius": selectionRadius,
         "circle-color": "rgba(0,0,0,0)",
@@ -495,11 +496,11 @@ export function ensurePoiSelectionLayers(map: MLMap) {
       },
     });
   }
-  if (!map.getLayer(POI_SELECTION_RING_LAYER_ID)) {
+  if (!map.getLayer(SELECTION_RING_LAYER_ID)) {
     map.addLayer({
-      id: POI_SELECTION_RING_LAYER_ID,
+      id: SELECTION_RING_LAYER_ID,
       type: "circle",
-      source: POI_SELECTION_SOURCE_ID,
+      source: SELECTION_RING_SOURCE_ID,
       paint: {
         "circle-radius": selectionRadius,
         "circle-color": "rgba(0,0,0,0)",
@@ -510,35 +511,39 @@ export function ensurePoiSelectionLayers(map: MLMap) {
   }
 }
 
-/** Point the ring at the place whose details are open; null clears it. */
-export function updatePoiSelection(
+export interface SelectionRingPoint {
+  lon: number;
+  lat: number;
+}
+
+/** Point the ring at every active selection; an empty list clears it. */
+export function updateSelectionRing(
   map: MLMap,
-  selection: { lon: number; lat: number } | null,
+  selections: readonly SelectionRingPoint[],
 ): void {
-  ensurePoiSelectionLayers(map);
-  const source = map.getSource(POI_SELECTION_SOURCE_ID) as
+  ensureSelectionRingLayers(map);
+  const seen = new Set<string>();
+  const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+  for (const selection of selections) {
+    if (!Number.isFinite(selection.lon) || !Number.isFinite(selection.lat)) continue;
+    const key = `${selection.lon.toFixed(5)}:${selection.lat.toFixed(5)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    features.push({
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [selection.lon, selection.lat],
+      },
+      properties: {},
+    });
+  }
+  const source = map.getSource(SELECTION_RING_SOURCE_ID) as
     | { setData?: (data: GeoJSON.FeatureCollection) => void }
     | undefined;
-  source?.setData?.({
-    type: "FeatureCollection",
-    features: selection
-      ? [
-          {
-            type: "Feature",
-            geometry: {
-              type: "Point",
-              coordinates: [selection.lon, selection.lat],
-            },
-            properties: {},
-          },
-        ]
-      : [],
-  });
+  source?.setData?.({ type: "FeatureCollection", features });
   // Keep the ring above dots/icons/labels after a style or zoom re-add.
-  for (const id of [
-    POI_SELECTION_HALO_LAYER_ID,
-    POI_SELECTION_RING_LAYER_ID,
-  ]) {
+  for (const id of [SELECTION_RING_HALO_LAYER_ID, SELECTION_RING_LAYER_ID]) {
     if (map.getLayer(id)) map.moveLayer(id);
   }
 }

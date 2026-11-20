@@ -3832,11 +3832,6 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [poiOn, active, mapInstance]);
 
-  // A new transit from/to/via supersedes a previously tapped stop.
-  useEffect(() => {
-    setStationSelection(null);
-  }, [transitFrom, transitTo, transitVia]);
-
   // Every active selection shares one ring layer: the open place detail,
   // transit from/to/via, and the last tapped rail/tram/bus stop. Duplicate
   // coordinates are collapsed inside updateSelectionRing().
