@@ -33,6 +33,8 @@ interface Props {
   onClose: () => void;
   onCenter?: (lon: number, lat: number) => void;
   onPlanRoute?: (selection: PoiSelection) => void;
+  /** Set by the shell when the bottom sheet takes the edge from the card. */
+  dismissed?: boolean;
 }
 
 interface ContentProps extends Omit<Props, "selection"> {
@@ -73,6 +75,7 @@ function PoiDetailContent({
   onClose,
   onCenter,
   onPlanRoute,
+  dismissed,
 }: ContentProps) {
   const [details, setDetails] = useState<PoiDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -536,6 +539,13 @@ function PoiDetailContent({
     haptic("tap");
     onPlanRoute?.(routeSelection);
   };
+
+  // The sheet expanded: hand the bottom edge over. Closing through the
+  // animation keeps the card's own exit timing instead of unmounting it.
+  useEffect(() => {
+    if (dismissed) closeCard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot signal from the shell
+  }, [dismissed]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

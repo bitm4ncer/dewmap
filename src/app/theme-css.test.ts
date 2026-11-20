@@ -313,6 +313,10 @@ describe("sheet chrome and compact date field", () => {
     );
     expect(mobileZ).toBeDefined();
     expect(mobileBottom).toBeDefined();
+    // Source order decides here: the base .poi-detail rule must come first.
+    expect(css.lastIndexOf("bottom: var(--hud-peek-h)")).toBeGreaterThan(
+      css.indexOf(".poi-detail {"),
+    );
     const sheet = css.match(/--z-sheet:\s*(\d+)/)?.[1];
     const cardZ = css.match(/--z-card:\s*(\d+)/)?.[1];
     expect(Number(cardZ)).toBeLessThan(Number(sheet));

@@ -5191,6 +5191,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
       <PoiDetail
         selection={poiSelection}
+        dismissed={poiDismissing}
         onClose={closePoi}
         onCenter={centerPoi}
         onPlanRoute={planPoiRoute}

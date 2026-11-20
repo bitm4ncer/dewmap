@@ -395,14 +395,6 @@ body {
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
-
-  /* The detail card lives in the dock's shadow: above the map, below the
-     opaque peek bar, so it slides out from behind it and the tabs stay
-     readable and clickable in every state. */
-  .poi-detail {
-    bottom: var(--hud-peek-h);
-    z-index: var(--z-card);
-  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -653,8 +645,7 @@ body {
   body:has(.poi-detail) .maplibregl-ctrl-bottom-left,
   body:has(.poi-detail) .maplibregl-ctrl-bottom-right,
   body:has(.poi-detail) .maplibregl-ctrl-attrib,
-  body:has(.poi-detail) .maplibregl-ctrl-attrib-button,
-  body:has(.poi-detail) .hud-sheet-tabs {
+  body:has(.poi-detail) .maplibregl-ctrl-attrib-button {
     display: none !important;
   }
 }
@@ -1912,6 +1903,13 @@ input[type="range"].hud-slider::-moz-range-thumb {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* The card rests above the opaque dock bar, so a full-height translate starts
+   hidden behind it: the card looks like it slides out from under the tabs. */
+@keyframes poi-card-rise {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
 .poi-detail[data-expanded="true"] {
   height: min(78dvh, 760px);
 }
@@ -2562,6 +2560,18 @@ input[type="range"].hud-slider::-moz-range-thumb {
   width: 100%;
   height: 12px;
   border-radius: 6px;
+}
+
+/* The detail card lives in the dock's shadow: above the map, below the opaque
+   peek bar, so it slides out from behind it and the tabs stay readable and
+   clickable in every state. Declared after the base rule on purpose. */
+@media (max-width: 767px) {
+  .poi-detail {
+    bottom: var(--hud-peek-h);
+    z-index: var(--z-card);
+    /* Rise from behind the dock bar instead of the 14px desktop nudge. */
+    animation-name: poi-card-rise;
+  }
 }
 
 @media (min-width: 768px) {
