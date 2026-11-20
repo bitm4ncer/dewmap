@@ -1,0 +1,62 @@
+{
+  "cwd": "/home/jannes/Github/Biosphere1",
+  "configPath": "/home/jannes/Github/Biosphere1/.powerhouse/polish/config.json",
+  "out": "/home/jannes/Github/Biosphere1/.powerhouse/polish/runs/settings-fixed2-20261120-151842",
+  "launch": {
+    "mode": "command",
+    "command": "npm run dev -- -p 3100",
+    "url": "http://localhost:3100",
+    "readyTimeoutMs": 120000,
+    "waitFor": "[role=\"dialog\"]",
+    "navTimeoutMs": 30000
+  },
+  "routes": [
+    {
+      "path": "/?settings=1",
+      "intent": {
+        "purpose": "Store the user's own Copernicus Data Space (Sentinel Hub) OAuth client so satellite imagery can be loaded directly from the browser, with no backend.",
+        "primaryAction": "Save credentials",
+        "globalActions": [
+          "Close (Escape or backdrop click)",
+          "Clear credentials"
+        ]
+      }
+    }
+  ],
+  "viewports": [
+    [
+      390,
+      844
+    ],
+    [
+      1440,
+      900
+    ]
+  ],
+  "appearances": [
+    "dark"
+  ],
+  "appearancesExplicit": true,
+  "flows": [],
+  "auth": null,
+  "tokens": [
+    "rgb(18, 22, 25)",
+    "rgb(22, 27, 30)",
+    "rgb(27, 33, 37)",
+    "rgb(34, 42, 47)",
+    "rgb(43, 52, 57)",
+    "rgb(233, 238, 240)",
+    "rgb(167, 180, 186)",
+    "rgb(144, 158, 165)",
+    "rgb(141, 172, 187)",
+    "rgb(143, 188, 222)",
+    "rgb(216, 162, 95)",
+    "rgb(222, 138, 126)",
+    "rgb(15, 20, 22)"
+  ],
+  "ignore": [
+    "[data-polish-ignore]"
+  ],
+  "maxRoutes": 3,
+  "maxComponents": 40
+}

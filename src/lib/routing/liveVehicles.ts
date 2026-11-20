@@ -8,6 +8,7 @@
  * when the real-time times change.
  */
 
+import { MODE_COLORS } from "./modeColors";
 import { bearingDeg, cumulativeDistances } from "./geo";
 import { fetchJson } from "./http";
 import { decodePolyline, toLonLat } from "./polyline";
@@ -79,22 +80,7 @@ const MODE_LABELS: Record<string, string> = {
   AIRPLANE: "Plane",
 };
 
-const MODE_COLORS: Record<string, string> = {
-  HIGHSPEED_RAIL: "#8cc8ff",
-  LONG_DISTANCE: "#8cc8ff",
-  REGIONAL_RAIL: "#8cc8ff",
-  REGIONAL_EXPRESS: "#8cc8ff",
-  SUBURBAN: "#7bd6a4",
-  METRO: "#c39bff",
-  SUBWAY: "#c39bff",
-  TRAM: "#f0b35b",
-  LIGHT_RAIL: "#f0b35b",
-  BUS: "#f0b35b",
-  COACH: "#f0b35b",
-  FERRY: "#5bc8d8",
-  ODM: "#d8ef6a",
-  AIRPLANE: "#d9d7cf",
-};
+
 
 export function liveModeLabel(mode: string | undefined): string {
   if (!mode) return "Transit";

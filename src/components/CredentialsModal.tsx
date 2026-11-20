@@ -63,7 +63,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-[color:var(--surf-1)] p-6 sm:p-7"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[var(--r-sheet)] bg-[color:var(--surf-1)] p-6 sm:p-7"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -73,23 +73,32 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
             >
               Bring your own credentials
             </h2>
-            <p
+            <div
               id={descId}
-              className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--ink-dim)]"
+              className="mt-1.5 space-y-2 text-[14px] leading-relaxed text-[color:var(--ink-dim)]"
             >
-              KugelMaps runs entirely in your browser — no backend, no
-              proxy. Create an OAuth client in your{" "}
-              <a
-                href="https://dataspace.copernicus.eu/"
-                target="_blank"
-                rel="noreferrer"
-                className="rounded text-[color:var(--accent)] hover:opacity-80"
-              >
-                Copernicus Data Space
-              </a>{" "}
-              account (type: <span className="font-mono">Single-Page Application</span>,
-              Web origins: allow all or your page URL).
-            </p>
+              <p>
+                KugelMaps runs entirely in your browser — no backend, no proxy.
+              </p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>
+                  Create an OAuth client in your{" "}
+                  <a
+                    href="https://dataspace.copernicus.eu/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[color:var(--accent)] underline underline-offset-2 hover:opacity-80"
+                  >
+                    Copernicus Data Space
+                  </a>{" "}
+                  account.
+                </li>
+                <li>
+                  Type <span className="font-mono">Single-Page Application</span>,
+                  web origins: allow all or your page URL.
+                </li>
+              </ul>
+            </div>
           </div>
           {onClose && (
             <button
@@ -130,7 +139,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
               type="text"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              className="ui-input font-mono text-[14px]"
+              className="ui-input font-mono"
               placeholder="sh-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
               autoComplete="off"
               spellCheck={false}
@@ -147,17 +156,18 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
                 type={showSecret ? "text" : "password"}
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                className="ui-input pr-20 font-mono text-[14px]"
+                className="ui-input pr-20 font-mono"
+                placeholder="Your client secret"
                 autoComplete="off"
                 spellCheck={false}
               />
               <button
                 type="button"
                 onClick={() => setShowSecret((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[12px] text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
+                className="absolute right-2 top-1/2 h-9 -translate-y-1/2 rounded-[var(--r-pill)] px-3 text-[12px] text-[color:var(--ink-dim)] hover:bg-[color:var(--surf-2)] hover:text-[color:var(--ink)]"
                 aria-label={showSecret ? "Hide secret" : "Show secret"}
               >
-                {showSecret ? "hide" : "show"}
+                {showSecret ? "Hide" : "Show"}
               </button>
             </div>
           </label>
@@ -185,7 +195,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-full px-4 py-2 text-[13px] text-[color:var(--ink-dim)] hover:bg-[rgba(241,240,232,0.06)] hover:text-[color:var(--ink)]"
+                  className="inline-flex min-h-11 items-center justify-center rounded-[var(--r-pill)] px-4 text-[13px] text-[color:var(--ink-dim)] hover:bg-[rgba(241,240,232,0.06)] hover:text-[color:var(--ink)]"
                 >
                   Cancel
                 </button>

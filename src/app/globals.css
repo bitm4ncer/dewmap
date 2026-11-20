@@ -158,7 +158,7 @@ body {
   bottom: -2px;
   width: 18px;
   height: 6px;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   filter: blur(5px);
   opacity: 0.55;
@@ -252,7 +252,7 @@ body {
   width: 36px;
   height: 36px;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 0;
   background: var(--glass-strong);
   backdrop-filter: blur(18px) saturate(1.08);
@@ -327,7 +327,7 @@ body {
   padding: 2px;
   background: var(--surf-3);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   display: inline-flex;
   align-items: center;
   transition: background var(--dur-fast) var(--ease);
@@ -537,7 +537,7 @@ body {
   display: none;
   width: 34px;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--ink-mute);
   opacity: 0.55;
   transition: opacity var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
@@ -555,7 +555,7 @@ body {
   border: 0;
   background: transparent;
   color: var(--ink-dim);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
@@ -657,7 +657,7 @@ input[type="range"].hud-slider {
 
 input[type="range"].hud-slider::-webkit-slider-runnable-track {
   height: 4px;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   background: linear-gradient(to right,
     var(--accent) 0%,
     var(--accent) var(--hud-fill, 50%),
@@ -667,12 +667,12 @@ input[type="range"].hud-slider::-webkit-slider-runnable-track {
 
 input[type="range"].hud-slider::-moz-range-track {
   height: 4px;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   background: var(--surf-3);
 }
 input[type="range"].hud-slider::-moz-range-progress {
   height: 4px;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
 }
 
@@ -682,7 +682,7 @@ input[type="range"].hud-slider::-webkit-slider-thumb {
   height: 18px;
   background: var(--ink);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   margin-top: -7px;
 }
 
@@ -691,7 +691,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   height: 18px;
   background: var(--ink);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
 }
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -836,7 +836,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   color: var(--ink-dim);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
 }
 
 .hud-handle:hover {
@@ -856,7 +856,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   height: 44px;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--glass-strong);
   backdrop-filter: blur(22px) saturate(1.1);
   color: var(--ink);
@@ -991,7 +991,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   color: var(--ink-dim);
   background: var(--surf-2);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
   min-height: 26px;
@@ -1025,7 +1025,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   gap: 0;
   background: var(--glass);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   padding: 4px;
   overflow: hidden;
   backdrop-filter: blur(18px) saturate(1.08);
@@ -1039,7 +1039,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   height: 32px;
   background: transparent;
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   color: var(--ink-dim);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
@@ -1084,7 +1084,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   color: var(--accent-ink);
   background: var(--accent);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
   transition: filter var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
 }
@@ -1105,7 +1105,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   border: 0;
   background: transparent;
   color: var(--ink-dim);
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
@@ -1123,7 +1123,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   flex: 0 0 auto;
   width: 40px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0;
   background: var(--surf-3);
   cursor: pointer;
@@ -1175,7 +1175,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .hud-search {
   background: var(--glass);
   border: 0;
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   backdrop-filter: blur(18px) saturate(1.08);
   transition: box-shadow var(--dur-fast) var(--ease);
 }
@@ -1250,7 +1250,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   align-items: center;
   min-height: 18px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent-soft);
   color: var(--ink);
   font-size: 9.5px;
@@ -1302,7 +1302,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .pane-tape {
   height: 3px;
   background: var(--accent);
-  border-radius: 9999px;
+  border-radius: var(--r-pill);
   margin: 0 0 10px;
   flex-shrink: 0;
 }
@@ -1670,8 +1670,23 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 .ui-chip[data-active="true"]:hover { background: var(--accent-strong); }
 .ui-chip:disabled { opacity: .4; cursor: not-allowed; }
+/* Icon-only chips (place filters) need a real touch target. The generic
+   .ui-chip min-height would otherwise win over Tailwind's min-h-10. */
+.ui-chip.ui-chip-icon {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  justify-content: center;
+}
 @media (max-width: 767px) {
   .ui-chip { min-height: 32px; padding: 0 var(--sp-3); font-size: 12px; }
+  .ui-chip.ui-chip-icon {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
 }
 
 /* Inputs --------------------------------------------------------------- */
@@ -1910,7 +1925,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   width: 36px;
   height: 4px;
   transform: translateX(-50%);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--surf-3);
 }
 
@@ -2128,7 +2143,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--ink);
   background: rgba(20, 21, 18, 0.72);
   backdrop-filter: blur(10px);
@@ -2367,7 +2382,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .poi-status {
   margin-left: auto;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   font-size: 10.5px;
   font-weight: 700;
 }
@@ -2740,7 +2755,7 @@ select {
     height: 28px;
     display: grid;
     place-items: center;
-    border-radius: 999px;
+    border-radius: var(--r-pill);
     background: var(--glass-strong);
     backdrop-filter: blur(18px) saturate(1.08);
     color: var(--accent);

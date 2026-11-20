@@ -1,0 +1,49 @@
+{
+  "engine": "chromium",
+  "engineGap": "Tauri/WebView2 and WebKit are not rendered; a Tauri dev server is a Chromium proxy.",
+  "framework": "unknown",
+  "tools": {
+    "playwright": "1.65.1",
+    "axe": "4.14.0"
+  },
+  "limitations": [
+    "shadow-dom"
+  ],
+  "routes": [
+    "/?settings=1"
+  ],
+  "intents": [
+    {
+      "path": "/?settings=1",
+      "purpose": "Store the user's own Copernicus Data Space (Sentinel Hub) OAuth client so satellite imagery can be loaded directly from the browser, with no backend.",
+      "primaryAction": "Save credentials",
+      "globalActions": [
+        "Close (Escape or backdrop click)",
+        "Clear credentials"
+      ],
+      "confidence": "provided"
+    }
+  ],
+  "viewports": [
+    [
+      390,
+      844
+    ],
+    [
+      1440,
+      900
+    ]
+  ],
+  "appearances": [
+    "dark"
+  ],
+  "darkSpot": false,
+  "flows": [],
+  "screens": [
+    "screens/settings-1-390x844-dark-full.png",
+    "screens/settings-1-390x844-dark-s1.png",
+    "screens/settings-1-1440x900-dark-full.png",
+    "screens/settings-1-1440x900-dark-s1.png"
+  ],
+  "collectedAt": "2026-11-20T14:06:04.271Z"
+}

@@ -4,7 +4,7 @@ import {
   POI_CLUSTER_CIRCLE_LAYER_ID,
   POI_CLUSTER_COUNT_LAYER_ID,
   POI_CLUSTER_DATA_SOURCE_ID,
-  POI_CLUSTER_POINT_LAYER_ID,
+  POI_CLUSTER_NAME_LAYER_ID,
   POI_DOT_LAYER_ID,
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
@@ -14,6 +14,7 @@ import {
   ensurePoiLayers,
   featureMatchesKinds,
   poiLayerFilter,
+  poiTextFont,
   removePoiClusterLayers,
   removePoiLayers,
 } from "./poiLayer";
@@ -114,7 +115,7 @@ describe("POI cluster layers", () => {
     expect(sources.has(POI_CLUSTER_DATA_SOURCE_ID)).toBe(true);
     expect(layers.has(POI_CLUSTER_CIRCLE_LAYER_ID)).toBe(true);
     expect(layers.has(POI_CLUSTER_COUNT_LAYER_ID)).toBe(true);
-    expect(layers.has(POI_CLUSTER_POINT_LAYER_ID)).toBe(true);
+    expect(layers.has(POI_CLUSTER_NAME_LAYER_ID)).toBe(true);
   });
 
   it("is idempotent and removes everything", () => {
@@ -127,6 +128,34 @@ describe("POI cluster layers", () => {
     removePoiClusterLayers(map);
     expect(sources.size).toBe(0);
     expect(layers.size).toBe(0);
+  });
+});
+
+describe("poiTextFont", () => {
+  const withGlyphs = (glyphs: string) =>
+    ({ getStyle: () => ({ glyphs, layers: [] }) }) as unknown as MLMap;
+
+  it("uses the font names each glyph provider actually serves", () => {
+    expect(poiTextFont(withGlyphs("https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf"), true))
+      .toEqual(["Noto Sans Bold", "Noto Sans Regular"]);
+    expect(poiTextFont(withGlyphs("https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf")))
+      .toEqual(["Noto Sans Regular"]);
+
+    expect(poiTextFont(withGlyphs("https://tiles.basemaps.cartocdn.com/v/1/fonts/{fontstack}/{range}.pbf"), true))
+      .toEqual(["Open Sans Bold", "Noto Sans Regular"]);
+
+    expect(poiTextFont(withGlyphs("https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf"), true))
+      .toEqual(["Noto Sans Medium", "Noto Sans Regular"]);
+
+    expect(poiTextFont(withGlyphs("https://tiles.versatiles.org/assets/glyphs/{fontstack}/{range}.pbf"), true))
+      .toEqual(["noto_sans_bold", "noto_sans_regular"]);
+    expect(poiTextFont(withGlyphs("https://tiles.versatiles.org/assets/glyphs/{fontstack}/{range}.pbf")))
+      .toEqual(["noto_sans_regular"]);
+
+    expect(poiTextFont(withGlyphs("https://www.openhistoricalmap.org/map-styles/fonts/{fontstack}/{range}.pbf"), true))
+      .toEqual(["OpenHistorical Bold", "OpenHistorical"]);
+    expect(poiTextFont(withGlyphs("https://www.openhistoricalmap.org/map-styles/fonts/{fontstack}/{range}.pbf")))
+      .toEqual(["OpenHistorical"]);
   });
 });
 

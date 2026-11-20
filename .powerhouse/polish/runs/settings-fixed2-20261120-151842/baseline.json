@@ -1,0 +1,99 @@
+{
+  "confidence": "explicit",
+  "coverage": 0.6071428571428571,
+  "colors": [
+    {
+      "value": "rgba(0, 0, 0, 0)",
+      "count": 22
+    },
+    {
+      "value": "rgb(167, 180, 186)",
+      "count": 12
+    },
+    {
+      "value": "rgb(233, 238, 240)",
+      "count": 10
+    },
+    {
+      "value": "rgb(144, 158, 165)",
+      "count": 4
+    },
+    {
+      "value": "rgb(43, 52, 57)",
+      "count": 4
+    },
+    {
+      "value": "rgb(141, 172, 187)",
+      "count": 2
+    },
+    {
+      "value": "rgb(34, 42, 47)",
+      "count": 2
+    }
+  ],
+  "radii": [
+    {
+      "value": "0px",
+      "count": 16
+    },
+    {
+      "value": "999px",
+      "count": 8
+    },
+    {
+      "value": "10px",
+      "count": 4
+    }
+  ],
+  "fontSizes": [
+    {
+      "value": "14px",
+      "count": 8
+    },
+    {
+      "value": "16px",
+      "count": 8
+    },
+    {
+      "value": "12px",
+      "count": 6
+    },
+    {
+      "value": "18px",
+      "count": 2
+    },
+    {
+      "value": "13px",
+      "count": 2
+    },
+    {
+      "value": "13.5px",
+      "count": 2
+    }
+  ],
+  "shadows": [
+    {
+      "value": "none",
+      "count": 26
+    },
+    {
+      "value": "rgb(22, 27, 30) 0px 0px 0px 2px, rgb(141, 172, 187) 0px 0px 0px 4px",
+      "count": 2
+    }
+  ],
+  "radiusOutliers": [],
+  "fontOutliers": [
+    {
+      "value": "18px",
+      "count": 2
+    },
+    {
+      "value": "13px",
+      "count": 2
+    },
+    {
+      "value": "13.5px",
+      "count": 2
+    }
+  ]
+}

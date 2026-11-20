@@ -1,0 +1,147 @@
+{
+  "findings": [
+    {
+      "id": "tokens:type-outlier:/?settings=1 #_r_0_",
+      "severity": "P2",
+      "category": "tokens",
+      "where": "/?settings=1 #_r_0_",
+      "claim": "Font size appears once or twice, outside the inferred type scale.",
+      "evidence": "18px",
+      "rule": "type-outlier",
+      "fix": "Use the project's type scale.",
+      "flags": []
+    },
+    {
+      "id": "tokens:type-outlier:/?settings=1 div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4 > div.flex.items-center > div.flex.items-center > button.inline-flex.min-h-11:nth-of-type(1)",
+      "severity": "P2",
+      "category": "tokens",
+      "where": "/?settings=1 div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4 > div.flex.items-center > div.flex.items-center > button.inline-flex.min-h-11:nth-of-type(1)",
+      "claim": "Font size appears once or twice, outside the inferred type scale.",
+      "evidence": "13px",
+      "rule": "type-outlier",
+      "fix": "Use the project's type scale.",
+      "flags": []
+    },
+    {
+      "id": "tokens:type-outlier:/?settings=1 div.fixed.inset-0:nth-of-type(2) > div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4 > label.block:nth-of-type(1) > input.ui-input.font-mono",
+      "severity": "P2",
+      "category": "tokens",
+      "where": "/?settings=1 div.fixed.inset-0:nth-of-type(2) > div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4 > label.block:nth-of-type(1) > input.ui-input.font-mono",
+      "claim": "Font size appears once or twice, outside the inferred type scale.",
+      "evidence": "13.5px",
+      "rule": "type-outlier",
+      "fix": "Use the project's type scale.",
+      "flags": []
+    },
+    {
+      "id": "tokens:type-outlier:/?settings=1 div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4 > label.block:nth-of-type(2) > div.relative > input.ui-input.pr-20",
+      "severity": "P2",
+      "category": "tokens",
+      "where": "/?settings=1 div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4 > label.block:nth-of-type(2) > div.relative > input.ui-input.pr-20",
+      "claim": "Font size appears once or twice, outside the inferred type scale.",
+      "evidence": "13.5px",
+      "rule": "type-outlier",
+      "fix": "Use the project's type scale.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2)",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2)",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1)",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1)",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1) > div.h-full.w-full:nth-of-type(1)",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1) > div.h-full.w-full:nth-of-type(1)",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1) > div.h-full.w-full:nth-of-type(1) > div.maplibregl-canvas-container.maplibregl-interactive:nth-of-type(1) > canvas.maplibregl-canvas",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1) > div.h-full.w-full:nth-of-type(1) > div.maplibregl-canvas-container.maplibregl-interactive:nth-of-type(1) > canvas.maplibregl-canvas",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "responsive:vh-unit:/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.fixed.inset-0:nth-of-type(2)",
+      "severity": "P2",
+      "category": "responsive",
+      "where": "/?settings=1 390x844 html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.fixed.inset-0:nth-of-type(2)",
+      "claim": "Element height equals the viewport height; mobile browser chrome can clip it.",
+      "evidence": "height == innerHeight",
+      "rule": "vh-unit",
+      "fix": "Use min-height with dvh or let content define the height.",
+      "flags": []
+    },
+    {
+      "id": "a11y:axe:region:/?settings=1 .maplibregl-ctrl-attrib-inner",
+      "severity": "P2",
+      "category": "a11y",
+      "where": "/?settings=1 .maplibregl-ctrl-attrib-inner",
+      "claim": "All page content should be contained by landmarks",
+      "evidence": "2 node(s)",
+      "rule": "axe:region",
+      "fix": "Follow the axe guidance for this rule.",
+      "flags": []
+    },
+    {
+      "id": "a11y:axe:region:/?settings=1 .text-sm",
+      "severity": "P2",
+      "category": "a11y",
+      "where": "/?settings=1 .text-sm",
+      "claim": "All page content should be contained by landmarks",
+      "evidence": "1 node(s)",
+      "rule": "axe:region",
+      "fix": "Follow the axe guidance for this rule.",
+      "flags": []
+    }
+  ]
+}

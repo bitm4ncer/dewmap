@@ -1,0 +1,110 @@
+{
+  "sections": [
+    {
+      "route": "/?settings=1",
+      "viewport": "390x844",
+      "appearance": "dark",
+      "id": "s3",
+      "role": "form",
+      "heading": "",
+      "selector": "body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.fixed.inset-0:nth-of-type(2) > div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4",
+      "box": {
+        "x": 40,
+        "y": 396.625,
+        "w": 310,
+        "h": 275
+      },
+      "order": {
+        "dom": 340,
+        "visual": 0
+      },
+      "padding": "0px",
+      "background": "rgba(0, 0, 0, 0)",
+      "actions": [
+        "c7",
+        "c8",
+        "c9",
+        "c10",
+        "c11",
+        "c12",
+        "c13",
+        "c14"
+      ]
+    },
+    {
+      "route": "/?settings=1",
+      "viewport": "390x844",
+      "appearance": "dark",
+      "id": "s1",
+      "role": "aside",
+      "heading": "Routes",
+      "selector": "html.geist_a71539c9-module__T19VSG__variable.geist_mono_8d43a2aa-module__8Li5zG__variable > body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1) > aside.hud-bottom-sheet.flex",
+      "box": {
+        "x": 0,
+        "y": 756,
+        "w": 390,
+        "h": 88
+      },
+      "order": {
+        "dom": 151,
+        "visual": 1
+      },
+      "padding": "0px",
+      "background": "rgb(22, 27, 30)",
+      "actions": []
+    },
+    {
+      "route": "/?settings=1",
+      "viewport": "390x844",
+      "appearance": "dark",
+      "id": "s2",
+      "role": "nav",
+      "heading": "",
+      "selector": "body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.relative.h-full:nth-of-type(1) > aside.hud-bottom-sheet.flex > nav.hud-sheet-tabs",
+      "box": {
+        "x": 0,
+        "y": 792,
+        "w": 390,
+        "h": 52
+      },
+      "order": {
+        "dom": 162,
+        "visual": 2
+      },
+      "padding": "0px 8px 12px",
+      "background": "rgba(0, 0, 0, 0)",
+      "actions": []
+    },
+    {
+      "route": "/?settings=1",
+      "viewport": "1440x900",
+      "appearance": "dark",
+      "id": "s1",
+      "role": "form",
+      "heading": "",
+      "selector": "body.min-h-full.flex > div.fixed.inset-0:nth-of-type(2) > div.fixed.inset-0:nth-of-type(2) > div.max-h-\\[calc\\(100dvh-2rem\\)\\].w-full > form.space-y-4",
+      "box": {
+        "x": 492,
+        "y": 413.25,
+        "w": 456,
+        "h": 275
+      },
+      "order": {
+        "dom": 94,
+        "visual": 0
+      },
+      "padding": "0px",
+      "background": "rgba(0, 0, 0, 0)",
+      "actions": [
+        "c21",
+        "c22",
+        "c23",
+        "c24",
+        "c25",
+        "c26",
+        "c27",
+        "c28"
+      ]
+    }
+  ]
+}

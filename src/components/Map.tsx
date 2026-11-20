@@ -57,7 +57,7 @@ import {
   POI_CLUSTER_COUNT_LAYER_ID,
   POI_CLUSTER_DATA_SOURCE_ID,
   POI_CLUSTER_MIN_ZOOM,
-  POI_CLUSTER_POINT_LAYER_ID,
+  POI_CLUSTER_NAME_LAYER_ID,
   POI_DOT_LAYER_ID,
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
@@ -74,13 +74,25 @@ import {
 } from "@/lib/poi/poiLayer";
 import {
   aggregatePoiDistricts,
+  clearPoiTileCache,
   clusterTileBudget,
   DISTRICT_CELL_DEG,
-  fetchPoiClusterPoints,
+  fetchPoiClusterData,
   loadPoiView,
   persistPoiView,
 } from "@/lib/poi/poiClusterData";
 import { useHiking } from "@/lib/hiking/store";
+import {
+  ensureRailRouteLayers,
+  fetchRailRoutes,
+  RAIL_ROUTE_MIN_ZOOM,
+  removeRailRouteLayers,
+  type RailRouteNetwork,
+} from "@/lib/rail/railRoutes";
+import {
+  RAIL_KIND_COLORS,
+  RAIL_KIND_LABELS,
+} from "@/lib/routing/modeColors";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
 import { haptic } from "@/lib/haptics";
@@ -499,12 +511,14 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
           [
             "match",
             ["get", "subclass"],
-            "tram", THEME.tram,
-            "narrow_gauge", THEME.narrowGauge,
+            "tram", RAIL_KIND_COLORS.tram,
+            "light_rail", RAIL_KIND_COLORS.tram,
+            "subway", RAIL_KIND_COLORS.subway,
             "monorail", THEME.narrowGauge,
-            THEME.lightRail,
+            "narrow_gauge", THEME.narrowGauge,
+            RAIL_KIND_COLORS.tram,
           ],
-          THEME.info,
+          RAIL_KIND_COLORS.rail,
         ],
         "line-width": [
           "interpolate", ["linear"], ["zoom"],
@@ -533,7 +547,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       filter: [
         "all",
         ["==", ["get", "class"], "railway"],
-        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt", "tram_stop", "subway"]]],
       ],
       paint: {
         // Large invisible tap target. `transparent` is not reliable across
@@ -557,7 +571,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       filter: [
         "all",
         ["==", ["get", "class"], "railway"],
-        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt", "tram_stop", "subway"]]],
       ],
       paint: {
         "circle-radius": [
@@ -566,7 +580,13 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
           14, 3.2,
           17, 4.5,
         ],
-        "circle-color": THEME.accent,
+        "circle-color": [
+          "match",
+          ["get", "subclass"],
+          "tram_stop", RAIL_KIND_COLORS.tram,
+          "subway", RAIL_KIND_COLORS.subway,
+          RAIL_KIND_COLORS.rail,
+        ],
         "circle-stroke-color": THEME.casing,
         "circle-stroke-width": 1.2,
         "circle-opacity": railFade(opacity, RAIL_STATION_FADE),
@@ -584,7 +604,7 @@ function ensureRailVectorLayers(map: MLMap, opacity: number) {
       filter: [
         "all",
         ["==", ["get", "class"], "railway"],
-        ["in", ["get", "subclass"], ["literal", ["station", "halt"]]],
+        ["in", ["get", "subclass"], ["literal", ["station", "halt", "tram_stop", "subway"]]],
       ],
       layout: {
         "text-field": ["coalesce", ["get", "name"], ""],
@@ -2978,9 +2998,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.getCanvas().style.cursor = "";
     };
 
-    // Tapping a station drops a hiking waypoint. The pipeline resolves
-    // the tap with tolerance and fires haptic + ripple before we touch
-    // any state, so the acknowledgment is instant.
+    // Tapping a station either fills the transit destination or drops a
+    // hiking waypoint, depending on the planner mode the user is in. The
+    // pipeline resolves the tap with tolerance and fires haptic + ripple
+    // before we touch any state, so the acknowledgment is instant.
     const unregisterTaps = registerFeatureTaps(map, {
       id: "rail-stations",
       layers: [
@@ -2992,14 +3013,26 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       onFeature: (feature) => {
         const coords = (feature.geometry as GeoJSON.Point)
           .coordinates as [number, number];
-        const name = (feature.properties?.name as string | undefined)
-          ?? "Station";
-        useHiking.getState().addWaypoint({
+        const props = feature.properties ?? {};
+        const name = (props.name as string | undefined) ?? "Station";
+        const place = {
+          name,
           lat: coords[1],
           lon: coords[0],
-          label: name,
-          source: "station",
-        });
+          kind: "stop" as const,
+        };
+        if (routesMode === "walk" || routesMode === "bike" || routesMode === "car") {
+          useHiking.getState().addWaypoint({
+            lat: coords[1],
+            lon: coords[0],
+            label: name,
+            source: "station",
+          });
+          return;
+        }
+        useTransit.getState().setTo(place);
+        setActivePane("hiking");
+        setSheetState((state) => (state === "peek" ? "half" : state));
       },
     });
 
@@ -3012,6 +3045,128 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("idle", apply);
       map.off("mouseenter", RAIL_VECTOR_STATION_HIT_LAYER_ID, onEnter);
       map.off("mouseleave", RAIL_VECTOR_STATION_HIT_LAYER_ID, onLeave);
+    };
+  }, [railwayOn, active, routesMode]);
+
+  // Heavy-rail service colours (S-Bahn / regional / long-distance). The
+  // tiles only know infrastructure classes; these lines come from OSM
+  // route relations and sit on top of the neutral tile rail line.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!railwayOn) {
+      try {
+        removeRailRouteLayers(map);
+      } catch {
+        // Style swapped in the meantime.
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | null = null;
+    let retryTimer: number | null = null;
+    let retryCount = 0;
+    let controller: AbortController | null = null;
+    let lastNetwork: RailRouteNetwork | null = null;
+
+    const styleReady = () => {
+      try {
+        return Boolean(map.getStyle()?.layers?.length);
+      } catch {
+        return false;
+      }
+    };
+
+    const scheduleRetry = (delay: number) => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        refresh();
+      }, delay);
+    };
+
+    const refresh = () => {
+      if (cancelled) return;
+      if (!styleReady()) {
+        if (retryTimer === null) scheduleRetry(700);
+        return;
+      }
+      if (map.getZoom() < RAIL_ROUTE_MIN_ZOOM) return;
+      const bounds = map.getBounds();
+      const padLng = (bounds.getEast() - bounds.getWest()) * 0.08;
+      const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.08;
+      const bbox: [number, number, number, number] = [
+        Math.max(-85, bounds.getSouth() - padLat),
+        bounds.getWest() - padLng,
+        Math.min(85, bounds.getNorth() + padLat),
+        bounds.getEast() + padLng,
+      ];
+      controller?.abort();
+      const ctrl = new AbortController();
+      controller = ctrl;
+      fetchRailRoutes(bbox, ctrl.signal)
+        .then((network) => {
+          if (cancelled || ctrl.signal.aborted) return;
+          retryCount = 0;
+          if (network === lastNetwork) return;
+          lastNetwork = network;
+          ensureRailRouteLayers(map, network);
+        })
+        .catch((error) => {
+          if ((error as Error).name === "AbortError") return;
+          console.warn("[rail-routes] fetch failed", error);
+          scheduleRetry(Math.min(30_000, 5_000 * 2 ** retryCount));
+          retryCount += 1;
+        });
+    };
+
+    const apply = () => {
+      if (cancelled || !styleReady()) return;
+      if (lastNetwork) {
+        try {
+          ensureRailRouteLayers(map, lastNetwork);
+        } catch {
+          /* style still settling */
+        }
+      }
+      refresh();
+    };
+
+    apply();
+    map.on("style.load", apply);
+    map.once("idle", apply);
+    const onMoveEnd = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(refresh, 500);
+    };
+    map.on("moveend", onMoveEnd);
+    const watchdog = window.setInterval(() => {
+      if (cancelled || !styleReady()) return;
+      if (!lastNetwork) return;
+      if (!map.getLayer("rail-route-sbahn")) {
+        try {
+          ensureRailRouteLayers(map, lastNetwork);
+        } catch {
+          /* style still settling */
+        }
+      }
+    }, 3_000);
+
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (timer !== null) window.clearTimeout(timer);
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      window.clearInterval(watchdog);
+      map.off("style.load", apply);
+      map.off("idle", apply);
+      map.off("moveend", onMoveEnd);
+      try {
+        removeRailRouteLayers(map);
+      } catch {
+        /* style already swapped */
+      }
     };
   }, [railwayOn, active]);
 
@@ -3227,11 +3382,19 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     poiKindsRef.current = poiKinds;
   }, [poiKinds]);
 
+  // The tap callback depends on the bottom-sheet state. Keep it in a ref
+  // so opening a place card does not tear down this effect (which would
+  // abort the cluster build and reset the rendered-marker session).
+  const openPoiRef = useRef(openPoi);
+  useEffect(() => {
+    openPoiRef.current = openPoi;
+  }, [openPoi]);
+
   // Google-Maps-style place dots. These ride on the same keyless
   // OpenFreeMap vector tiles as the rail detail, but in their own source
   // so they survive basemap swaps and can be toggled independently.
-  // City zoom (12 → 15) aggregates the dense z14 POI tiles into clusters
-  // with counts; closer in, individual dots take over.
+  // City zoom (10 → 14) aggregates the dense z14 POI tiles into one
+  // counted marker per OSM Stadtteil; closer in, individual dots take over.
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
@@ -3242,6 +3405,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       } catch {
         // A style swap may already have removed the source.
       }
+      clearPoiTileCache();
       return;
     }
 
@@ -3274,6 +3438,15 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const onKindsChanged = () => {
       builtBbox = null;
       renderedMarkers.clear();
+      // Drop the old, unfiltered counts immediately. Until the filtered
+      // rebuild finishes, empty is honest; stale numbers are not.
+      const clusterSource = map.getSource(POI_CLUSTER_DATA_SOURCE_ID) as
+        | { setData?: (data: GeoJSON.FeatureCollection) => void }
+        | undefined;
+      clusterSource?.setData?.({
+        type: "FeatureCollection",
+        features: [],
+      });
       forceNextBuild = true;
       scheduleClusters();
     };
@@ -3284,9 +3457,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let builtBbox: [number, number, number, number] | null = null;
     let builtKinds = "";
     let warmStarted = false;
-    /** Markers ever rendered this session, keyed by cell. Only grows:
-     *  a tile budget cut at low zoom must never remove a district that
-     *  was already on screen (that made the grid look like it jumps). */
+    /** Markers rendered by this effect instance, keyed by the stable
+     *  district/grid key. Only grows: a tile-budget cut at low zoom must
+     *  never remove a district that was already on screen. */
     const renderedMarkers = new Map<string, GeoJSON.Feature<GeoJSON.Point>>();
     const rebuildClusters = (force = false) => {
       if (cancelled || !styleReady()) return;
@@ -3334,7 +3507,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const template = (
         map.getSource(POI_SOURCE_ID) as { tiles?: string[] } | undefined
       )?.tiles?.[0];
-      fetchPoiClusterPoints(bbox, poiKindsRef.current, ctrl.signal, template, {
+      fetchPoiClusterData(bbox, poiKindsRef.current, ctrl.signal, template, {
         budget: clusterTileBudget(zoom),
       })
         .then((data) => {
@@ -3345,7 +3518,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
               number,
               number,
             ];
-            const key = `${Math.round(lon / cellDeg)}:${Math.round(lat / cellDeg)}:${lon.toFixed(5)}:${lat.toFixed(5)}`;
+            const key = String(
+              feature.properties?.key
+                ?? `${Math.round(lon / cellDeg)}:${Math.round(lat / cellDeg)}:${lon.toFixed(5)}:${lat.toFixed(5)}`,
+            );
             const existing = renderedMarkers.get(key);
             if (!existing) {
               renderedMarkers.set(key, feature);
@@ -3436,7 +3612,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         ? geometry.coordinates as [number, number]
         : null;
       if (!coords && !event) return;
-      openPoi({
+      openPoiRef.current({
         lon: coords ? coords[0] : event!.lngLat.lng,
         lat: coords ? coords[1] : event!.lngLat.lat,
         ...(name ? { name } : {}),
@@ -3464,23 +3640,55 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       onFeature: openPlace,
     });
 
-    // Cluster taps either zoom into the cluster or open an unclustered
-    // place. The pipeline already fired haptic + ripple.
+    // Cluster taps fit the *actual places* of the district, not a
+    // guessed cell size. The pipeline already fired haptic + ripple.
     const onClusterTap = (feature: MapGeoJSONFeature) => {
       const count = Number(feature.properties?.point_count);
       const coords = (feature.geometry as GeoJSON.Point | undefined)?.coordinates as
         | [number, number]
         | undefined;
-      if (Number.isFinite(count) && count >= 2 && coords) {
-        // One level only: zoom until the district cell fits the screen,
-        // which always lands in the individual-dot range.
+      if (Number.isFinite(count) && count >= 1 && coords) {
+        const rawBounds = feature.properties?.bounds;
+        const bounds =
+          Array.isArray(rawBounds) &&
+          rawBounds.length === 4 &&
+          rawBounds.every(
+            (value) => typeof value === "number" && Number.isFinite(value),
+          )
+            ? (rawBounds as [number, number, number, number])
+            : null;
+        if (bounds) {
+          const camera = map.cameraForBounds(
+            [
+              [bounds[0], bounds[1]],
+              [bounds[2], bounds[3]],
+            ],
+            { padding: 56 },
+          );
+          const cameraZoom = camera?.zoom;
+          if (
+            camera?.center &&
+            typeof cameraZoom === "number" &&
+            Number.isFinite(cameraZoom)
+          ) {
+            map.easeTo({
+              center: camera.center,
+              zoom: Math.min(17, Math.max(POI_MIN_ZOOM, cameraZoom)),
+              duration: prefersReducedMotion() ? 0 : 550,
+            });
+            return;
+          }
+        }
+        // Fallback for old/partial data: fit a 0.02° area. Use CSS
+        // pixels, not canvas device pixels, so high-DPR phones do not
+        // over-zoom by a factor of 2–3.
         const cellDeg =
           Number(feature.properties?.cell_deg) || DISTRICT_CELL_DEG;
-        const width = map.getCanvas().width;
+        const width = map.getContainer().clientWidth;
         const fit = Math.log2((0.65 * width * 360) / (512 * cellDeg));
         map.easeTo({
           center: coords,
-          zoom: Math.min(17, Math.max(POI_MIN_ZOOM + 0.4, fit)),
+          zoom: Math.min(17, Math.max(POI_MIN_ZOOM, fit)),
           duration: prefersReducedMotion() ? 0 : 550,
         });
         return;
@@ -3491,8 +3699,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       id: "poi-clusters",
       layers: [
         POI_CLUSTER_CIRCLE_LAYER_ID,
+        POI_CLUSTER_NAME_LAYER_ID,
         POI_CLUSTER_COUNT_LAYER_ID,
-        POI_CLUSTER_POINT_LAYER_ID,
       ],
       // Cluster circles max out at 15 px; keep the grab radius just
       // above that (the pipeline measures to the centroid).
@@ -3506,6 +3714,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("mouseleave", POI_HIT_LAYER_ID, hidePointer);
     map.on("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
     map.on("mouseleave", POI_CLUSTER_CIRCLE_LAYER_ID, hidePointer);
+    map.on("mouseenter", POI_CLUSTER_NAME_LAYER_ID, showPointer);
+    map.on("mouseleave", POI_CLUSTER_NAME_LAYER_ID, hidePointer);
 
     return () => {
       unregisterTaps();
@@ -3523,8 +3733,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
       map.off("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
       map.off("mouseleave", POI_CLUSTER_CIRCLE_LAYER_ID, hidePointer);
+      map.off("mouseenter", POI_CLUSTER_NAME_LAYER_ID, showPointer);
+      map.off("mouseleave", POI_CLUSTER_NAME_LAYER_ID, hidePointer);
     };
-  }, [poiOn, active, mapInstance, openPoi]);
+  }, [poiOn, active, mapInstance]);
 
   // Kind chips apply instantly to detail dots and clusters without
   // rebuilding the whole POI subsystem.
@@ -5395,7 +5607,7 @@ function ViewPanel({
           <div className="flex min-w-0 flex-col">
             <span className="ui-row-title">Places</span>
             <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-              Clustered by area · tap a cluster to zoom in
+              Clustered by district · tap a cluster to zoom in
             </span>
           </div>
           <button
@@ -5419,11 +5631,11 @@ function ViewPanel({
           >
             <button
               type="button"
-              className="ui-chip min-h-10 min-w-10 justify-center"
+              className="ui-chip ui-chip-icon"
               data-active={poiKinds.length === 0}
               aria-pressed={poiKinds.length === 0}
-              aria-label="All places"
-              title="All places"
+              aria-label="All categories"
+              title="All categories"
               onClick={() => onPoiKindsChange([])}
             >
               <AllPlacesIcon size={17} />
@@ -5444,7 +5656,7 @@ function ViewPanel({
                 <button
                   key={kind.id}
                   type="button"
-                  className="ui-chip min-h-10 min-w-10 justify-center"
+                  className="ui-chip ui-chip-icon"
                   data-active={active}
                   aria-pressed={active}
                   aria-label={kind.label}
@@ -5468,7 +5680,7 @@ function ViewPanel({
           <div className="flex min-w-0 flex-col">
             <span className="ui-row-title">Rails</span>
             <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-              Railways &amp; stations · OpenFreeMap
+              Railways &amp; stations · coloured by service
             </span>
           </div>
           <button
@@ -5483,6 +5695,27 @@ function ViewPanel({
             <span className="hud-switch-thumb" aria-hidden />
           </button>
         </div>
+
+        {railOn && (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            aria-label="Rail colour key"
+          >
+            {RAIL_KIND_LABELS.map(({ kind, label }) => (
+              <span
+                key={kind}
+                className="inline-flex items-center gap-1 text-[10.5px] text-[color:var(--ink-mute)]"
+              >
+                <span
+                  aria-hidden
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: RAIL_KIND_COLORS[kind] }}
+                />
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-col">

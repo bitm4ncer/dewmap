@@ -513,9 +513,9 @@ export function CultureIcon({ size = 18, className }: IconProps) {
 export function SportIcon({ size = 18, className }: IconProps) {
   return (
     <svg {...base(size, className)}>
-      <path d="M3.5 12h17" />
-      <rect x="2.5" y="8.5" width="3.5" height="7" rx="1.4" />
-      <rect x="18" y="8.5" width="3.5" height="7" rx="1.4" />
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 4c3.4 2.4 3.4 13.6 0 16" />
+      <path d="M4.6 8.8c4.6 1.7 10.2 1.7 14.8 0M4.6 15.2c4.6-1.7 10.2-1.7 14.8 0" />
     </svg>
   );
 }
