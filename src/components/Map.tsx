@@ -75,7 +75,7 @@ import {
 import {
   aggregatePoiDistricts,
   clusterTileBudget,
-  districtCellDeg,
+  DISTRICT_CELL_DEG,
   fetchPoiClusterPoints,
   loadPoiView,
   persistPoiView,
@@ -3261,16 +3261,29 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
     };
 
+    let forceNextBuild = false;
     const scheduleClusters = () => {
       if (clusterTimer !== null) window.clearTimeout(clusterTimer);
       clusterTimer = window.setTimeout(() => {
         clusterTimer = null;
-        rebuildClusters();
+        const force = forceNextBuild;
+        forceNextBuild = false;
+        rebuildClusters(force);
       }, 350);
+    };
+    const onKindsChanged = () => {
+      builtBbox = null;
+      forceNextBuild = true;
+      scheduleClusters();
     };
 
     let clusterController: AbortController | null = null;
-    const rebuildClusters = () => {
+    /** Area the current markers were built from — zooming inside it
+     *  must not re-bucket or re-fetch anything. */
+    let builtBbox: [number, number, number, number] | null = null;
+    let builtKinds = "";
+    let warmStarted = false;
+    const rebuildClusters = (force = false) => {
       if (cancelled || !styleReady()) return;
       const zoom = map.getZoom();
       if (zoom < POI_CLUSTER_MIN_ZOOM || zoom >= POI_CLUSTER_BUILD_MAX_ZOOM) {
@@ -3289,12 +3302,26 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         Math.min(85, bounds.getNorth() + padLat),
         bounds.getEast() + padLng,
       ];
-      const cellDeg = districtCellDeg(zoom);
-      // Warm start: show the last identical view immediately. Positions
-      // and counts only change once, when the fresh tiles are complete.
-      if (poiKindsRef.current.length === 0) {
+      const cellDeg = DISTRICT_CELL_DEG;
+      const kindsKey = poiKindsRef.current.join(",");
+      if (
+        !force &&
+        builtBbox &&
+        builtKinds === kindsKey &&
+        bbox[0] >= builtBbox[0] &&
+        bbox[1] >= builtBbox[1] &&
+        bbox[2] <= builtBbox[2] &&
+        bbox[3] <= builtBbox[3]
+      ) {
+        return;
+      }
+      // Warm start once: show the last identical view immediately.
+      // Later rebuilds keep the on-screen markers until the fresh
+      // tiles are complete, so zooming does not flash.
+      if (!warmStarted && kindsKey === "") {
         const cached = loadPoiView(bbox, cellDeg);
         if (cached) source.setData?.(cached);
+        warmStarted = true;
       }
       clusterController?.abort();
       const ctrl = new AbortController();
@@ -3309,6 +3336,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           if (cancelled || ctrl.signal.aborted) return;
           const aggregated = aggregatePoiDistricts(data, cellDeg);
           source.setData?.(aggregated);
+          builtBbox = bbox;
+          builtKinds = kindsKey;
           if (poiKindsRef.current.length === 0) {
             persistPoiView(bbox, cellDeg, aggregated);
           }
@@ -3412,7 +3441,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         // One level only: zoom until the district cell fits the screen,
         // which always lands in the individual-dot range.
         const cellDeg =
-          Number(feature.properties?.cell_deg) || districtCellDeg(map.getZoom());
+          Number(feature.properties?.cell_deg) || DISTRICT_CELL_DEG;
         const width = map.getCanvas().width;
         const fit = Math.log2((0.65 * width * 360) / (512 * cellDeg));
         map.easeTo({
@@ -3438,7 +3467,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
 
     map.on("moveend", scheduleClusters);
-    map.on("kugelmaps:poi-kinds", scheduleClusters);
+    map.on("kugelmaps:poi-kinds", onKindsChanged);
     map.on("mouseenter", POI_HIT_LAYER_ID, showPointer);
     map.on("mouseleave", POI_HIT_LAYER_ID, hidePointer);
     map.on("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
@@ -3455,7 +3484,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("style.load", apply);
       map.off("idle", apply);
       map.off("moveend", scheduleClusters);
-      map.off("kugelmaps:poi-kinds", scheduleClusters);
+      map.off("kugelmaps:poi-kinds", onKindsChanged);
       map.off("mouseenter", POI_HIT_LAYER_ID, showPointer);
       map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
       map.off("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);

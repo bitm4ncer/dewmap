@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregatePoiDistricts,
-  districtCellDeg,
+  DISTRICT_CELL_DEG,
   MAX_CLUSTER_TILES,
   lonLatToTile,
   tileRangeForBbox,
@@ -103,7 +103,7 @@ describe("district aggregation", () => {
         point(6.78 + i * 0.0001, 51.23 + i * 0.0001),
       ),
     };
-    const out = aggregatePoiDistricts(data, districtCellDeg(12));
+    const out = aggregatePoiDistricts(data, DISTRICT_CELL_DEG);
     expect(out.features).toHaveLength(1);
     expect(out.features[0].properties?.point_count).toBe(20);
   });

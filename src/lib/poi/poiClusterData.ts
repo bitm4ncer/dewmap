@@ -268,16 +268,12 @@ export async function fetchPoiClusterPoints(
 
 // ── Single-level district aggregation ────────────────────────────────
 /**
- * Cell size for the one cluster level per zoom. Bigger cells when
- * zoomed far out, district-sized (~2.5 km) around z12. There is no
- * second hierarchy: every place belongs to exactly one cell and every
- * non-empty cell becomes exactly one marker.
+ * One fixed district grid for the whole cluster band (~1.4 km by
+ * 1.4 km at central-European latitudes). Keeping it zoom-independent
+ * is what makes the markers stable: zooming only changes how much of
+ * the grid is on screen, never where a district sits or what it counts.
  */
-export function districtCellDeg(zoom: number): number {
-  if (zoom < 11) return 0.06;
-  if (zoom < 12) return 0.04;
-  return 0.025;
-}
+export const DISTRICT_CELL_DEG = 0.02;
 
 /**
  * Group POIs into square geographic cells. Cells with two or more
