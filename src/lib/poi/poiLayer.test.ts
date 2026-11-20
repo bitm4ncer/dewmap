@@ -10,6 +10,7 @@ import {
   POI_ICON_LAYER_ID,
   POI_LABEL_LAYER_ID,
   POI_SOURCE_ID,
+  ALL_POI_KINDS,
   SELECTION_RING_HALO_LAYER_ID,
   SELECTION_RING_LAYER_ID,
   SELECTION_RING_SOURCE_ID,
@@ -19,6 +20,8 @@ import {
   ensureSelectionRingLayers,
   featureMatchesKinds,
   poiLayerFilter,
+  selectedPoiKinds,
+  togglePoiKind,
   poiTextFont,
   removePoiClusterLayers,
   removePoiLayers,
@@ -272,6 +275,39 @@ describe("featureMatchesKinds", () => {
   it("combines kinds", () => {
     expect(featureMatchesKinds(place({ class: "restaurant" }), ["food", "shop"])).toBe(true);
     expect(featureMatchesKinds(place({ class: "garden", name: "Garten" }), ["space"])).toBe(true);
+  });
+});
+
+describe("poi kind chip selection", () => {
+  it("treats the empty stored value as every chip on", () => {
+    expect(selectedPoiKinds([])).toEqual([...ALL_POI_KINDS]);
+  });
+
+  it("turns one category off from the all state", () => {
+    expect(togglePoiKind([], "food")).toEqual([
+      "shop",
+      "culture",
+      "sport",
+      "space",
+    ]);
+  });
+
+  it("turns the last missing category back on", () => {
+    expect(togglePoiKind(["shop", "culture", "sport", "space"], "food")).toEqual([
+      ...ALL_POI_KINDS,
+    ]);
+  });
+
+  it("keeps at least one category selected", () => {
+    expect(togglePoiKind(["food"], "food")).toEqual(["food"]);
+  });
+
+  it("keeps the canonical order regardless of click order", () => {
+    expect(togglePoiKind(["space", "food"], "shop")).toEqual([
+      "food",
+      "shop",
+      "space",
+    ]);
   });
 });
 

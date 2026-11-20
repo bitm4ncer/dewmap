@@ -1723,6 +1723,73 @@ input[type="range"].hud-slider::-moz-range-thumb {
   justify-content: center;
 }
 .ui-chip.ui-chip-icon:not([data-active="true"]) { color: var(--ink-mute); }
+
+/* Place filters: one tooltip per icon, shown on hover, focus or a tap. */
+.poi-filter-chip { position: relative; }
+.poi-filter-tooltip {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: flex;
+  width: max-content;
+  max-width: 190px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surf-2);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.poi-filter-tooltip-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.poi-filter-tooltip-text {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ink-mute);
+}
+.poi-filter-chip[data-tip-edge="start"] .poi-filter-tooltip {
+  left: 0;
+  transform: translateY(4px);
+}
+.poi-filter-chip[data-tip-edge="end"] .poi-filter-tooltip {
+  right: 0;
+  left: auto;
+  transform: translateY(4px);
+}
+.poi-filter-chip[data-tip-open="true"] .poi-filter-tooltip,
+.poi-filter-chip:focus-visible .poi-filter-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.poi-filter-chip[data-tip-edge="start"][data-tip-open="true"] .poi-filter-tooltip,
+.poi-filter-chip[data-tip-edge="start"]:focus-visible .poi-filter-tooltip,
+.poi-filter-chip[data-tip-edge="end"][data-tip-open="true"] .poi-filter-tooltip,
+.poi-filter-chip[data-tip-edge="end"]:focus-visible .poi-filter-tooltip {
+  transform: translateY(0);
+}
+@media (hover: hover) {
+  .poi-filter-chip:hover .poi-filter-tooltip {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  .poi-filter-chip[data-tip-edge="start"]:hover .poi-filter-tooltip,
+  .poi-filter-chip[data-tip-edge="end"]:hover .poi-filter-tooltip {
+    transform: translateY(0);
+  }
+}
 @media (max-width: 767px) {
   .ui-chip { min-height: 32px; padding: 0 var(--sp-3); font-size: 12px; }
   .ui-chip.ui-chip-icon {

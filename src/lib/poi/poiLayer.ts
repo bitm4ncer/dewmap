@@ -584,14 +584,74 @@ export type PoiKindFilter = "food" | "shop" | "culture" | "sport" | "space";
 export const POI_KIND_FILTERS: {
   id: PoiKindFilter;
   label: string;
+  description: string;
   classes: readonly string[];
 }[] = [
-  { id: "food", label: "Food", classes: FOOD },
-  { id: "shop", label: "Shopping", classes: SHOP },
-  { id: "culture", label: "Culture", classes: CULTURE },
-  { id: "sport", label: "Sport", classes: SPORT },
-  { id: "space", label: "Parks & public", classes: SPACE },
+  {
+    id: "food",
+    label: "Food",
+    description: "Restaurants, cafés and bars",
+    classes: FOOD,
+  },
+  {
+    id: "shop",
+    label: "Shopping",
+    description: "Shops, markets and supplies",
+    classes: SHOP,
+  },
+  {
+    id: "culture",
+    label: "Culture",
+    description: "Museums, sights and the arts",
+    classes: CULTURE,
+  },
+  {
+    id: "sport",
+    label: "Sport",
+    description: "Sport and fitness",
+    classes: SPORT,
+  },
+  {
+    id: "space",
+    label: "Parks & public",
+    description: "Parks, gardens and public spaces",
+    classes: SPACE,
+  },
 ];
+
+export const ALL_POI_KINDS: readonly PoiKindFilter[] = POI_KIND_FILTERS.map(
+  (kind) => kind.id,
+);
+
+/**
+ * The chips are the only filter control: no separate "All" button. An
+ * empty stored array has always meant "no category restriction", so it
+ * displays as every chip being on.
+ */
+export function selectedPoiKinds(
+  kinds: readonly PoiKindFilter[],
+): PoiKindFilter[] {
+  if (kinds.length === 0) return [...ALL_POI_KINDS];
+  const selected = ALL_POI_KINDS.filter((id) => kinds.includes(id));
+  return selected.length > 0 ? selected : [...ALL_POI_KINDS];
+}
+
+/**
+ * Toggle one chip while keeping the canonical order. At least one
+ * category stays visible; turning the last one off is a no-op so the map
+ * can never fall back to "all" after the user tried to hide everything.
+ */
+export function togglePoiKind(
+  kinds: readonly PoiKindFilter[],
+  id: PoiKindFilter,
+): PoiKindFilter[] {
+  const active = selectedPoiKinds(kinds);
+  const next = active.includes(id)
+    ? active.filter((kind) => kind !== id)
+    : [...active, id];
+  if (next.length === 0) return active;
+  return ALL_POI_KINDS.filter((kind) => next.includes(kind));
+}
 
 function classesForKinds(kinds: readonly PoiKindFilter[]): string[] {
   if (kinds.length === 0) return [];

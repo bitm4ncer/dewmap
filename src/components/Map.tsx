@@ -72,6 +72,8 @@ import {
   removePoiClusterLayers,
   removePoiLayers,
   buildSelectionRingPoints,
+  selectedPoiKinds,
+  togglePoiKind,
   updateSelectionRing,
   type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
@@ -142,7 +144,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
-  AllPlacesIcon,
   CloseIcon,
   CultureIcon,
   AirQualityIcon,
@@ -6004,6 +6005,8 @@ function MapReadout({ map }: { map: MLMap | null }) {
   );
 }
 
+type PoiKindSpec = (typeof POI_KIND_FILTERS)[number];
+
 interface ViewPanelProps {
   projection: "mercator" | "globe";
   onProjectionChange: (p: "mercator" | "globe") => void;
@@ -6037,6 +6040,33 @@ function ViewPanel({
   onBusChange,
   busLoading,
 }: ViewPanelProps) {
+  const [poiTip, setPoiTip] = useState<{
+    kind: PoiKindSpec;
+    note?: string;
+  } | null>(null);
+  const poiTipTimer = useRef<number | null>(null);
+  const activeKinds = selectedPoiKinds(poiKinds);
+
+  useEffect(
+    () => () => {
+      if (poiTipTimer.current !== null) {
+        window.clearTimeout(poiTipTimer.current);
+      }
+    },
+    [],
+  );
+
+  const showPoiTip = (kind: PoiKindSpec, note?: string) => {
+    setPoiTip({ kind, ...(note ? { note } : {}) });
+    if (poiTipTimer.current !== null) {
+      window.clearTimeout(poiTipTimer.current);
+    }
+    poiTipTimer.current = window.setTimeout(() => {
+      poiTipTimer.current = null;
+      setPoiTip(null);
+    }, 1_800);
+  };
+
   return (
     <HudPanel label="View">
       <div className="ui-section">
@@ -6117,19 +6147,15 @@ function ViewPanel({
             role="group"
             aria-label="Place filters"
           >
-            <button
-              type="button"
-              className="ui-chip ui-chip-icon"
-              data-active={poiKinds.length === 0}
-              aria-pressed={poiKinds.length === 0}
-              aria-label="All categories"
-              title="All categories"
-              onClick={() => onPoiKindsChange([])}
-            >
-              <AllPlacesIcon size={17} />
-            </button>
-            {POI_KIND_FILTERS.map((kind) => {
-              const active = poiKinds.includes(kind.id);
+            {POI_KIND_FILTERS.map((kind, index) => {
+              const active = activeKinds.includes(kind.id);
+              const staysOn = active && activeKinds.length === 1;
+              const edge =
+                index === 0
+                  ? "start"
+                  : index === POI_KIND_FILTERS.length - 1
+                    ? "end"
+                    : undefined;
               const Icon =
                 kind.id === "food"
                   ? FoodIcon
@@ -6144,20 +6170,36 @@ function ViewPanel({
                 <button
                   key={kind.id}
                   type="button"
-                  className="ui-chip ui-chip-icon"
+                  className="ui-chip ui-chip-icon poi-filter-chip"
                   data-active={active}
+                  data-tip-edge={edge}
+                  data-tip-open={poiTip?.kind.id === kind.id ? "true" : "false"}
                   aria-pressed={active}
                   aria-label={kind.label}
-                  title={kind.label}
-                  onClick={() =>
-                    onPoiKindsChange(
-                      active
-                        ? poiKinds.filter((k) => k !== kind.id)
-                        : [...poiKinds, kind.id],
-                    )
-                  }
+                  aria-describedby={`poi-filter-tip-${kind.id}`}
+                  onClick={() => {
+                    onPoiKindsChange(togglePoiKind(poiKinds, kind.id));
+                    showPoiTip(
+                      kind,
+                      staysOn ? "At least one category stays visible" : undefined,
+                    );
+                  }}
                 >
                   <Icon size={17} />
+                  <span
+                    id={`poi-filter-tip-${kind.id}`}
+                    className="poi-filter-tooltip"
+                    role="tooltip"
+                  >
+                    <span className="poi-filter-tooltip-label">
+                      {kind.label}
+                    </span>
+                    <span className="poi-filter-tooltip-text">
+                      {poiTip?.kind.id === kind.id && poiTip.note
+                        ? poiTip.note
+                        : kind.description}
+                    </span>
+                  </span>
                 </button>
               );
             })}
