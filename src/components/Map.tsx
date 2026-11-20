@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import maplibregl, {
   Map as MLMap,
   ScaleControl,
@@ -71,7 +71,7 @@ import {
   ensurePoiLayers,
   removePoiClusterLayers,
   removePoiLayers,
-  updatePoiSelection,
+  updateSelectionRing,
   type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
 import {
@@ -1683,6 +1683,12 @@ function buildLiveLocationEl(): {
 export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [flyTarget, setFlyTarget] = useState<GeocodeResult | null>(null);
   const [poiSelection, setPoiSelection] = useState<PoiSelection | null>(null);
+  /** Last tapped rail/tram/bus stop that does not become a transit input
+   *  (bus stops and walk/bike/car mode). It gets the same ring as a POI. */
+  const [stationSelection, setStationSelection] = useState<{
+    lon: number;
+    lat: number;
+  } | null>(null);
   const [crosshair, setCrosshair] = useState<{
     lon: number;
     lat: number;
@@ -1725,6 +1731,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const toMarkerRef = useRef<maplibregl.Marker | null>(null);
   const transitFrom = useTransit((s) => s.from);
   const transitTo = useTransit((s) => s.to);
+  const transitVia = useTransit((s) => s.via);
   const [liveHeadingDeg, setLiveHeadingDeg] = useState<number | null>(null);
   const [historyVisibleCount, setHistoryVisibleCount] = useState(0);
   const historyDataRef = useRef<LandmarkCollection | null>(null);
@@ -2689,6 +2696,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // Clouds add via map.once("style.load") would fire against a style
   // that's about to be replaced, then never see the replacement load).
   const lastAppliedBasemapKeyRef = useRef<string | null>(null);
+  // The basemap effect below only re-runs on basemap/variant changes, so a
+  // closure over `basemapMode` goes stale: a style.load handler registered
+  // while Hybrid was active would re-add the overlay after switching back to
+  // Vector. Read the mode through a ref instead.
+  const basemapModeRef = useRef(basemapMode);
+  useEffect(() => {
+    basemapModeRef.current = basemapMode;
+  }, [basemapMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2775,7 +2790,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.setProjection({ type: projection });
       if (sector) setSectorOutline(map, sector);
       if (overlayUrl && sector) setOverlay(map, overlayUrl, sector, overlayOpacity);
-      if (basemapMode === "hybrid") addHybridOverlay(map);
+      // A style swap may keep runtime layers around (MapLibre diffs styles),
+      // so the overlay is reconciled on every load: added for Hybrid, removed
+      // for everything else.
+      if (basemapModeRef.current === "hybrid") addHybridOverlay(map);
+      else removeHybridOverlay(map);
     };
     // Same lifecycle bug as above — only `style.load` fires after a
     // basemap swap. Listening for `load` meant the hybrid overlay was
@@ -2789,6 +2808,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     return () => {
       clearStyleWatchdog?.();
       if (clearStyleWatchdog) map.off("style.load", clearStyleWatchdog);
+      map.off("style.load", reapply);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, activeVariantId, liveBasemapDayOffset]);
@@ -2797,12 +2817,21 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // A pending idle callback from a previous mode must not win: switching
+    // Hybrid -> Vector while the style is still loading would otherwise add
+    // the overlay after the newer effect already removed it.
+    let cancelled = false;
     const apply = () => {
+      if (cancelled) return;
       if (basemapMode === "hybrid") addHybridOverlay(map);
       else removeHybridOverlay(map);
     };
     if (map.isStyleLoaded()) apply();
     else map.once("idle", apply);
+    return () => {
+      cancelled = true;
+      map.off("idle", apply);
+    };
   }, [basemapMode]);
 
   // Re-tint the CARTO Dark Matter vector style after every style load.
@@ -3185,6 +3214,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           kind: "stop" as const,
         };
         if (routesMode === "walk" || routesMode === "bike" || routesMode === "car") {
+          setStationSelection({ lon: coords[0], lat: coords[1] });
           useHiking.getState().addWaypoint({
             lat: coords[1],
             lon: coords[0],
@@ -3412,6 +3442,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         ];
         const name = (feature.properties?.name as string | undefined)
           ?? "Bus stop";
+        setStationSelection({ lon: coords[0], lat: coords[1] });
         useHiking.getState().addWaypoint({
           lat: coords[1],
           lon: coords[0],
@@ -3801,9 +3832,29 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [poiOn, active, mapInstance]);
 
-  // Selected-place ring. It lives outside the Places toggle so a place
-  // opened from search or a long press stays marked even when the overlay
-  // itself is off; the detail card is the source of truth.
+  // A new transit from/to/via supersedes a previously tapped stop.
+  useEffect(() => {
+    setStationSelection(null);
+  }, [transitFrom, transitTo, transitVia]);
+
+  // Every active selection shares one ring layer: the open place detail,
+  // transit from/to/via, and the last tapped rail/tram/bus stop. Duplicate
+  // coordinates are collapsed inside updateSelectionRing().
+  const selectionPoints = useMemo(() => {
+    const points: { lon: number; lat: number }[] = [];
+    const add = (place: { lon: number; lat: number } | null | undefined) => {
+      if (place && Number.isFinite(place.lon) && Number.isFinite(place.lat)) {
+        points.push({ lon: place.lon, lat: place.lat });
+      }
+    };
+    add(poiSelection);
+    add(stationSelection);
+    add(transitFrom);
+    add(transitTo);
+    for (const place of transitVia) add(place);
+    return points;
+  }, [poiSelection, stationSelection, transitFrom, transitTo, transitVia]);
+
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
@@ -3811,7 +3862,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     const apply = () => {
       if (cancelled) return;
       try {
-        updatePoiSelection(map, poiSelection);
+        updateSelectionRing(map, selectionPoints);
       } catch {
         // Style json not parsed yet; style.load/idle and the retry handle it.
       }
@@ -3826,7 +3877,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("style.load", apply);
       map.off("idle", apply);
     };
-  }, [mapInstance, poiSelection]);
+  }, [mapInstance, selectionPoints]);
 
   // Kind chips apply instantly to detail dots and clusters without
   // rebuilding the whole POI subsystem.
