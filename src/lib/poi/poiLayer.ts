@@ -516,6 +516,33 @@ export interface SelectionRingPoint {
   lat: number;
 }
 
+/** Collect every active selection into one deduplicated ring list. */
+export function buildSelectionRingPoints(input: {
+  poi?: SelectionRingPoint | null;
+  station?: SelectionRingPoint | null;
+  from?: SelectionRingPoint | null;
+  to?: SelectionRingPoint | null;
+  via?: readonly (SelectionRingPoint | null | undefined)[];
+}): SelectionRingPoint[] {
+  const points: SelectionRingPoint[] = [];
+  const seen = new Set<string>();
+  const add = (point: SelectionRingPoint | null | undefined) => {
+    if (!point || !Number.isFinite(point.lon) || !Number.isFinite(point.lat)) {
+      return;
+    }
+    const key = `${point.lon.toFixed(5)}:${point.lat.toFixed(5)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    points.push({ lon: point.lon, lat: point.lat });
+  };
+  add(input.poi);
+  add(input.station);
+  add(input.from);
+  add(input.to);
+  for (const point of input.via ?? []) add(point);
+  return points;
+}
+
 /** Point the ring at every active selection; an empty list clears it. */
 export function updateSelectionRing(
   map: MLMap,

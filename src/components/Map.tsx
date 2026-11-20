@@ -71,6 +71,7 @@ import {
   ensurePoiLayers,
   removePoiClusterLayers,
   removePoiLayers,
+  buildSelectionRingPoints,
   updateSelectionRing,
   type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
@@ -3835,20 +3836,17 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   // Every active selection shares one ring layer: the open place detail,
   // transit from/to/via, and the last tapped rail/tram/bus stop. Duplicate
   // coordinates are collapsed inside updateSelectionRing().
-  const selectionPoints = useMemo(() => {
-    const points: { lon: number; lat: number }[] = [];
-    const add = (place: { lon: number; lat: number } | null | undefined) => {
-      if (place && Number.isFinite(place.lon) && Number.isFinite(place.lat)) {
-        points.push({ lon: place.lon, lat: place.lat });
-      }
-    };
-    add(poiSelection);
-    add(stationSelection);
-    add(transitFrom);
-    add(transitTo);
-    for (const place of transitVia) add(place);
-    return points;
-  }, [poiSelection, stationSelection, transitFrom, transitTo, transitVia]);
+  const selectionPoints = useMemo(
+    () =>
+      buildSelectionRingPoints({
+        poi: poiSelection,
+        station: stationSelection,
+        from: transitFrom,
+        to: transitTo,
+        via: transitVia,
+      }),
+    [poiSelection, stationSelection, transitFrom, transitTo, transitVia],
+  );
 
   useEffect(() => {
     const map = mapInstance;

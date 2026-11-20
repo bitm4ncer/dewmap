@@ -13,6 +13,7 @@ import {
   SELECTION_RING_HALO_LAYER_ID,
   SELECTION_RING_LAYER_ID,
   SELECTION_RING_SOURCE_ID,
+  buildSelectionRingPoints,
   ensurePoiClusterLayers,
   ensurePoiLayers,
   ensureSelectionRingLayers,
@@ -141,6 +142,32 @@ describe("POI cluster layers", () => {
     removePoiClusterLayers(map);
     expect(sources.size).toBe(0);
     expect(layers.size).toBe(0);
+  });
+});
+
+describe("selection ring points", () => {
+  it("includes POI, station, from, to and every via stop once", () => {
+    const points = buildSelectionRingPoints({
+      poi: { lon: 6.78, lat: 51.23 },
+      station: { lon: 6.79, lat: 51.22 },
+      from: { lon: 6.80, lat: 51.24 },
+      to: { lon: 6.81, lat: 51.25 },
+      via: [{ lon: 6.82, lat: 51.26 }, null, { lon: 6.78, lat: 51.23 }],
+    });
+    expect(points).toHaveLength(5);
+    expect(points[0]).toEqual({ lon: 6.78, lat: 51.23 });
+    expect(points.some((p) => p.lon === 6.82 && p.lat === 51.26)).toBe(true);
+  });
+
+  it("ignores null and invalid coordinates", () => {
+    const points = buildSelectionRingPoints({
+      poi: null,
+      station: { lon: Number.NaN, lat: 51.2 },
+      from: { lon: 6.8, lat: 51.2 },
+      to: null,
+      via: [undefined, null],
+    });
+    expect(points).toEqual([{ lon: 6.8, lat: 51.2 }]);
   });
 });
 
