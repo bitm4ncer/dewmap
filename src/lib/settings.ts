@@ -38,6 +38,7 @@ export interface Settings {
   /** Rails panel — toggle the rail-network overlay (independent of the
    * Biosphere stack; only ever zero/one rail style at a time). */
   railOn: boolean;
+  busOn: boolean;
   railStyle: RailStyle;
   /** Small POI dots (shops, food, culture, sport) above the basemap. */
   poiOn: boolean;
@@ -83,6 +84,7 @@ export interface Settings {
   setProjection: (p: Projection) => void;
   setOrientationMode: (m: OrientationMode) => void;
   setRailOn: (on: boolean) => void;
+  setBusOn: (on: boolean) => void;
   setRailStyle: (style: RailStyle) => void;
   setPoiOn: (on: boolean) => void;
   setNdviOn: (on: boolean) => void;
@@ -124,6 +126,7 @@ export const useSettings = create<Settings>()(
       projection: "mercator",
       orientationMode: "north",
       railOn: false,
+      busOn: false,
       railStyle: "lines",
       poiOn: true,
       ndviOn: false,
@@ -162,6 +165,7 @@ export const useSettings = create<Settings>()(
       setProjection: (p) => set({ projection: p }),
       setOrientationMode: (m) => set({ orientationMode: m }),
       setRailOn: (on) => set({ railOn: on }),
+      setBusOn: (on) => set({ busOn: on }),
       setRailStyle: (style) => set({ railStyle: style }),
       setPoiOn: (on) => set({ poiOn: on }),
       setNdviOn: (on) => set({ ndviOn: on }),
@@ -208,6 +212,7 @@ export const useSettings = create<Settings>()(
         projection: state.projection,
         orientationMode: state.orientationMode,
         railOn: state.railOn,
+        busOn: state.busOn,
         railStyle: state.railStyle,
         poiOn: state.poiOn,
         ndviOn: state.ndviOn,

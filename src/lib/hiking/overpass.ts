@@ -1,58 +1,4 @@
-const ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-];
-
-interface OverpassNode {
-  type: "node";
-  id: number;
-  lat: number;
-  lon: number;
-  tags?: Record<string, string>;
-}
-
-interface OverpassWay {
-  type: "way";
-  id: number;
-  nodes?: number[];
-  geometry?: { lat: number; lon: number }[];
-  tags?: Record<string, string>;
-}
-
-type OverpassElement = OverpassNode | OverpassWay;
-
-interface OverpassResponse {
-  elements: OverpassElement[];
-}
-
-async function overpass(
-  query: string,
-  signal?: AbortSignal,
-): Promise<OverpassResponse> {
-  let lastErr: unknown;
-  for (const endpoint of ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `data=${encodeURIComponent(query)}`,
-        signal,
-      });
-      if (!res.ok) {
-        lastErr = new Error(`Overpass ${endpoint} → ${res.status}`);
-        continue;
-      }
-      return (await res.json()) as OverpassResponse;
-    } catch (err) {
-      if ((err as Error).name === "AbortError") throw err;
-      lastErr = err;
-    }
-  }
-  throw new Error(
-    `All Overpass endpoints failed: ${(lastErr as Error)?.message ?? "unknown"}`,
-  );
-}
+import { overpassQuery } from "../overpass";
 
 /**
  * Fetch green/natural polygons within a bounding box.
@@ -72,7 +18,7 @@ export async function fetchGreenPolygons(
     );
     out geom;
   `;
-  const data = await overpass(q, signal);
+  const data = await overpassQuery(q, signal);
   const polygons: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
   for (const el of data.elements) {
     if (el.type !== "way" || !el.geometry || el.geometry.length < 3) continue;

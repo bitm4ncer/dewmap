@@ -66,6 +66,12 @@ import {
   installFeatureTapPipeline,
   registerFeatureTaps,
 } from "@/lib/map/featureTaps";
+import {
+  BUS_MIN_ZOOM,
+  ensureBusLayers,
+  fetchBusRoutes,
+  removeBusLayers,
+} from "@/lib/bus/busRoutes";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
 import { formatCoordinates } from "@/lib/map/coordinates";
@@ -1567,6 +1573,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     projection,
     orientationMode,
     railOn,
+    busOn,
     poiOn,
     ndviOn,
     ndviOpacity,
@@ -1595,6 +1602,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setLiveBasemapDayOffset,
     setProjection,
     setRailOn,
+    setBusOn,
     setPoiOn,
     setNdviOn,
     setNdviOpacity,
@@ -2972,6 +2980,101 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [railwayOn, active]);
 
+  // ── Bus lines overlay ─────────────────────────────────────────────
+  // Dedicated bus routes (OSM route=bus relations via Overpass) shown
+  // as dashed amber lines next to the rail network. Viewport-bound with
+  // a debounced refetch and a per-bbox TTL cache inside the module.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    if (!busOn) {
+      try {
+        removeBusLayers(map);
+      } catch {
+        // A style swap may already have removed the layers.
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let timer: number | null = null;
+    let controller: AbortController | null = null;
+    let requestedKey = "";
+
+    const refresh = () => {
+      if (cancelled) return;
+      if (map.getZoom() < BUS_MIN_ZOOM) {
+        try {
+          removeBusLayers(map);
+        } catch {
+          /* style swapping */
+        }
+        return;
+      }
+      const bounds = map.getBounds();
+      const padLng = (bounds.getEast() - bounds.getWest()) * 0.08;
+      const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.08;
+      const bbox: [number, number, number, number] = [
+        bounds.getSouth() - padLat,
+        bounds.getWest() - padLng,
+        bounds.getNorth() + padLat,
+        bounds.getEast() + padLng,
+      ];
+      const key = bbox.map((n) => n.toFixed(3)).join(",");
+      if (key === requestedKey) return;
+      requestedKey = key;
+      controller?.abort();
+      const ctrl = new AbortController();
+      controller = ctrl;
+      fetchBusRoutes(bbox, ctrl.signal)
+        .then((data) => {
+          if (cancelled || ctrl.signal.aborted) return;
+          try {
+            ensureBusLayers(map, data);
+          } catch (error) {
+            console.warn("[bus-lines] layers could not be added", error);
+          }
+        })
+        .catch((error) => {
+          if ((error as Error).name === "AbortError") return;
+          console.warn("[bus-lines] fetch failed", error);
+        });
+    };
+
+    const onMoveEnd = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(refresh, 700);
+    };
+    const onStyle = () => {
+      // The style swap removed our source/layers; refetch this bbox.
+      requestedKey = "";
+      refresh();
+    };
+
+    // Style may load after this effect registers.
+    const waitForStyle = () => {
+      if (cancelled) return;
+      if (map.isStyleLoaded()) refresh();
+      else window.setTimeout(waitForStyle, 300);
+    };
+    waitForStyle();
+    map.on("style.load", onStyle);
+    map.on("moveend", onMoveEnd);
+
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (timer !== null) window.clearTimeout(timer);
+      map.off("style.load", onStyle);
+      map.off("moveend", onMoveEnd);
+      try {
+        removeBusLayers(map);
+      } catch {
+        /* style already swapped */
+      }
+    };
+  }, [busOn, active, mapInstance]);
+
   // Google-Maps-style place dots. These ride on the same keyless
   // OpenFreeMap vector tiles as the rail detail, but in their own source
   // so they survive basemap swaps and can be toggled independently.
@@ -4279,6 +4382,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onPoiChange={setPoiOn}
                   railOn={railOn}
                   onRailChange={setRailOn}
+                  busOn={busOn}
+                  onBusChange={setBusOn}
                 />
 
                 <BasemapPanel
@@ -4844,6 +4949,8 @@ interface ViewPanelProps {
   onPoiChange: (on: boolean) => void;
   railOn: boolean;
   onRailChange: (on: boolean) => void;
+  busOn: boolean;
+  onBusChange: (on: boolean) => void;
 }
 
 function ViewPanel({
@@ -4855,6 +4962,8 @@ function ViewPanel({
   onPoiChange,
   railOn,
   onRailChange,
+  busOn,
+  onBusChange,
 }: ViewPanelProps) {
   return (
     <HudPanel label="View">
@@ -4945,6 +5054,26 @@ function ViewPanel({
             onClick={() => onRailChange(!railOn)}
             className="hud-switch"
             data-on={railOn}
+          >
+            <span className="hud-switch-thumb" aria-hidden />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-col">
+            <span className="ui-row-title">Bus lines</span>
+            <span className="text-[10.5px] text-[color:var(--ink-mute)]">
+              OSM bus routes · Overpass · from zoom 12
+            </span>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={busOn}
+            aria-label="Bus lines overlay on/off"
+            onClick={() => onBusChange(!busOn)}
+            className="hud-switch"
+            data-on={busOn}
           >
             <span className="hud-switch-thumb" aria-hidden />
           </button>
