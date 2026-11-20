@@ -52,12 +52,26 @@ import {
   RAIL_VECTOR_TILEJSON_URL,
 } from "@/lib/railway";
 import {
+  POI_CLUSTER_BUILD_MAX_ZOOM,
+  POI_CLUSTER_CIRCLE_LAYER_ID,
+  POI_CLUSTER_COUNT_LAYER_ID,
+  POI_CLUSTER_DATA_SOURCE_ID,
+  POI_CLUSTER_MIN_ZOOM,
+  POI_CLUSTER_POINT_LAYER_ID,
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
+  POI_KIND_FILTERS,
   POI_LABEL_LAYER_ID,
+  POI_MIN_ZOOM,
+  POI_SOURCE_ID,
+  applyPoiKindFilters,
+  ensurePoiClusterLayers,
   ensurePoiLayers,
+  removePoiClusterLayers,
   removePoiLayers,
+  type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
+import { fetchPoiClusterPoints } from "@/lib/poi/poiClusterData";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
 import { requestCompassPermission, subscribeCompass } from "@/lib/compass";
@@ -1579,6 +1593,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     railOn,
     busOn,
     poiOn,
+    poiKinds,
     ndviOn,
     ndviOpacity,
     speciesOn,
@@ -1608,6 +1623,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     setRailOn,
     setBusOn,
     setPoiOn,
+    setPoiKinds,
     setNdviOn,
     setNdviOpacity,
     setSpeciesOn,
@@ -3155,15 +3171,25 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, [busOn, active, mapInstance]);
 
+  // Kind chips change filters only — the cluster builder reads them
+  // through a ref so the tap pipeline is not torn down on every chip tap.
+  const poiKindsRef = useRef(poiKinds);
+  useEffect(() => {
+    poiKindsRef.current = poiKinds;
+  }, [poiKinds]);
+
   // Google-Maps-style place dots. These ride on the same keyless
   // OpenFreeMap vector tiles as the rail detail, but in their own source
   // so they survive basemap swaps and can be toggled independently.
+  // City zoom (12 → 15) aggregates the dense z14 POI tiles into clusters
+  // with counts; closer in, individual dots take over.
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
     if (!poiOn) {
       try {
         removePoiLayers(map);
+        removePoiClusterLayers(map);
       } catch {
         // A style swap may already have removed the source.
       }
@@ -3172,12 +3198,75 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     let cancelled = false;
     let frame = 0;
+    let clusterTimer: number | null = null;
     const startedAt = Date.now();
+
+    // `isStyleLoaded()` waits for every basemap tile; a slow or blocked
+    // basemap would keep the place layers invisible forever. Adding
+    // layers only needs the parsed style JSON, so gate on that instead.
+    const styleReady = () => {
+      try {
+        return Boolean(map.getStyle()?.layers?.length);
+      } catch {
+        return false;
+      }
+    };
+
+    const scheduleClusters = () => {
+      if (clusterTimer !== null) window.clearTimeout(clusterTimer);
+      clusterTimer = window.setTimeout(() => {
+        clusterTimer = null;
+        rebuildClusters();
+      }, 250);
+    };
+
+    let clusterController: AbortController | null = null;
+    const rebuildClusters = () => {
+      if (cancelled || !styleReady()) return;
+      const zoom = map.getZoom();
+      if (zoom < POI_CLUSTER_MIN_ZOOM || zoom >= POI_CLUSTER_BUILD_MAX_ZOOM) {
+        return;
+      }
+      const source = map.getSource(POI_CLUSTER_DATA_SOURCE_ID) as
+        | { setData?: (data: GeoJSON.FeatureCollection) => void }
+        | undefined;
+      if (!source?.setData) return;
+      const bounds = map.getBounds();
+      const padLng = (bounds.getEast() - bounds.getWest()) * 0.1;
+      const padLat = (bounds.getNorth() - bounds.getSouth()) * 0.1;
+      const bbox: [number, number, number, number] = [
+        Math.max(-85, bounds.getSouth() - padLat),
+        bounds.getWest() - padLng,
+        Math.min(85, bounds.getNorth() + padLat),
+        bounds.getEast() + padLng,
+      ];
+      clusterController?.abort();
+      const ctrl = new AbortController();
+      clusterController = ctrl;
+      const template = (
+        map.getSource(POI_SOURCE_ID) as { tiles?: string[] } | undefined
+      )?.tiles?.[0];
+      fetchPoiClusterPoints(bbox, poiKindsRef.current, ctrl.signal, template)
+        .then((data) => {
+          if (cancelled || ctrl.signal.aborted) return;
+          source.setData?.(data);
+        })
+        .catch((error) => {
+          if ((error as Error).name === "AbortError") return;
+          console.warn("[poi] cluster build failed", error);
+        });
+    };
+
     const apply = () => {
-      if (cancelled || !map.isStyleLoaded()) return;
+      if (cancelled || !styleReady()) return;
       try {
         ensurePoiLayers(map);
+        ensurePoiClusterLayers(map);
+        applyPoiKindFilters(map, poiKindsRef.current);
+        scheduleClusters();
       } catch (error) {
+        // Style not parsed yet (or a swap in flight) — the watchdog and
+        // style.load retry.
         console.warn("[poi] layers could not be added", error);
       }
     };
@@ -3185,7 +3274,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // briefly in addition to the style/idle events.
     const waitForStyle = () => {
       if (cancelled) return;
-      if (map.isStyleLoaded()) {
+      if (styleReady()) {
         apply();
         return;
       }
@@ -3196,10 +3285,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     waitForStyle();
     map.on("style.load", apply);
     map.once("idle", apply);
+    const watchdog = window.setInterval(() => {
+      if (cancelled) return;
+      if (!map.getLayer(POI_ICON_LAYER_ID) && styleReady()) apply();
+    }, 2000);
 
     const openPlace = (
       feature: MapGeoJSONFeature,
-      event: MapMouseEvent,
+      event?: MapMouseEvent,
     ) => {
       const props = feature.properties ?? {};
       const stringValue = (...keys: string[]) => {
@@ -3217,9 +3310,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const coords = geometry?.type === "Point"
         ? geometry.coordinates as [number, number]
         : null;
+      if (!coords && !event) return;
       openPoi({
-        lon: coords ? coords[0] : event.lngLat.lng,
-        lat: coords ? coords[1] : event.lngLat.lat,
+        lon: coords ? coords[0] : event!.lngLat.lng,
+        lat: coords ? coords[1] : event!.lngLat.lat,
         ...(name ? { name } : {}),
         ...(category ? { category } : {}),
       });
@@ -3239,19 +3333,84 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       tolerancePx: 40,
       onFeature: openPlace,
     });
+
+    // Cluster taps either zoom into the cluster or open an unclustered
+    // place. The pipeline already fired haptic + ripple.
+    const onClusterTap = (feature: MapGeoJSONFeature) => {
+      const clusterId = feature.properties?.cluster_id;
+      const coords = (feature.geometry as GeoJSON.Point | undefined)?.coordinates as
+        | [number, number]
+        | undefined;
+      if (typeof clusterId === "number" && coords) {
+        const source = map.getSource(POI_CLUSTER_DATA_SOURCE_ID) as
+          | { getClusterExpansionZoom?: (id: number) => Promise<number> }
+          | undefined;
+        source?.getClusterExpansionZoom?.(clusterId)
+          .then((zoom) => {
+            map.easeTo({
+              center: coords,
+              zoom: Math.max(Math.min(zoom + 0.25, 17), POI_MIN_ZOOM + 0.2),
+              duration: prefersReducedMotion() ? 0 : 550,
+            });
+          })
+          .catch(() => {
+            /* cluster vanished while tapping */
+          });
+        return;
+      }
+      openPlace(feature);
+    };
+    const unregisterClusterTaps = registerFeatureTaps(map, {
+      id: "poi-clusters",
+      layers: [
+        POI_CLUSTER_CIRCLE_LAYER_ID,
+        POI_CLUSTER_COUNT_LAYER_ID,
+        POI_CLUSTER_POINT_LAYER_ID,
+      ],
+      // Cluster circles can be 29 px wide; the pipeline measures to the
+      // centroid, so keep the grab radius above the largest radius.
+      tolerancePx: 28,
+      onFeature: onClusterTap,
+    });
+
+    map.on("moveend", scheduleClusters);
+    map.on("kugelmaps:poi-kinds", scheduleClusters);
     map.on("mouseenter", POI_HIT_LAYER_ID, showPointer);
     map.on("mouseleave", POI_HIT_LAYER_ID, hidePointer);
+    map.on("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
+    map.on("mouseleave", POI_CLUSTER_CIRCLE_LAYER_ID, hidePointer);
 
     return () => {
       unregisterTaps();
+      unregisterClusterTaps();
       cancelled = true;
+      clusterController?.abort();
+      window.clearInterval(watchdog);
       if (frame) cancelAnimationFrame(frame);
+      if (clusterTimer !== null) window.clearTimeout(clusterTimer);
       map.off("style.load", apply);
       map.off("idle", apply);
+      map.off("moveend", scheduleClusters);
+      map.off("kugelmaps:poi-kinds", scheduleClusters);
       map.off("mouseenter", POI_HIT_LAYER_ID, showPointer);
       map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
+      map.off("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
+      map.off("mouseleave", POI_CLUSTER_CIRCLE_LAYER_ID, hidePointer);
     };
   }, [poiOn, active, mapInstance, openPoi]);
+
+  // Kind chips apply instantly to detail dots and clusters without
+  // rebuilding the whole POI subsystem.
+  useEffect(() => {
+    if (!mapInstance || !poiOn) return;
+    try {
+      applyPoiKindFilters(mapInstance, poiKinds);
+    } catch {
+      // Style not parsed yet; the POI effect re-applies filters on apply.
+      return;
+    }
+    mapInstance.fire("kugelmaps:poi-kinds");
+  }, [poiOn, mapInstance, poiKinds]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────
   useEffect(() => {
@@ -4460,6 +4619,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onBasemapModeChange={setBasemapMode}
                   poiOn={poiOn}
                   onPoiChange={setPoiOn}
+                  poiKinds={poiKinds}
+                  onPoiKindsChange={setPoiKinds}
                   railOn={railOn}
                   onRailChange={setRailOn}
                   busOn={busOn}
@@ -5027,6 +5188,8 @@ interface ViewPanelProps {
   onBasemapModeChange: (m: BasemapMode) => void;
   poiOn: boolean;
   onPoiChange: (on: boolean) => void;
+  poiKinds: PoiKindFilter[];
+  onPoiKindsChange: (kinds: PoiKindFilter[]) => void;
   railOn: boolean;
   onRailChange: (on: boolean) => void;
   busOn: boolean;
@@ -5040,6 +5203,8 @@ function ViewPanel({
   onBasemapModeChange,
   poiOn,
   onPoiChange,
+  poiKinds,
+  onPoiKindsChange,
   railOn,
   onRailChange,
   busOn,
@@ -5103,7 +5268,7 @@ function ViewPanel({
           <div className="flex min-w-0 flex-col">
             <span className="ui-row-title">Places</span>
             <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-              Shops, food, culture &amp; sport
+              Clustered by area · tap a cluster to zoom in
             </span>
           </div>
           <button
@@ -5118,6 +5283,45 @@ function ViewPanel({
             <span className="hud-switch-thumb" aria-hidden />
           </button>
         </div>
+
+        {poiOn && (
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label="Place filters"
+          >
+            <button
+              type="button"
+              className="ui-chip min-h-10"
+              data-active={poiKinds.length === 0}
+              aria-pressed={poiKinds.length === 0}
+              onClick={() => onPoiKindsChange([])}
+            >
+              All
+            </button>
+            {POI_KIND_FILTERS.map((kind) => {
+              const active = poiKinds.includes(kind.id);
+              return (
+                <button
+                  key={kind.id}
+                  type="button"
+                  className="ui-chip min-h-10"
+                  data-active={active}
+                  aria-pressed={active}
+                  onClick={() =>
+                    onPoiKindsChange(
+                      active
+                        ? poiKinds.filter((k) => k !== kind.id)
+                        : [...poiKinds, kind.id],
+                    )
+                  }
+                >
+                  {kind.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 flex-col">

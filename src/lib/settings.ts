@@ -3,6 +3,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import type { PoiKindFilter } from "./poi/poiLayer";
 import {
   BASEMAPS,
   DEFAULT_IMAGE_BASEMAP_ID,
@@ -42,6 +43,7 @@ export interface Settings {
   railStyle: RailStyle;
   /** Small POI dots (shops, food, culture, sport) above the basemap. */
   poiOn: boolean;
+  poiKinds: PoiKindFilter[];
   /** Biosphere panel — independent overlay toggles, can stack. */
   ndviOn: boolean;
   ndviOpacity: number;
@@ -87,6 +89,7 @@ export interface Settings {
   setBusOn: (on: boolean) => void;
   setRailStyle: (style: RailStyle) => void;
   setPoiOn: (on: boolean) => void;
+  setPoiKinds: (kinds: PoiKindFilter[]) => void;
   setNdviOn: (on: boolean) => void;
   setNdviOpacity: (o: number) => void;
   setSpeciesOn: (on: boolean) => void;
@@ -129,6 +132,7 @@ export const useSettings = create<Settings>()(
       busOn: false,
       railStyle: "lines",
       poiOn: true,
+      poiKinds: [],
       ndviOn: false,
       ndviOpacity: 0.7,
       speciesOn: false,
@@ -168,6 +172,7 @@ export const useSettings = create<Settings>()(
       setBusOn: (on) => set({ busOn: on }),
       setRailStyle: (style) => set({ railStyle: style }),
       setPoiOn: (on) => set({ poiOn: on }),
+      setPoiKinds: (poiKinds) => set({ poiKinds }),
       setNdviOn: (on) => set({ ndviOn: on }),
       setNdviOpacity: (o) => set({ ndviOpacity: clamp01(o) }),
       setSpeciesOn: (on) => set({ speciesOn: on }),
@@ -201,7 +206,7 @@ export const useSettings = create<Settings>()(
     }),
     {
       name: "kugelmaps:settings",
-      version: 26,
+      version: 27,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         imageBasemapId: state.imageBasemapId,
@@ -215,6 +220,7 @@ export const useSettings = create<Settings>()(
         busOn: state.busOn,
         railStyle: state.railStyle,
         poiOn: state.poiOn,
+        poiKinds: state.poiKinds,
         ndviOn: state.ndviOn,
         ndviOpacity: state.ndviOpacity,
         speciesOn: state.speciesOn,
@@ -243,6 +249,20 @@ export const useSettings = create<Settings>()(
         // predate this toggle.
         if (typeof p.poiOn !== "boolean") {
           p.poiOn = true;
+        }
+        // v26 → v27: place-kind chips. Unknown ids would silently fall
+        // back to "all" through classesForKinds, so sanitize them.
+        if (version < 27) {
+          p.poiKinds = Array.isArray(p.poiKinds)
+            ? p.poiKinds.filter(
+                (id): id is PoiKindFilter =>
+                  id === "food" ||
+                  id === "shop" ||
+                  id === "culture" ||
+                  id === "sport" ||
+                  id === "space",
+              )
+            : [];
         }
         // v21 → v22: raster cartography moved out of the vector slot.
         // A drawn map that was active in vector mode becomes an image

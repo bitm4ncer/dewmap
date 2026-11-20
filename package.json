@@ -17,6 +17,7 @@
     "check:no-emoji": "node scripts/check-no-emoji.mjs"
   },
   "dependencies": {
+    "@mapbox/vector-tile": "^2.0.4",
     "@openhistoricalmap/maplibre-gl-dates": "^1.3.0",
     "@turf/along": "^7.3.5",
     "@turf/boolean-point-in-polygon": "^7.3.5",
@@ -24,6 +25,7 @@
     "@turf/length": "^7.3.5",
     "maplibre-gl": "^5.23.0",
     "next": "16.2.4",
+    "pbf": "^4.0.1",
     "pmtiles": "^4.5.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",

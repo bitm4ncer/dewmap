@@ -414,3 +414,186 @@ export function removePoiLayers(map: MLMap) {
     if (map.hasImage(spec.id)) map.removeImage(spec.id);
   }
 }
+
+// ── Kind filters (Gastro / Shopping / Culture / Sport / Parks) ────────
+
+export type PoiKindFilter = "food" | "shop" | "culture" | "sport" | "space";
+
+export const POI_KIND_FILTERS: {
+  id: PoiKindFilter;
+  label: string;
+  classes: readonly string[];
+}[] = [
+  { id: "food", label: "Food", classes: FOOD },
+  { id: "shop", label: "Shopping", classes: SHOP },
+  { id: "culture", label: "Culture", classes: CULTURE },
+  { id: "sport", label: "Sport", classes: SPORT },
+  { id: "space", label: "Parks & public", classes: SPACE },
+];
+
+function classesForKinds(kinds: readonly PoiKindFilter[]): string[] {
+  if (kinds.length === 0) return [];
+  const out: string[] = [];
+  for (const id of kinds) {
+    const spec = POI_KIND_FILTERS.find((k) => k.id === id);
+    if (spec) out.push(...spec.classes);
+  }
+  return out;
+}
+
+/** Layer filter = category filter AND the selected kind chips. */
+export function poiLayerFilter(
+  kinds: readonly PoiKindFilter[],
+): FilterSpecification {
+  const classes = classesForKinds(kinds);
+  if (classes.length === 0) return categoryFilter;
+  return [
+    "all",
+    categoryFilter,
+    [
+      "any",
+      ["in", ["get", "class"], ["literal", classes]],
+      ["in", ["get", "subclass"], ["literal", classes]],
+    ],
+  ] as FilterSpecification;
+}
+
+/** Apply the kind chips to all detail layers (no-op when layers absent). */
+export function applyPoiKindFilters(
+  map: MLMap,
+  kinds: readonly PoiKindFilter[],
+): void {
+  const filter = poiLayerFilter(kinds);
+  for (const id of [
+    POI_ICON_LAYER_ID,
+    POI_LABEL_LAYER_ID,
+    POI_HIT_LAYER_ID,
+  ]) {
+    if (map.getLayer(id)) map.setFilter(id, filter);
+  }
+}
+
+/**
+ * Pure mirror of the layer filter for cluster aggregation and tests.
+ * Keep the NAMED_ONLY rule in sync with `categoryFilter`.
+ */
+export function featureMatchesKinds(
+  props: Record<string, unknown>,
+  kinds: readonly PoiKindFilter[] = [],
+): boolean {
+  const cls = typeof props.class === "string" ? props.class : "";
+  const sub = typeof props.subclass === "string" ? props.subclass : "";
+  const name = typeof props.name === "string" ? props.name.trim() : "";
+  const base = [...FOOD, ...SHOP, ...CULTURE, ...SPORT, ...SPACE_FREE];
+  const matchesBase = base.includes(cls) || base.includes(sub);
+  const matchesNamed =
+    (NAMED_ONLY.includes(cls) || NAMED_ONLY.includes(sub)) && name !== "";
+  if (!matchesBase && !matchesNamed) return false;
+  if (kinds.length === 0) return true;
+  const classes = classesForKinds(kinds);
+  return classes.includes(cls) || classes.includes(sub);
+}
+
+// ── City-overview clusters ────────────────────────────────────────────
+// OpenFreeMap's poi layer is only dense at z14. The cluster GeoJSON is
+// built in `poiClusterData.ts` by fetching and decoding z14 tiles
+// directly (MapLibre skips tile zooms below a source's minzoom, so a
+// pinned vector source cannot feed a z12 map).
+
+export const POI_CLUSTER_DATA_SOURCE_ID = "poi-cluster-data-src";
+export const POI_CLUSTER_CIRCLE_LAYER_ID = "poi-cluster-circles";
+export const POI_CLUSTER_COUNT_LAYER_ID = "poi-cluster-count";
+export const POI_CLUSTER_POINT_LAYER_ID = "poi-cluster-points";
+export const POI_CLUSTER_MIN_ZOOM = 13;
+export const POI_CLUSTER_MAX_ZOOM = POI_MIN_ZOOM;
+/** Stop building at this zoom — clusters hand over to detail dots. */
+export const POI_CLUSTER_BUILD_MAX_ZOOM = POI_CLUSTER_MAX_ZOOM;
+
+export function ensurePoiClusterLayers(map: MLMap) {
+  if (!map.getSource(POI_CLUSTER_DATA_SOURCE_ID)) {
+    map.addSource(POI_CLUSTER_DATA_SOURCE_ID, {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+      cluster: true,
+      clusterRadius: 44,
+      clusterMaxZoom: POI_CLUSTER_MAX_ZOOM,
+    });
+  }
+
+  if (!map.getLayer(POI_CLUSTER_CIRCLE_LAYER_ID)) {
+    map.addLayer({
+      id: POI_CLUSTER_CIRCLE_LAYER_ID,
+      type: "circle",
+      source: POI_CLUSTER_DATA_SOURCE_ID,
+      minzoom: POI_CLUSTER_MIN_ZOOM,
+      maxzoom: POI_CLUSTER_MAX_ZOOM,
+      filter: ["has", "point_count"],
+      paint: {
+        "circle-radius": [
+          "step",
+          ["get", "point_count"],
+          14,
+          10, 17,
+          50, 21,
+          200, 25,
+          600, 29,
+        ],
+        "circle-color": THEME.accent,
+        "circle-opacity": 0.9,
+        "circle-stroke-color": THEME.casing,
+        "circle-stroke-width": 2,
+      },
+    });
+  }
+  if (!map.getLayer(POI_CLUSTER_COUNT_LAYER_ID)) {
+    map.addLayer({
+      id: POI_CLUSTER_COUNT_LAYER_ID,
+      type: "symbol",
+      source: POI_CLUSTER_DATA_SOURCE_ID,
+      minzoom: POI_CLUSTER_MIN_ZOOM,
+      maxzoom: POI_CLUSTER_MAX_ZOOM,
+      filter: ["has", "point_count"],
+      layout: {
+        "text-field": ["get", "point_count_abbreviated"],
+        "text-size": 11.5,
+        // Regular exists in every basemap glyph set the app ships with.
+        "text-font": ["Noto Sans Regular"],
+        // Larger clusters win placement, so counts never stack up in
+        // dense districts (the whole point of the overview).
+        "text-padding": 2,
+      },
+      paint: {
+        "text-color": THEME.accentInk,
+      },
+    });
+  }
+  if (!map.getLayer(POI_CLUSTER_POINT_LAYER_ID)) {
+    map.addLayer({
+      id: POI_CLUSTER_POINT_LAYER_ID,
+      type: "circle",
+      source: POI_CLUSTER_DATA_SOURCE_ID,
+      minzoom: POI_CLUSTER_MIN_ZOOM,
+      maxzoom: POI_CLUSTER_MAX_ZOOM,
+      filter: ["!", ["has", "point_count"]],
+      paint: {
+        "circle-radius": 4.5,
+        "circle-color": THEME.accent,
+        "circle-stroke-color": THEME.casing,
+        "circle-stroke-width": 1.2,
+      },
+    });
+  }
+}
+
+export function removePoiClusterLayers(map: MLMap) {
+  for (const id of [
+    POI_CLUSTER_POINT_LAYER_ID,
+    POI_CLUSTER_COUNT_LAYER_ID,
+    POI_CLUSTER_CIRCLE_LAYER_ID,
+  ]) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  if (map.getSource(POI_CLUSTER_DATA_SOURCE_ID)) {
+    map.removeSource(POI_CLUSTER_DATA_SOURCE_ID);
+  }
+}

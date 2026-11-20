@@ -1664,6 +1664,11 @@ input[type="range"].hud-slider::-moz-range-thumb {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .ui-chip:hover { background: var(--surf-3); color: var(--ink); }
+.ui-chip[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ui-chip[data-active="true"]:hover { background: var(--accent-strong); }
 .ui-chip:disabled { opacity: .4; cursor: not-allowed; }
 @media (max-width: 767px) {
   .ui-chip { min-height: 32px; padding: 0 var(--sp-3); font-size: 12px; }

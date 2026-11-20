@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Map as MLMap } from "maplibre-gl";
 import {
+  POI_CLUSTER_CIRCLE_LAYER_ID,
+  POI_CLUSTER_COUNT_LAYER_ID,
+  POI_CLUSTER_DATA_SOURCE_ID,
+  POI_CLUSTER_POINT_LAYER_ID,
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
   POI_LABEL_LAYER_ID,
   POI_SOURCE_ID,
+  ensurePoiClusterLayers,
   ensurePoiLayers,
+  featureMatchesKinds,
+  poiLayerFilter,
+  removePoiClusterLayers,
   removePoiLayers,
 } from "./poiLayer";
 
@@ -93,5 +101,80 @@ describe("POI vector layer", () => {
     expect(sources.size).toBe(0);
     expect(layers.size).toBe(0);
     expect(images.size).toBe(0);
+  });
+});
+
+describe("POI cluster layers", () => {
+  it("adds the clustered GeoJSON source and all three layers", () => {
+    const { map, sources, layers } = fakeMap();
+    ensurePoiClusterLayers(map);
+
+    expect(sources.has(POI_CLUSTER_DATA_SOURCE_ID)).toBe(true);
+    expect(layers.has(POI_CLUSTER_CIRCLE_LAYER_ID)).toBe(true);
+    expect(layers.has(POI_CLUSTER_COUNT_LAYER_ID)).toBe(true);
+    expect(layers.has(POI_CLUSTER_POINT_LAYER_ID)).toBe(true);
+  });
+
+  it("is idempotent and removes everything", () => {
+    const { map, sources, layers } = fakeMap();
+    ensurePoiClusterLayers(map);
+    ensurePoiClusterLayers(map);
+    expect(sources.size).toBe(1);
+    expect(layers.size).toBe(3);
+
+    removePoiClusterLayers(map);
+    expect(sources.size).toBe(0);
+    expect(layers.size).toBe(0);
+  });
+});
+
+const place = (props: Record<string, unknown>) => props;
+
+describe("featureMatchesKinds", () => {
+  it("matches categorized places with no filter", () => {
+    expect(featureMatchesKinds(place({ class: "restaurant" }))).toBe(true);
+    expect(featureMatchesKinds(place({ class: "shop", subclass: "bakery" }))).toBe(true);
+    expect(featureMatchesKinds(place({ class: "museum" }))).toBe(true);
+  });
+
+  it("rejects unrelated classes", () => {
+    expect(featureMatchesKinds(place({ class: "gate" }))).toBe(false);
+    expect(featureMatchesKinds(place({ class: "bollard" }))).toBe(false);
+  });
+
+  it("requires a name for green space", () => {
+    expect(featureMatchesKinds(place({ class: "garden" }))).toBe(false);
+    expect(featureMatchesKinds(place({ class: "garden", name: "Hofgarten" }))).toBe(true);
+    expect(featureMatchesKinds(place({ subclass: "park" }))).toBe(false);
+    expect(featureMatchesKinds(place({ subclass: "park", name: "Stadtpark" }))).toBe(true);
+  });
+
+  it("keeps named parks even though playgrounds are excluded", () => {
+    expect(featureMatchesKinds(place({ class: "playground" }))).toBe(false);
+  });
+
+  it("filters by selected kind", () => {
+    expect(featureMatchesKinds(place({ class: "restaurant" }), ["food"])).toBe(true);
+    expect(featureMatchesKinds(place({ class: "restaurant" }), ["shop"])).toBe(false);
+    expect(featureMatchesKinds(place({ class: "shop", subclass: "bakery" }), ["shop"])).toBe(true);
+    expect(featureMatchesKinds(place({ class: "museum" }), ["culture", "sport"])).toBe(true);
+  });
+
+  it("combines kinds", () => {
+    expect(featureMatchesKinds(place({ class: "restaurant" }), ["food", "shop"])).toBe(true);
+    expect(featureMatchesKinds(place({ class: "garden", name: "Garten" }), ["space"])).toBe(true);
+  });
+});
+
+describe("poiLayerFilter", () => {
+  it("returns the plain category filter when nothing is selected", () => {
+    const filter = poiLayerFilter([]) as unknown[];
+    expect(filter[0]).toBe("any");
+  });
+
+  it("ANDs the category filter with the kind classes", () => {
+    const filter = poiLayerFilter(["food"]) as unknown[];
+    expect(filter[0]).toBe("all");
+    expect(filter).toHaveLength(3);
   });
 });
