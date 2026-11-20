@@ -6,7 +6,10 @@
  * online use only.
  */
 
-const CACHE = "kugelmaps-shell-v1";
+/* Bump on every change that must reach an installed home-screen app: the
+ * shell (index, manifest, icons) is cache-first, so a new cache name is what
+ * forces the manifest colours and the shell to be re-read. */
+const CACHE = "kugelmaps-shell-v2";
 const SCOPE = self.registration.scope;
 
 const SHELL = [

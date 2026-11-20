@@ -15,6 +15,7 @@ import {
   type SpringHandle,
 } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
+import { measuredSafeBottom } from "@/lib/safeArea";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
@@ -72,14 +73,9 @@ function cssLength(name: string): number {
 }
 
 function safeInsetBottom(): number {
-  if (typeof document === "undefined") return 0;
-  const probe = document.createElement("div");
-  probe.style.cssText =
-    "position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none";
-  document.body.appendChild(probe);
-  const height = probe.getBoundingClientRect().height;
-  probe.remove();
-  return Number.isFinite(height) ? height : 0;
+  // Same inset the dock adds — see src/lib/safeArea.ts. A raw env() here would
+  // put the compact card one inset above the dock on iOS 26 home-screen apps.
+  return measuredSafeBottom();
 }
 
 function PoiDetailContent({

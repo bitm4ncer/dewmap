@@ -100,8 +100,15 @@ describe("Graphite tokens", () => {
   });
 
   it("themes the installed-app chrome", () => {
-    expect(manifest).toContain('background_color: "#121619"');
-    expect(manifest).toContain('theme_color: "#121619"');
+    // iOS samples the manifest colours for the launch screen and for the strip
+    // it keeps below the layout viewport, so both must be the page surface.
+    expect(manifest).toContain("background_color: THEME.surface0");
+    expect(manifest).toContain("theme_color: THEME.surface0");
+  });
+
+  it("keeps the page canvas on the sheet surface", () => {
+    expect(css).toMatch(/\nhtml \{[\s\S]*?background: var\(--surf-0\)/);
+    expect(css).toMatch(/\nbody \{[\s\S]*?background: var\(--surf-0\)/);
   });
 
   it("ships seven cool route tones", () => {

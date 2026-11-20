@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
+import { THEME } from "@/lib/theme";
 
 export const dynamic = "force-static";
 
@@ -15,8 +16,10 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: ".",
     display: "standalone",
     orientation: "any",
-    background_color: "#121619",
-    theme_color: "#121619",
+    // Keep both in the page surface colour: iOS samples them for the strip it
+    // keeps below the layout viewport and for the launch screen.
+    background_color: THEME.surface0,
+    theme_color: THEME.surface0,
     icons: [
       {
         src: "icon.svg",

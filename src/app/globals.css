@@ -19,10 +19,11 @@
 
 html {
   font-family: var(--font-sans), system-ui, sans-serif;
-  /* iOS reserves the home-indicator strip below the layout viewport and paints
-     it with the propagated page background. Keep that background on the sheet
-     surface (--surf-0), not on --bg, so the strip reads as part of the panel
-     instead of a darker bar under it. The map surface is --surf-0 as well. */
+  /* iOS paints the strip below the layout viewport with a colour guessed from
+     the page background (WebKit 301108/301994) and caches that guess until
+     the home-screen app is relaunched. Keep the guess on the sheet surface so
+     the strip reads as part of the panel instead of a darker bar under it.
+     The map canvas and the dock are --surf-0 as well. */
   background: var(--surf-0);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
@@ -30,10 +31,9 @@ html {
 }
 
 body {
-  background: var(--bg);
-}
-
-body {
+  /* Same surface as <html>: the body covers the page canvas, so it is what
+     iOS samples for the reserved strip. */
+  background: var(--surf-0);
   overscroll-behavior: none;
 }
 

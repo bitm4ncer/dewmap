@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { SafeAreaRoot } from "@/components/ui/SafeAreaRoot";
 import { TactileRoot } from "@/components/ui/TactileRoot";
+import { THEME } from "@/lib/theme";
 import {
   SITE_DESCRIPTION,
   SITE_NAME,
@@ -92,7 +94,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#121619",
+  // Must match the page surface: iOS tints the standalone chrome (and caches
+  // it for the reserved bottom strip) from this colour.
+  themeColor: THEME.surface0,
   width: "device-width",
   initialScale: 1,
   // Keep page zoom available (WCAG 1.4.4); MapLibre owns gestures on the
@@ -142,9 +146,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="min-h-full flex flex-col bg-[color:var(--bg)] text-[color:var(--ink)]">
+      <body className="min-h-full flex flex-col bg-[color:var(--surf-0)] text-[color:var(--ink)]">
         {children}
         <ServiceWorkerRegister />
+        <SafeAreaRoot />
         <TactileRoot />
       </body>
     </html>

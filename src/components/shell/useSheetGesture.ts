@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { haptic } from "../../lib/haptics";
+import { measuredSafeBottom } from "../../lib/safeArea";
 import {
   chooseDetent,
   createSpring,
@@ -26,16 +27,13 @@ function clampVelocity(value: number): number {
   return Math.max(-1200, Math.min(1200, value));
 }
 
-/** Safe-area bottom inset in px, measured via a temporary probe element. */
+/**
+ * Bottom inset the dock may add, in px. The raw `env()` value minus whatever
+ * the system already keeps outside the layout viewport — see
+ * `src/lib/safeArea.ts`.
+ */
 export function measureSafeBottom(): number {
-  if (typeof document === "undefined") return 0;
-  const probe = document.createElement("div");
-  probe.style.cssText =
-    "position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none";
-  document.body.appendChild(probe);
-  const height = probe.getBoundingClientRect().height;
-  probe.remove();
-  return Number.isFinite(height) ? height : 0;
+  return measuredSafeBottom();
 }
 
 /** A swipe counts only when it is clearly vertical; otherwise the tap wins. */
