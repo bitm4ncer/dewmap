@@ -1749,6 +1749,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     null,
   );
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [railLoading, setRailLoading] = useState(false);
+  const [busLoading, setBusLoading] = useState(false);
   const historyPopupRef = useRef<maplibregl.Popup | null>(null);
   const {
     imageBasemapId,
@@ -3184,6 +3186,53 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     let cancelled = false;
     let stationTimer: number | null = null;
+    /** Only the first tile load after enabling gets a spinner. */
+    let initialLoadDone = false;
+    let loadingShowTimer: number | null = null;
+    let loadingMaxTimer: number | null = null;
+
+    const stopRailLoading = () => {
+      if (loadingShowTimer !== null) {
+        window.clearTimeout(loadingShowTimer);
+        loadingShowTimer = null;
+      }
+      if (loadingMaxTimer !== null) {
+        window.clearTimeout(loadingMaxTimer);
+        loadingMaxTimer = null;
+      }
+      setRailLoading(false);
+    };
+
+    // OpenFreeMap streams rail tiles on demand. A short spinner covers
+    // the first viewport; later pans do not flash it again, and the
+    // 12 s ceiling prevents a stuck spinner when tiles fail.
+    const syncRailLoading = () => {
+      let loaded = false;
+      try {
+        loaded =
+          Boolean(map.getSource(RAIL_VECTOR_SOURCE_ID)) &&
+          map.isSourceLoaded(RAIL_VECTOR_SOURCE_ID);
+      } catch {
+        loaded = false;
+      }
+      if (loaded) {
+        initialLoadDone = true;
+        stopRailLoading();
+        return;
+      }
+      if (initialLoadDone) return;
+      if (loadingShowTimer !== null || loadingMaxTimer !== null) return;
+      loadingShowTimer = window.setTimeout(() => {
+        loadingShowTimer = null;
+        if (!cancelled) setRailLoading(true);
+      }, 250);
+      loadingMaxTimer = window.setTimeout(() => {
+        loadingMaxTimer = null;
+        initialLoadDone = true;
+        stopRailLoading();
+      }, 12_000);
+    };
+
     const rebuildStations = () => {
       if (cancelled) return;
       try {
@@ -3235,6 +3284,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         // A style swap can remove the source between the check and add.
       }
       scheduleStations();
+      syncRailLoading();
     };
     // `isStyleLoaded()` can stay false while tiles are still streaming even
     // though the style and its layers already exist. Apply immediately, then
@@ -3242,6 +3292,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     apply();
     map.on("style.load", apply);
     map.once("idle", apply);
+    map.on("idle", stopRailLoading);
 
     const onEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -3291,9 +3342,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     const onStationsMoveEnd = () => scheduleStations();
     const onStationsSourceData = (event: MapSourceDataEvent) => {
-      if (event.sourceId === RAIL_VECTOR_SOURCE_ID && event.isSourceLoaded) {
-        scheduleStations();
-      }
+      if (event.sourceId !== RAIL_VECTOR_SOURCE_ID) return;
+      syncRailLoading();
+      if (event.isSourceLoaded) scheduleStations();
     };
     map.on("moveend", onStationsMoveEnd);
     map.on("sourcedata", onStationsSourceData);
@@ -3302,10 +3353,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     return () => {
       cancelled = true;
+      stopRailLoading();
       unregisterTaps();
       if (stationTimer !== null) window.clearTimeout(stationTimer);
       map.off("style.load", apply);
       map.off("idle", apply);
+      map.off("idle", stopRailLoading);
       map.off("moveend", onStationsMoveEnd);
       map.off("sourcedata", onStationsSourceData);
       map.off("mouseenter", RAIL_STATION_MERGED_HIT_LAYER_ID, onEnter);
@@ -3349,6 +3402,28 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
      * simply refetch once a minute; a degraded mirror recovers.
      */
     const EMPTY_RETRY_MS = 60_000;
+
+    // A cache hit resolves in a few milliseconds; the 250 ms delay keeps
+    // the spinner from flashing on every pan that is already covered.
+    let pendingLoads = 0;
+    let busLoadingTimer: number | null = null;
+    const beginBusLoading = () => {
+      pendingLoads += 1;
+      if (pendingLoads > 1 || busLoadingTimer !== null) return;
+      busLoadingTimer = window.setTimeout(() => {
+        busLoadingTimer = null;
+        if (!cancelled) setBusLoading(true);
+      }, 250);
+    };
+    const endBusLoading = () => {
+      pendingLoads = Math.max(0, pendingLoads - 1);
+      if (pendingLoads > 0) return;
+      if (busLoadingTimer !== null) {
+        window.clearTimeout(busLoadingTimer);
+        busLoadingTimer = null;
+      }
+      if (!cancelled) setBusLoading(false);
+    };
 
     // `isStyleLoaded()` waits for every basemap tile, so on a slow or
     // blocked basemap the overlay could never appear. Layer bookkeeping
@@ -3419,6 +3494,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       controller?.abort();
       const ctrl = new AbortController();
       controller = ctrl;
+      beginBusLoading();
       fetchBusNetwork(bbox, ctrl.signal)
         .then((network) => {
           if (cancelled || ctrl.signal.aborted) return;
@@ -3445,6 +3521,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         })
         .finally(() => {
           if (inFlightKey === key) inFlightKey = null;
+          endBusLoading();
         });
     };
 
@@ -3518,6 +3595,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       controller?.abort();
       if (timer !== null) window.clearTimeout(timer);
       if (retryTimer !== null) window.clearTimeout(retryTimer);
+      if (busLoadingTimer !== null) window.clearTimeout(busLoadingTimer);
+      setBusLoading(false);
       window.clearInterval(watchdog);
       map.off("style.load", onStyle);
       map.off("moveend", onMoveEnd);
@@ -5181,8 +5260,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
                   onPoiKindsChange={setPoiKinds}
                   railOn={railOn}
                   onRailChange={setRailOn}
+                  railLoading={railOn && railLoading}
                   busOn={busOn}
                   onBusChange={setBusOn}
+                  busLoading={busOn && busLoading}
                 />
 
                 <BasemapPanel
@@ -5780,8 +5861,10 @@ interface ViewPanelProps {
   onPoiKindsChange: (kinds: PoiKindFilter[]) => void;
   railOn: boolean;
   onRailChange: (on: boolean) => void;
+  railLoading: boolean;
   busOn: boolean;
   onBusChange: (on: boolean) => void;
+  busLoading: boolean;
 }
 
 function ViewPanel({
@@ -5795,8 +5878,10 @@ function ViewPanel({
   onPoiKindsChange,
   railOn,
   onRailChange,
+  railLoading,
   busOn,
   onBusChange,
+  busLoading,
 }: ViewPanelProps) {
   return (
     <HudPanel label="View">
@@ -5932,17 +6017,30 @@ function ViewPanel({
               Railways &amp; stations · coloured by service
             </span>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={railOn}
-            aria-label="Rail overlay on/off"
-            onClick={() => onRailChange(!railOn)}
-            className="hud-switch"
-            data-on={railOn}
-          >
-            <span className="hud-switch-thumb" aria-hidden />
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-4 w-4 items-center justify-center">
+              {railLoading && (
+                <span
+                  role="status"
+                  aria-label="Rails loading"
+                  className="inline-flex text-[color:var(--ink-mute)]"
+                >
+                  <Spinner size={12} />
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={railOn}
+              aria-label="Rail overlay on/off"
+              onClick={() => onRailChange(!railOn)}
+              className="hud-switch"
+              data-on={railOn}
+            >
+              <span className="hud-switch-thumb" aria-hidden />
+            </button>
+          </div>
         </div>
 
         {railOn && (
@@ -5993,17 +6091,30 @@ function ViewPanel({
               OSM bus routes &amp; stops · Overpass · from zoom 12
             </span>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={busOn}
-            aria-label="Bus lines overlay on/off"
-            onClick={() => onBusChange(!busOn)}
-            className="hud-switch"
-            data-on={busOn}
-          >
-            <span className="hud-switch-thumb" aria-hidden />
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-4 w-4 items-center justify-center">
+              {busLoading && (
+                <span
+                  role="status"
+                  aria-label="Bus lines loading"
+                  className="inline-flex text-[color:var(--ink-mute)]"
+                >
+                  <Spinner size={12} />
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={busOn}
+              aria-label="Bus lines overlay on/off"
+              onClick={() => onBusChange(!busOn)}
+              className="hud-switch"
+              data-on={busOn}
+            >
+              <span className="hud-switch-thumb" aria-hidden />
+            </button>
+          </div>
         </div>
       </div>
     </HudPanel>
