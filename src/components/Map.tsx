@@ -88,6 +88,7 @@ import {
   ensureBusLayers,
   fetchBusNetwork,
   removeBusLayers,
+  snapBboxToGrid,
   type BusNetwork,
 } from "@/lib/bus/busRoutes";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
@@ -3022,6 +3023,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let cancelled = false;
     let timer: number | null = null;
     let retryTimer: number | null = null;
+    let retryCount = 0;
     let controller: AbortController | null = null;
     /** Bbox whose data is currently rendered. Reset on style swaps. */
     let loadedKey = "";
@@ -3029,6 +3031,17 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     let inFlightKey: string | null = null;
     /** Last successful payload so layers can be restored without network. */
     let lastNetwork: BusNetwork | null = null;
+
+    // `isStyleLoaded()` waits for every basemap tile, so on a slow or
+    // blocked basemap the overlay could never appear. Layer bookkeeping
+    // only needs the parsed style JSON.
+    const styleReady = () => {
+      try {
+        return Boolean(map.getStyle()?.layers?.length);
+      } catch {
+        return false;
+      }
+    };
 
     const applyNetwork = (network: BusNetwork) => {
       try {
@@ -3041,22 +3054,25 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     /** Re-add layers from the last payload if they disappeared. */
     const reassertLayers = () => {
       if (cancelled || !lastNetwork) return;
-      if (!map.isStyleLoaded()) return;
+      if (!styleReady()) return;
       if (map.getZoom() < BUS_MIN_ZOOM) return;
       if (map.getLayer(BUS_LAYER_ID)) return;
       applyNetwork(lastNetwork);
     };
 
+    const scheduleRetry = (delay: number) => {
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null;
+        refresh();
+      }, delay);
+    };
+
     const refresh = () => {
       if (cancelled) return;
-      if (!map.isStyleLoaded()) {
+      if (!styleReady()) {
         // Style still settling — retry shortly instead of dropping data.
-        if (retryTimer === null) {
-          retryTimer = window.setTimeout(() => {
-            retryTimer = null;
-            refresh();
-          }, 400);
-        }
+        if (retryTimer === null) scheduleRetry(600);
         return;
       }
       if (map.getZoom() < BUS_MIN_ZOOM) {
@@ -3077,7 +3093,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         bounds.getNorth() + padLat,
         bounds.getEast() + padLng,
       ];
-      const key = bbox.map((n) => n.toFixed(3)).join(",");
+      // Key on the snapped bbox: small pans hit the same cached cell and
+      // never trigger a redundant Overpass query.
+      const key = snapBboxToGrid(bbox)
+        .map((n) => n.toFixed(4))
+        .join(",");
       if (key === loadedKey) {
         reassertLayers();
         return;
@@ -3092,12 +3112,17 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           if (cancelled || ctrl.signal.aborted) return;
           loadedKey = key;
           lastNetwork = network;
+          retryCount = 0;
           applyNetwork(network);
         })
         .catch((error) => {
           if ((error as Error).name === "AbortError") return;
-          // Leave loadedKey empty so the next moveend retries this bbox.
+          // Keep the previous lines on screen and retry with backoff,
+          // even if the user does not move the map again.
           console.warn("[bus-lines] fetch failed", error);
+          const delay = Math.min(30_000, 3_000 * 2 ** retryCount);
+          retryCount += 1;
+          scheduleRetry(delay);
         })
         .finally(() => {
           if (inFlightKey === key) inFlightKey = null;
@@ -3120,16 +3145,26 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // Style may load after this effect registers.
     const waitForStyle = () => {
       if (cancelled) return;
-      if (map.isStyleLoaded()) refresh();
+      if (styleReady()) refresh();
       else window.setTimeout(waitForStyle, 300);
     };
     waitForStyle();
     map.on("style.load", onStyle);
     map.on("moveend", onMoveEnd);
 
-    // Safety net: if a style swap or render quirk drops the layers
-    // without an event we listen to, restore them from the cache.
-    const watchdog = window.setInterval(reassertLayers, 2500);
+    // Safety net: a style swap, a dropped layer or a failed fetch must
+    // not leave the map without bus lines. Reassert from memory first,
+    // refetch when nothing usable is on the map yet.
+    const watchdog = window.setInterval(() => {
+      if (cancelled || !styleReady()) return;
+      if (map.getZoom() < BUS_MIN_ZOOM) return;
+      if (map.getLayer(BUS_LAYER_ID)) return;
+      if (lastNetwork && lastNetwork.routes.features.length > 0) {
+        applyNetwork(lastNetwork);
+        return;
+      }
+      if (inFlightKey === null && retryTimer === null) refresh();
+    }, 6_000);
 
     // Bus stops are tappable exactly like rail stations: dropping a
     // hiking waypoint at the stop.

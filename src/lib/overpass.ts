@@ -2,6 +2,7 @@ const ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.osm.ch/api/interpreter",
 ];
 
 export interface OverpassNode {
@@ -40,22 +41,32 @@ export interface OverpassResponse {
   elements: OverpassElement[];
 }
 
+/** Per-endpoint wall clock so one dead mirror cannot stall the overlay. */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
 /**
  * Run an Overpass query with endpoint rotation. POSTs the query so long
- * `out geom` bodies do not hit URL limits.
+ * `out geom` bodies do not hit URL limits. Every endpoint gets its own
+ * timeout; a 429/504 falls through to the next mirror immediately.
  */
 export async function overpassQuery(
   query: string,
   signal?: AbortSignal,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<OverpassResponse> {
   let lastErr: unknown;
   for (const endpoint of ENDPOINTS) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: `data=${encodeURIComponent(query)}`,
-        signal,
+        signal: controller.signal,
       });
       if (!res.ok) {
         lastErr = new Error(`Overpass ${endpoint} → ${res.status}`);
@@ -63,8 +74,16 @@ export async function overpassQuery(
       }
       return (await res.json()) as OverpassResponse;
     } catch (err) {
-      if ((err as Error).name === "AbortError") throw err;
-      lastErr = err;
+      // The caller cancelled: stop rotating and surface the abort.
+      if (signal?.aborted) throw err;
+      if ((err as Error).name === "AbortError") {
+        lastErr = new Error(`Overpass ${endpoint} timed out`);
+      } else {
+        lastErr = err;
+      }
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
     }
   }
   throw new Error(

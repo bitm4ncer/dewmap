@@ -24,8 +24,15 @@ export const BUS_STOP_HIT_LAYER_ID = "bus-stops-hit";
 export const BUS_LINE_COLOR = THEME.warn;
 export const BUS_MIN_ZOOM = 12;
 
-const CACHE_TTL_MS = 10 * 60_000;
-const CACHE_MAX = 24;
+const CACHE_TTL_MS = 30 * 60_000;
+/** An empty response is often a mirror hiccup — retry it soon. */
+const EMPTY_CACHE_TTL_MS = 45_000;
+const CACHE_MAX = 32;
+/** ~5.5 km grid: the same cell survives typical pans and pinch zooms. */
+const GRID_STEP = 0.05;
+const PERSIST_KEY = "kugelmaps.bus-cache.v1";
+const PERSIST_MAX_ENTRIES = 4;
+const PERSIST_MAX_BYTES = 1_800_000;
 
 export interface BusRouteFeature extends GeoJSON.Feature<GeoJSON.LineString> {
   properties: {
@@ -48,11 +55,95 @@ export interface BusNetwork {
   stops: GeoJSON.FeatureCollection<GeoJSON.Point>;
 }
 
-const cache = new Map<string, { at: number; data: BusNetwork }>();
+const cache = new Map<
+  string,
+  { at: number; bbox: [number, number, number, number]; data: BusNetwork }
+>();
 
-function cacheKey(bbox: [number, number, number, number]): string {
-  // ~1 km grid so small pans reuse the previous response.
-  return bbox.map((n) => (Math.round(n * 100) / 100).toFixed(2)).join(",");
+export type Bbox = [number, number, number, number];
+
+/**
+ * Snap a bbox outward to a coarse grid. Without this every pan produces
+ * a new key and refetches the (expensive) Overpass query.
+ */
+export function snapBboxToGrid(bbox: Bbox, step = GRID_STEP): Bbox {
+  return [
+    Math.floor(bbox[0] / step) * step,
+    Math.floor(bbox[1] / step) * step,
+    Math.ceil(bbox[2] / step) * step,
+    Math.ceil(bbox[3] / step) * step,
+  ];
+}
+
+export function bboxContains(outer: Bbox, inner: Bbox): boolean {
+  return (
+    inner[0] >= outer[0] &&
+    inner[1] >= outer[1] &&
+    inner[2] <= outer[2] &&
+    inner[3] <= outer[3]
+  );
+}
+
+function bboxKey(bbox: Bbox): string {
+  return bbox.map((n) => n.toFixed(4)).join(",");
+}
+
+function isEmptyNetwork(network: BusNetwork): boolean {
+  return network.routes.features.length === 0 && network.stops.features.length === 0;
+}
+
+let persistedLoaded = false;
+
+function loadPersistedCache(): void {
+  if (persistedLoaded) return;
+  persistedLoaded = true;
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(PERSIST_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as {
+      v?: number;
+      entries?: { at: number; bbox: Bbox; data: BusNetwork }[];
+    };
+    if (parsed?.v !== 1 || !Array.isArray(parsed.entries)) return;
+    for (const entry of parsed.entries) {
+      if (!entry?.bbox || !entry.data?.routes || !entry.data?.stops) continue;
+      cache.set(bboxKey(entry.bbox), entry);
+    }
+  } catch {
+    // Storage disabled or malformed — the in-memory cache still works.
+  }
+}
+
+function persistCache(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const entries = [...cache.values()]
+      .sort((a, b) => b.at - a.at)
+      .slice(0, PERSIST_MAX_ENTRIES);
+    let payload = JSON.stringify({ v: 1, entries });
+    while (payload.length > PERSIST_MAX_BYTES && entries.length > 1) {
+      entries.pop();
+      payload = JSON.stringify({ v: 1, entries });
+    }
+    if (payload.length > PERSIST_MAX_BYTES) return;
+    window.localStorage.setItem(PERSIST_KEY, payload);
+  } catch {
+    // Quota or privacy mode: silently keep the session cache.
+  }
+}
+
+/** Newest cached network whose coverage contains the requested bbox. */
+function findCached(bbox: Bbox, now: number): BusNetwork | null {
+  const wanted = snapBboxToGrid(bbox);
+  let best: { at: number; data: BusNetwork } | null = null;
+  for (const entry of cache.values()) {
+    const ttl = isEmptyNetwork(entry.data) ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS;
+    if (now - entry.at > ttl) continue;
+    if (!bboxContains(entry.bbox, wanted)) continue;
+    if (!best || entry.at > best.at) best = entry;
+  }
+  return best?.data ?? null;
 }
 
 /**
@@ -114,16 +205,21 @@ export function parseBusNetwork(
   };
 }
 
-/** Fetch routes + stops for bbox = [south, west, north, east], TTL-cached. */
+/** Fetch routes + stops for bbox = [south, west, north, east], cached. */
 export async function fetchBusNetwork(
-  bbox: [number, number, number, number],
+  bbox: Bbox,
   signal?: AbortSignal,
+  force = false,
 ): Promise<BusNetwork> {
-  const key = cacheKey(bbox);
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.data;
+  loadPersistedCache();
+  const now = Date.now();
+  if (!force) {
+    const cached = findCached(bbox, now);
+    if (cached) return cached;
+  }
 
-  const [s, w, n, e] = bbox;
+  const fetchBbox = snapBboxToGrid(bbox);
+  const [s, w, n, e] = fetchBbox;
   // One request: route relations carry their geometry, stops are nodes.
   const query = `
     [out:json][timeout:25];
@@ -136,11 +232,13 @@ export async function fetchBusNetwork(
   `;
   const data = await overpassQuery(query, signal);
   const network = parseBusNetwork(data.elements);
-  cache.set(key, { at: Date.now(), data: network });
+  const key = bboxKey(fetchBbox);
+  cache.set(key, { at: Date.now(), bbox: fetchBbox, data: network });
   if (cache.size > CACHE_MAX) {
     const oldest = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
     if (oldest) cache.delete(oldest[0]);
   }
+  persistCache();
   return network;
 }
 
