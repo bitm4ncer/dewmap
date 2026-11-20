@@ -9,14 +9,19 @@ import {
   POI_HIT_LAYER_ID,
   POI_ICON_LAYER_ID,
   POI_LABEL_LAYER_ID,
+  POI_SELECTION_HALO_LAYER_ID,
+  POI_SELECTION_RING_LAYER_ID,
+  POI_SELECTION_SOURCE_ID,
   POI_SOURCE_ID,
   ensurePoiClusterLayers,
   ensurePoiLayers,
+  ensurePoiSelectionLayers,
   featureMatchesKinds,
   poiLayerFilter,
   poiTextFont,
   removePoiClusterLayers,
   removePoiLayers,
+  updatePoiSelection,
 } from "./poiLayer";
 
 function fakeCanvas() {
@@ -51,10 +56,18 @@ function fakeMap() {
   const images = new Map<string, unknown>();
   const map = {
     getSource: (id: string) => sources.get(id),
-    addSource: (id: string, spec: unknown) => sources.set(id, spec),
+    addSource: (id: string, spec: unknown) =>
+      sources.set(id, { ...(spec as Record<string, unknown>), setData: vi.fn() }),
     getLayer: (id: string) => layers.get(id),
     addLayer: (layer: { id: string }, before?: string) =>
       layers.set(layer.id, { id: layer.id, before }),
+    moveLayer: (id: string) => {
+      const layer = layers.get(id);
+      if (layer) {
+        layers.delete(id);
+        layers.set(id, layer);
+      }
+    },
     hasImage: (id: string) => images.has(id),
     addImage: (id: string, image: unknown) => images.set(id, image),
     removeLayer: (id: string) => layers.delete(id),
@@ -128,6 +141,39 @@ describe("POI cluster layers", () => {
     removePoiClusterLayers(map);
     expect(sources.size).toBe(0);
     expect(layers.size).toBe(0);
+  });
+});
+
+describe("selected-place ring", () => {
+  it("draws a ring at the selected place and clears it", () => {
+    const { map, sources, layers } = fakeMap();
+    ensurePoiSelectionLayers(map);
+    expect(sources.has(POI_SELECTION_SOURCE_ID)).toBe(true);
+    expect(layers.has(POI_SELECTION_HALO_LAYER_ID)).toBe(true);
+    expect(layers.has(POI_SELECTION_RING_LAYER_ID)).toBe(true);
+
+    updatePoiSelection(map, { lon: 6.78, lat: 51.23 });
+    const source = sources.get(POI_SELECTION_SOURCE_ID) as {
+      setData: ReturnType<typeof vi.fn>;
+    };
+    const selected = source.setData.mock.calls.at(-1)?.[0] as GeoJSON.FeatureCollection;
+    expect(selected.features).toHaveLength(1);
+    expect(selected.features[0].geometry).toEqual({
+      type: "Point",
+      coordinates: [6.78, 51.23],
+    });
+
+    updatePoiSelection(map, null);
+    const cleared = source.setData.mock.calls.at(-1)?.[0] as GeoJSON.FeatureCollection;
+    expect(cleared.features).toHaveLength(0);
+  });
+
+  it("is idempotent", () => {
+    const { map, sources, layers } = fakeMap();
+    ensurePoiSelectionLayers(map);
+    ensurePoiSelectionLayers(map);
+    expect(sources.size).toBe(1);
+    expect(layers.size).toBe(2);
   });
 });
 

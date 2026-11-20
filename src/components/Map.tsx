@@ -71,6 +71,7 @@ import {
   ensurePoiLayers,
   removePoiClusterLayers,
   removePoiLayers,
+  updatePoiSelection,
   type PoiKindFilter,
 } from "@/lib/poi/poiLayer";
 import {
@@ -3799,6 +3800,33 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("mouseleave", POI_CLUSTER_NAME_LAYER_ID, hidePointer);
     };
   }, [poiOn, active, mapInstance]);
+
+  // Selected-place ring. It lives outside the Places toggle so a place
+  // opened from search or a long press stays marked even when the overlay
+  // itself is off; the detail card is the source of truth.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    let cancelled = false;
+    const apply = () => {
+      if (cancelled) return;
+      try {
+        updatePoiSelection(map, poiSelection);
+      } catch {
+        // Style json not parsed yet; style.load/idle and the retry handle it.
+      }
+    };
+    apply();
+    map.on("style.load", apply);
+    map.once("idle", apply);
+    const retry = window.setTimeout(apply, 500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retry);
+      map.off("style.load", apply);
+      map.off("idle", apply);
+    };
+  }, [mapInstance, poiSelection]);
 
   // Kind chips apply instantly to detail dots and clusters without
   // rebuilding the whole POI subsystem.

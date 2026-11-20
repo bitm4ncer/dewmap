@@ -99,6 +99,14 @@ function PoiDetailContent({
   /** Armed on a button target: the gesture stays a tap unless it passes
       the axis lock, then it is promoted to a real drag. */
   const pendingRef = useRef<{ pointerId: number; startY: number } | null>(null);
+  /** Deferred drag for the expanded body. It only promotes once the
+      scroll container is at its top and the finger moves downward, so
+      scrolling the details keeps working. */
+  const bodyPendingRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startX: number;
+  } | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -144,6 +152,34 @@ function PoiDetailContent({
     },
     [],
   );
+
+  // On touch devices the browser starts a native scroll before the
+  // pointermove threshold is reached, which cancels our pointer gesture.
+  // At the top of the expanded sheet a downward touch has nothing to
+  // scroll, so suppress that native gesture; upward swipes and a scrolled
+  // body still scroll normally.
+  useEffect(() => {
+    if (!expanded) return;
+    const scroller = cardRef.current?.querySelector<HTMLElement>(".poi-scroll");
+    if (!scroller) return;
+    let startY: number | null = null;
+    const onTouchStart = (event: TouchEvent) => {
+      startY = event.touches[0]?.clientY ?? null;
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (startY === null || event.touches.length !== 1) return;
+      if (scroller.scrollTop > 0) return;
+      const y = event.touches[0]?.clientY;
+      if (y === undefined) return;
+      if (y - startY > 2) event.preventDefault();
+    };
+    scroller.addEventListener("touchstart", onTouchStart, { passive: true });
+    scroller.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      scroller.removeEventListener("touchstart", onTouchStart);
+      scroller.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [expanded]);
 
   const retry = () => {
     setLoading(true);
@@ -321,6 +357,7 @@ function PoiDetailContent({
 
   const clearResize = () => {
     pendingRef.current = null;
+    bodyPendingRef.current = null;
     dragRef.current = null;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -383,6 +420,70 @@ function PoiDetailContent({
     animateHeight(nextExpanded ? max : compact, heightVelocity);
   };
 
+  const bodyScrollTop = () => {
+    const scroller = cardRef.current?.querySelector<HTMLElement>(".poi-scroll");
+    return scroller?.scrollTop ?? 0;
+  };
+
+  /**
+   * Drag-down on the expanded body. We deliberately wait for a downward
+   * movement past the axis lock and only arm it while the scroller is at
+   * the top; an upward swipe or a scrolled body stays a native scroll.
+   * This is what made the gesture work on the header/hero but not on the
+   * body before.
+   */
+  const onBodyPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    if (closing || !expanded) return;
+    if ((e.target as HTMLElement).closest(".poi-head, .poi-hero")) return;
+    if (bodyScrollTop() > 0) return;
+    bodyPendingRef.current = {
+      pointerId: e.pointerId,
+      startY: e.clientY,
+      startX: e.clientX,
+    };
+  };
+
+  const onBodyPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest(".poi-head, .poi-hero")) return;
+    const pending = bodyPendingRef.current;
+    if (pending && pending.pointerId === e.pointerId) {
+      const dy = e.clientY - pending.startY;
+      const dx = e.clientX - pending.startX;
+      if (Math.abs(dy) < 10 && Math.abs(dx) < 10) return;
+      // Horizontal or upward movement belongs to native scrolling.
+      if (Math.abs(dx) > Math.abs(dy) || dy < 0) {
+        bodyPendingRef.current = null;
+        return;
+      }
+      bodyPendingRef.current = null;
+      beginResize("expanded", e, pending.startY, true);
+      return;
+    }
+    if (dragRef.current?.mode === "expanded") {
+      moveResize(e.clientY, e.timeStamp);
+    }
+  };
+
+  const onBodyPointerUp = (e: React.PointerEvent<HTMLElement>) => {
+    if (bodyPendingRef.current?.pointerId === e.pointerId) {
+      bodyPendingRef.current = null; // never promoted — a plain tap
+      return;
+    }
+    if (dragRef.current?.mode === "expanded") finishResize(e);
+  };
+
+  const onBodyPointerCancel = () => {
+    bodyPendingRef.current = null;
+    clearResize();
+  };
+
+  const onBodyClickCapture = (e: React.MouseEvent<HTMLElement>) => {
+    if (!suppressTapRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    suppressTapRef.current = false;
+  };
+
   const expand = () => {
     if (consumeSuppressedTap() || closing || expanded) return;
     haptic("snap");
@@ -401,6 +502,7 @@ function PoiDetailContent({
     if (closing) return;
     const el = cardRef.current;
     pendingRef.current = null;
+    bodyPendingRef.current = null;
     dragRef.current = null;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -690,7 +792,14 @@ function PoiDetailContent({
             </div>
           )}
 
-          <div className="poi-body">
+          <div
+            className="poi-body"
+            onPointerDown={onBodyPointerDown}
+            onPointerMove={onBodyPointerMove}
+            onPointerUp={onBodyPointerUp}
+            onPointerCancel={onBodyPointerCancel}
+            onClickCapture={onBodyClickCapture}
+          >
             {!hasImage && (
               <div
                 className="poi-head poi-head--actions"
