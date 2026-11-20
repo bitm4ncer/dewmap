@@ -2572,6 +2572,11 @@ input[type="range"].hud-slider::-moz-range-thumb {
     /* Rise from behind the dock bar instead of the 14px desktop nudge. */
     animation-name: poi-card-rise;
   }
+  /* The card sits on the dock, so 78dvh would push its top over the search
+     bar on a notched phone. Cap it to the strip that is actually free. */
+  .poi-detail[data-expanded="true"] {
+    height: min(78dvh, calc(100dvh - var(--hud-peek-h) - var(--topbar-h) - 12px));
+  }
 }
 
 @media (min-width: 768px) {

@@ -16,7 +16,9 @@ export interface PoiSheetState {
 export type PoiSheetEvent =
   | { type: "open-poi"; isMobile: boolean; sheetState: SheetState }
   | { type: "close-poi"; isMobile: boolean }
-  | { type: "sheet-state"; sheetState: SheetState; cardOpen: boolean };
+  | { type: "sheet-state"; sheetState: SheetState; cardOpen: boolean }
+  /** The card turned into something else (a planned route); drop the memory. */
+  | { type: "dismiss" };
 
 export function poiSheetReduce(
   state: PoiSheetState,
@@ -33,6 +35,8 @@ export function poiSheetReduce(
         return { state, snapTo: null, dismissCard: false };
       }
       return { state: { saved: null }, snapTo: null, dismissCard: true };
+    case "dismiss":
+      return { state: { saved: null }, snapTo: null, dismissCard: false };
     case "close-poi": {
       const target = event.isMobile ? state.saved : null;
       return { state: { saved: null }, snapTo: target, dismissCard: false };

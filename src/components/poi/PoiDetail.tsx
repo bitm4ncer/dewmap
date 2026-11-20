@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchPoiDetails } from "@/lib/poi";
 import type { PoiDetails, PoiSelection } from "@/lib/poi";
 import { parseOpeningHours } from "@/lib/poi/openingHours";
+import { expandedCardHeight } from "./cardHeight";
 import {
   createSpring,
   prefersReducedMotion,
@@ -57,6 +58,17 @@ function descriptionText(value: string): string {
 function categoryLabel(value: string | undefined): string {
   const raw = (value || "Place").replace(/_/g, " ");
   return raw.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Resolve a CSS custom property to pixels by measuring a probe. */
+function cssLength(name: string): number {
+  if (typeof document === "undefined") return 0;
+  const probe = document.createElement("div");
+  probe.style.cssText = `position:fixed;left:0;top:0;width:0;height:var(${name});visibility:hidden;pointer-events:none`;
+  document.body.appendChild(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Number.isFinite(height) ? height : 0;
 }
 
 function safeInsetBottom(): number {
@@ -258,8 +270,11 @@ function PoiDetailContent({
 
   const expandedHeight = () => {
     const vh = window.visualViewport?.height ?? window.innerHeight;
-    if (window.matchMedia("(min-width: 768px)").matches) return vh - 90;
-    return Math.min(vh * 0.78, 760);
+    return expandedCardHeight(vh, {
+      desktop: window.matchMedia("(min-width: 768px)").matches,
+      peek: cssLength("--hud-peek-h"),
+      topbar: cssLength("--topbar-h"),
+    });
   };
 
   const compactHeight = () => {

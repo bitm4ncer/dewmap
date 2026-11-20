@@ -2402,6 +2402,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   /** A POI detail becomes the destination in the expanded route planner. */
   const planPoiRoute = useCallback(
     (poi: PoiSelection) => {
+      // The card becomes a route destination, not a closed card: drop the
+      // remembered sheet size so a later place tap does not inherit it.
+      applyPoiSheet({ type: "dismiss" });
+      setPoiDismissing(false);
       setPoiSelection(null);
       const center = mapRef.current?.getCenter();
       const start: RoutePoint = livePos
@@ -2441,7 +2445,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       if (activePane !== "hiking") setActivePane("hiking");
       snapTo("half");
     },
-    [activePane, livePos, snapTo],
+    [activePane, applyPoiSheet, livePos, snapTo],
   );
 
   /** A search result opens its place card, with Plan Route as the action. */
@@ -2449,8 +2453,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     (result: GeocodeResult) => {
       setFlyTarget(result);
       setPendingPin(null);
-      setCrosshair(null);
-      setPoiSelection({
+      openPoi({
         osmType: result.osmType,
         osmId: result.osmId,
         lon: result.coordinates[0],
@@ -2459,9 +2462,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         category: result.category,
         city: result.city,
       });
-      if (isMobile) snapTo("peek");
     },
-    [isMobile, snapTo],
+    [openPoi],
   );
 
   useEffect(() => {

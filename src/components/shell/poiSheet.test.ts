@@ -41,6 +41,13 @@ describe("poiSheetReduce", () => {
     expect(r.dismissCard).toBe(false);
   });
 
+  it("drops the memory when the card turns into a route", () => {
+    const r = poiSheetReduce({ saved: "half" }, { type: "dismiss" });
+    expect(r.state.saved).toBeNull();
+    expect(r.snapTo).toBeNull();
+    expect(r.dismissCard).toBe(false);
+  });
+
   it("restores the remembered size when the card closes", () => {
     const r = poiSheetReduce({ saved: "half" }, { type: "close-poi", isMobile: true });
     expect(r.snapTo).toBe("half");

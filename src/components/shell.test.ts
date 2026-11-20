@@ -43,7 +43,7 @@ describe("shell", () => {
       map.indexOf("const handleSearchSelect"),
       map.indexOf("const handleStartTimeline"),
     );
-    expect(search).toContain("setPoiSelection");
+    expect(search).toContain("openPoi({");
     expect(search).toContain("setPendingPin(null)");
     expect(search).not.toContain("setPendingPin({");
   });
