@@ -23,6 +23,7 @@ import {
 import { ElevationChart } from "@/components/hiking/ElevationChart";
 import { geocode, prettyCategory, type GeocodeResult } from "@/lib/geocode";
 import { useNavigation } from "@/lib/navigation/store";
+import { haptic } from "@/lib/haptics";
 import { deriveBrouterManeuvers, formatDuration, type RoutePlan } from "@/lib/routing";
 import { prefersReducedMotion } from "@/lib/motion";
 
@@ -254,16 +255,41 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
     };
   }, [selectedCand]);
 
+  // The summary card is the way in: one tap commits the route and hands the
+  // map over to turn-by-turn guidance.
+  const startRoute = () => {
+    if (!navPlan) return;
+    haptic("tap");
+    finalizeRoute();
+    startNavigation(navPlan);
+  };
+
   return (
     <div className="flex flex-col gap-3">
       {/* Route summary card */}
       <HudPanel label="Route">
-        <RouteSummary
-          phase={phase}
-          waypointCount={waypoints.length}
-          candidate={selectedCand}
-          finalized={finalized}
-        />
+        {navPlan ? (
+          <button
+            type="button"
+            onClick={startRoute}
+            className="route-summary-btn"
+            aria-label="Start navigation for this route"
+          >
+            <RouteSummary
+              phase={phase}
+              waypointCount={waypoints.length}
+              candidate={selectedCand}
+              finalized={finalized}
+            />
+          </button>
+        ) : (
+          <RouteSummary
+            phase={phase}
+            waypointCount={waypoints.length}
+            candidate={selectedCand}
+            finalized={finalized}
+          />
+        )}
       </HudPanel>
 
       {/* Waypoints */}
@@ -434,15 +460,6 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
               {finalized && navPlan && (
                 <button
                   type="button"
-                  onClick={() => startNavigation(navPlan)}
-                  className="hud-btn-primary"
-                >
-                  Navigate
-                </button>
-              )}
-              {finalized && navPlan && (
-                <button
-                  type="button"
                   onClick={() => startNavigation(navPlan, { simulate: true })}
                   className="hud-btn-ghost !w-auto justify-center px-3 text-[12px] font-medium"
                 >
@@ -584,7 +601,7 @@ function RouteSummary({
         </span>
       </div>
       <div className="flex items-center justify-between gap-2 text-[11.5px] text-[color:var(--ink-dim)]">
-        <span>{finalized ? "Final · committed" : "Best of options · tap Confirm to lock"}</span>
+        <span>{finalized ? "Final · committed" : "Tap to start navigation"}</span>
         {greenPct != null && (
           <span
             className={

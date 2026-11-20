@@ -287,17 +287,11 @@ export function CarPanel({ mapRef }: Props) {
                 index={i}
                 active={r.id === selectedId}
                 onSelect={() => selectRoute(r.id)}
+                onStart={() => startNavigation(r)}
               />
             ))}
             {selected && (
               <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => startNavigation(selected)}
-                  className="hud-btn-primary"
-                >
-                  Navigate
-                </button>
                 <button
                   type="button"
                   onClick={() => startNavigation(selected, { simulate: true })}
@@ -348,16 +342,18 @@ function RouteCard({
   index,
   active,
   onSelect,
+  onStart,
 }: {
   route: RoutePlan;
   index: number;
   active: boolean;
   onSelect: () => void;
+  onStart: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={active ? onStart : onSelect}
       data-active={active}
       className={[
         "journey-card flex w-full flex-col gap-2 rounded-[12px] p-3 text-left",
@@ -384,6 +380,11 @@ function RouteCard({
           {route.hasFerry && <span className="ui-badge" data-tone="info">Ferry</span>}
         </div>
       </div>
+      {active && (
+        <span className="text-[11px] text-[color:var(--ink-dim)]">
+          Tap to start navigation
+        </span>
+      )}
     </button>
   );
 }

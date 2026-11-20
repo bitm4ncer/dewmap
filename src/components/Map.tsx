@@ -108,11 +108,18 @@ import {
   BUS_STOP_HIT_LAYER_ID,
   BUS_STOP_LAYER_ID,
   busBboxKey,
+  busCacheBytes,
+  busPrefetchCells,
   busStopPoiSelection,
   ensureBusLayers,
   fetchBusNetwork,
+  hasBusCacheCoverage,
   isEmptyBusNetwork,
+  orderBusPrefetchCells,
+  pruneBusCache,
   removeBusLayers,
+  snapBboxToGrid,
+  type Bbox as BusBbox,
   type BusNetwork,
 } from "@/lib/bus/busRoutes";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
@@ -225,6 +232,52 @@ const HYBRID_REFERENCE_TILE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 const HYBRID_OVERLAY_ATTRIB =
   '<a href="https://www.esri.com/" target="_blank" rel="noreferrer">Esri</a> reference overlays';
+
+// Bus prefetch: fill a moving buffer around the viewport in the
+// background. At city zoom 48 MB ≈ the current cell plus one ring, i.e.
+// roughly 25–30 km of lines; the budget, not a fixed radius, caps it.
+const BUS_PREFETCH_BUDGET_BYTES = 48 * 1024 * 1024;
+const BUS_PREFETCH_RINGS = 5;
+const BUS_PREFETCH_MAX_CELLS = 32;
+const BUS_PREFETCH_GAP_MS = 900;
+const BUS_PREFETCH_START_DELAY_MS = 1500;
+
+/** Respect Save-Data, slow connections and a hidden tab. */
+function shouldPrefetchBus(): boolean {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+    return false;
+  }
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  if (connection?.saveData) return false;
+  if (
+    connection?.effectiveType &&
+    /(^|-)2g$|(^|-)3g$/.test(connection.effectiveType)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    let timer = 0;
+    const finish = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    timer = window.setTimeout(finish, ms);
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
 
 interface ViewState {
   center: [number, number];
@@ -2100,6 +2153,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     };
   }, []);
 
+  // A new travel mode starts at the top of the panel: the length of the
+  // previous mode's list must not decide where the next one begins.
+  useEffect(() => {
+    panelBodyRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [routesMode]);
+
   // Pull the panel body against its scrolled-off top edge: the content
   // rubber-bands against a spring until the pull passes a threshold, then
   // a full panel collapses to half. At half there is only the bounce.
@@ -3418,6 +3477,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     /** Last successful payload so layers can be restored without network. */
     let lastNetwork: BusNetwork | null = null;
     let lastNetworkAt = 0;
+    /** Moving prefetch buffer around the current viewport. */
+    let prefetchController: AbortController | null = null;
+    let prefetchTimer: number | null = null;
+    let lastViewportCenter: [number, number] | null = null;
     /**
      * An empty answer is retried after this long instead of being
      * treated as the final truth for the viewport. Real rural cells
@@ -3483,6 +3546,67 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }, delay);
     };
 
+    const cancelPrefetch = () => {
+      if (prefetchTimer !== null) {
+        window.clearTimeout(prefetchTimer);
+        prefetchTimer = null;
+      }
+      prefetchController?.abort();
+      prefetchController = null;
+    };
+
+    /**
+     * Fill the ring around the current cell, one request at a time, in
+     * the direction of travel. Each successful cell is cached; the
+     * distance-based prune keeps the buffer moving instead of growing.
+     */
+    const runBusPrefetch = async (
+      cell: BusBbox,
+      direction: [number, number],
+    ) => {
+      if (cancelled || !shouldPrefetchBus()) return;
+      const controller = new AbortController();
+      prefetchController = controller;
+      const targets = orderBusPrefetchCells(
+        cell,
+        busPrefetchCells(cell, BUS_PREFETCH_RINGS),
+        direction,
+      );
+      let fetched = 0;
+      let failures = 0;
+      for (const target of targets) {
+        if (cancelled || controller.signal.aborted) return;
+        if (fetched >= BUS_PREFETCH_MAX_CELLS) break;
+        if (!shouldPrefetchBus()) break;
+        if (busCacheBytes() >= BUS_PREFETCH_BUDGET_BYTES) break;
+        if (hasBusCacheCoverage(target)) continue;
+        try {
+          await fetchBusNetwork(target, controller.signal);
+          fetched += 1;
+          failures = 0;
+          pruneBusCache(cell, BUS_PREFETCH_BUDGET_BYTES, cell);
+        } catch (error) {
+          if ((error as Error).name === "AbortError") return;
+          failures += 1;
+          if (failures >= 2) break;
+        }
+        await abortableDelay(BUS_PREFETCH_GAP_MS, controller.signal);
+      }
+      if (prefetchController === controller) prefetchController = null;
+    };
+
+    const scheduleBusPrefetch = (
+      cell: BusBbox,
+      direction: [number, number],
+    ) => {
+      cancelPrefetch();
+      if (cancelled || !shouldPrefetchBus()) return;
+      prefetchTimer = window.setTimeout(() => {
+        prefetchTimer = null;
+        void runBusPrefetch(cell, direction);
+      }, BUS_PREFETCH_START_DELAY_MS);
+    };
+
     const refresh = () => {
       if (cancelled) return;
       if (!styleReady()) {
@@ -3507,6 +3631,18 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         bounds.getNorth() + padLat,
         bounds.getEast() + padLng,
       ];
+      const center: [number, number] = [
+        (bbox[1] + bbox[3]) / 2,
+        (bbox[0] + bbox[2]) / 2,
+      ];
+      const direction: [number, number] = lastViewportCenter
+        ? [
+            center[0] - lastViewportCenter[0],
+            center[1] - lastViewportCenter[1],
+          ]
+        : [0, 0];
+      lastViewportCenter = center;
+      const cell = snapBboxToGrid(bbox);
       // A cache hit resolves without the network; uncovered ground
       // fetches the padded viewport's cell. The key stays on the raw
       // bbox, so the coverage check — not a coarse key — decides.
@@ -3529,7 +3665,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           if (empty) {
             // Do not pin the cell: a false empty from a degraded mirror
             // must be retried even if the user never moves the map.
+            cancelPrefetch();
             scheduleRetry(EMPTY_RETRY_MS);
+          } else {
+            pruneBusCache(cell, BUS_PREFETCH_BUDGET_BYTES, cell);
+            scheduleBusPrefetch(cell, direction);
           }
         })
         .catch((error) => {
@@ -3537,6 +3677,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
           // Keep the previous lines on screen and retry with backoff,
           // even if the user does not move the map again.
           console.warn("[bus-lines] fetch failed", error);
+          cancelPrefetch();
           const delay = Math.min(30_000, 3_000 * 2 ** retryCount);
           retryCount += 1;
           scheduleRetry(delay);
@@ -3569,6 +3710,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     waitForStyle();
     map.on("style.load", onStyle);
     map.on("moveend", onMoveEnd);
+    map.on("movestart", cancelPrefetch);
 
     // Safety net: a style swap, a dropped layer, a failed fetch or a
     // false-empty mirror answer must not leave the map without bus
@@ -3610,6 +3752,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       cancelled = true;
       unregisterTaps();
       controller?.abort();
+      cancelPrefetch();
       if (timer !== null) window.clearTimeout(timer);
       if (retryTimer !== null) window.clearTimeout(retryTimer);
       if (busLoadingTimer !== null) window.clearTimeout(busLoadingTimer);
@@ -3617,6 +3760,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       window.clearInterval(watchdog);
       map.off("style.load", onStyle);
       map.off("moveend", onMoveEnd);
+      map.off("movestart", cancelPrefetch);
       try {
         removeBusLayers(map);
       } catch {

@@ -1744,6 +1744,21 @@ input[type="range"].hud-slider::-moz-range-thumb {
   font-size: 13.5px;
   outline: 0;
 }
+/* The route summary is the primary action of the walk/bike planner: the whole
+   card is the button, so starting guidance is one tap, not confirm + navigate. */
+.route-summary-btn {
+  display: block;
+  width: 100%;
+  padding: 2px;
+  margin: -2px;
+  border-radius: 10px;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.route-summary-btn:hover { background: var(--surf-2); }
+.route-summary-btn:active { transform: scale(0.995); }
+
 /* An empty required field carries a border so the form shows at a glance
    what is still missing. An outline keeps the box and its layout untouched. */
 .place-picker[data-missing="true"] .ui-input {
