@@ -88,7 +88,11 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: SITE_NAME,
-    statusBarStyle: "black-translucent",
+    // Not `black-translucent`: on iOS 26 that opt-in is what leaves the
+    // home-screen app with a strip below the layout viewport (WebKit 301108).
+    // Without it the viewport reaches the physical bottom edge and the dock
+    // sits flush; the status bar gets its own band in the page surface colour.
+    statusBarStyle: "black",
   },
   formatDetection: { telephone: false },
 };
