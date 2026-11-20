@@ -120,6 +120,7 @@ body {
   --z-controls: 10;
   --z-chrome: 20;
   --z-sheet: 30;
+  --z-card: 25;
   --z-modal: 50;
   --z-toast: 60;
 }
@@ -394,6 +395,14 @@ body {
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
+
+  /* The detail card lives in the dock's shadow: above the map, below the
+     opaque peek bar, so it slides out from behind it and the tabs stay
+     readable and clickable in every state. */
+  .poi-detail {
+    bottom: var(--hud-peek-h);
+    z-index: var(--z-card);
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────

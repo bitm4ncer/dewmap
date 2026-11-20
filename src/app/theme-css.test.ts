@@ -304,4 +304,18 @@ describe("sheet chrome and compact date field", () => {
   it("caps the When date field width", () => {
     expect(block(".ui-input-date")?.body).toContain("max-width: 240px");
   });
+
+  it("keeps the detail card under the sheet dock", () => {
+    const card = declarations.filter((d) => d.selector.includes(".poi-detail"));
+    const mobileZ = card.find((d) => d.prop === "z-index" && d.value === "var(--z-card)");
+    const mobileBottom = card.find(
+      (d) => d.prop === "bottom" && d.value === "var(--hud-peek-h)",
+    );
+    expect(mobileZ).toBeDefined();
+    expect(mobileBottom).toBeDefined();
+    const sheet = css.match(/--z-sheet:\s*(\d+)/)?.[1];
+    const cardZ = css.match(/--z-card:\s*(\d+)/)?.[1];
+    expect(Number(cardZ)).toBeLessThan(Number(sheet));
+  });
 });
+
