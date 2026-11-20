@@ -122,6 +122,7 @@ import { useTransit } from "@/lib/planner/transitStore";
 import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
 import { measureSafeBottom, sheetMetrics, useSheetGesture, type SheetState } from "./shell/useSheetGesture";
+import { poiSheetReduce, type PoiSheetEvent, type PoiSheetState } from "./shell/poiSheet";
 import { OrientationControl } from "./OrientationControl";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
@@ -1699,7 +1700,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     lon: number;
     lat: number;
   } | null>(null);
-  const sheetBeforePoiRef = useRef<SheetState | null>(null);
+  const poiSheetRef = useRef<PoiSheetState>({ saved: null });
+  const [poiDismissing, setPoiDismissing] = useState(false);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
     start: RoutePoint;
@@ -2307,23 +2309,36 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     snapTo("peek");
   }, [snapTo]);
 
+  /** One bottom surface at a time: see ./shell/poiSheet. */
+  const applyPoiSheet = useCallback(
+    (event: PoiSheetEvent) => {
+      const next = poiSheetReduce(poiSheetRef.current, event);
+      poiSheetRef.current = next.state;
+      if (next.snapTo) snapTo(next.snapTo);
+      if (next.dismissCard) setPoiDismissing(true);
+    },
+    [snapTo],
+  );
+
   /** Opening a place card clears the sheet out of the way, then restores
    *  the previous sheet size when the card is closed. */
   const openPoi = useCallback(
     (selection: PoiSelection, options?: { keepCrosshair?: boolean }) => {
       if (!options?.keepCrosshair) setCrosshair(null);
-      if (
-        isMobile
-        && sheetBeforePoiRef.current == null
-        && sheetState !== "peek"
-      ) {
-        sheetBeforePoiRef.current = sheetState;
-        snapTo("peek");
-      }
+      setPoiDismissing(false);
+      applyPoiSheet({ type: "open-poi", isMobile, sheetState });
       setPoiSelection(selection);
     },
-    [isMobile, sheetState, snapTo],
+    [applyPoiSheet, isMobile, sheetState],
   );
+
+  // A panel that opens while the card is up takes the bottom edge: the card
+  // animates out and the remembered sheet size is dropped, so closing the card
+  // cannot snap the sheet back behind the user's tap.
+  useEffect(() => {
+    if (!isMobile || !poiSelection) return;
+    applyPoiSheet({ type: "sheet-state", sheetState, cardOpen: true });
+  }, [applyPoiSheet, isMobile, poiSelection, sheetState]);
 
   // Long press = inspect this point. A normal tap never sets the
   // crosshair; the card opens with the crosshair kept in place. In the
@@ -2359,11 +2374,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   );
 
   const closePoi = useCallback(() => {
+    applyPoiSheet({ type: "close-poi", isMobile });
     setPoiSelection(null);
-    const previous = sheetBeforePoiRef.current;
-    sheetBeforePoiRef.current = null;
-    if (isMobile && previous) snapTo(previous);
-  }, [isMobile, snapTo]);
+    setPoiDismissing(false);
+  }, [applyPoiSheet, isMobile]);
 
   const centerPoi = useCallback((lon: number, lat: number) => {
     const map = mapRef.current;
