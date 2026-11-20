@@ -36,6 +36,11 @@ export const THEME = {
   narrowGauge: "#9DB0A8",
   landmarkWikidata: "#C08FA3",
   landmarkOsm: "#7FB3C4",
+  // Fixed route endpoint roles: start stays red, destination stays green.
+  start: "#E4574A",
+  end: "#6FCB96",
+  // Walk/bike routes: own tone so a leftover car line is unmistakable.
+  routeHike: "#8FD3B0",
 } as const;
 
 /** Desaturated cool tones for alternative hiking routes and via points. */
@@ -46,4 +51,19 @@ export const VIA_PALETTE = [
   "#A79A8F",
   "#8FA6B5",
   "#B3A6B0",
+  "#A592C9",
 ] as const;
+
+/**
+ * Stable pseudo-random via tone: the same place always gets the same colour,
+ * neighbouring stops get different ones. Re-rolling on every redraw would make
+ * the stops flicker while panning.
+ */
+export function viaColor(lon: number, lat: number, index: number): string {
+  const key = `${lon.toFixed(5)},${lat.toFixed(5)}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (Math.imul(31, hash) + key.charCodeAt(i)) | 0;
+  }
+  return VIA_PALETTE[Math.abs(hash + index) % VIA_PALETTE.length];
+}

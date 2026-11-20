@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { THEME } from "@/lib/theme";
+import { THEME, viaColor } from "@/lib/theme";
+import { applyWhenReady, asMapLike } from "@/lib/map/applyWhenReady";
 import {
   Popup,
   type Map as MLMap,
@@ -235,13 +236,18 @@ function iPrecedingRole(
   return fallback;
 }
 
-function pointFeatures(points: { lon: number; lat: number }[]): GeoJSON.FeatureCollection {
+function pointFeatures(
+  points: { lon: number; lat: number }[],
+  colorFor?: (point: { lon: number; lat: number }, index: number, total: number) => string,
+): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
     features: points.map((p, i) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-      properties: { index: i },
+      properties: colorFor
+        ? { index: i, color: colorFor(p, i, points.length) }
+        : { index: i },
     })),
   };
 }
@@ -404,14 +410,24 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
             "text-halo-width": 2.5,
           },
         });
-        ensureSource(map, STOPS, pointFeatures(carWaypoints));
+        ensureSource(
+          map,
+          STOPS,
+          pointFeatures(carWaypoints, (w, i, total) =>
+            i === 0
+              ? THEME.start
+              : i === total - 1
+                ? THEME.end
+                : viaColor(w.lon, w.lat, i),
+          ),
+        );
         map.addLayer({
           id: STOP_DOTS,
           type: "circle",
           source: STOPS,
           paint: {
             "circle-radius": 6,
-            "circle-color": ACCENT,
+            "circle-color": ["coalesce", ["get", "color"], ACCENT],
             "circle-stroke-color": THEME.casing,
             "circle-stroke-width": 2,
           },
@@ -551,7 +567,11 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
           (p): p is NonNullable<typeof p> => p != null,
         );
         if (endpoints.length > 0) {
-          ensureSource(map, "planner-endpoints", pointFeatures(endpoints));
+          ensureSource(
+            map,
+            "planner-endpoints",
+            pointFeatures(endpoints, (_p, i) => (i === 0 ? THEME.start : THEME.end)),
+          );
           if (!map.getLayer("planner-endpoints-layer")) {
             map.addLayer({
               id: "planner-endpoints-layer",
@@ -559,7 +579,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
               source: "planner-endpoints",
               paint: {
                 "circle-radius": 7,
-                "circle-color": ACCENT,
+                "circle-color": ["coalesce", ["get", "color"], ACCENT],
                 "circle-stroke-color": THEME.casing,
                 "circle-stroke-width": 3,
               },
@@ -591,8 +611,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       }
     };
 
-    if (map.isStyleLoaded()) safeApply();
-    else map.once("load", safeApply);
+    const stopRetry = applyWhenReady(asMapLike(map), apply);
     map.on("style.load", safeApply);
 
     // Taps resolve through the central pipeline with pixel tolerance:
@@ -631,7 +650,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       unregisterStops();
       unregisterAlt();
       unregisterPrimary();
-      map.off("load", safeApply);
+      stopRetry();
       map.off("style.load", safeApply);
       map.off("mouseenter", STOP_DOTS, onEnter);
       map.off("mouseleave", STOP_DOTS, onLeave);

@@ -395,6 +395,8 @@ body {
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
+  /* Nothing to close while the panel is only its dock. */
+  .hud-bottom-sheet[data-sheet-state="peek"] .sheet-close { display: none; }
 }
 
 /* ────────────────────────────────────────────────────────────────────────

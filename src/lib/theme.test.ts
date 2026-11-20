@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { THEME, VIA_PALETTE } from "./theme";
+import { THEME, VIA_PALETTE, viaColor } from "./theme";
 
 const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const manifest = readFileSync(new URL("../app/manifest.ts", import.meta.url), "utf8");
@@ -104,9 +104,24 @@ describe("Graphite tokens", () => {
     expect(manifest).toContain('theme_color: "#121619"');
   });
 
-  it("ships six cool route tones", () => {
+  it("ships seven cool route tones", () => {
     expect(VIA_PALETTE).toEqual([
-      "#7E8F9A", "#8FA89A", "#9AA3B8", "#A79A8F", "#8FA6B5", "#B3A6B0",
+      "#7E8F9A", "#8FA89A", "#9AA3B8", "#A79A8F", "#8FA6B5", "#B3A6B0", "#A592C9",
     ]);
+  });
+
+  it("gives start and destination one fixed pair of tones", () => {
+    expect(THEME.start).toBe("#E4574A");
+    expect(THEME.end).toBe("#6FCB96");
+    expect(THEME.start).not.toBe(THEME.end);
+  });
+
+  it("picks via tones from the palette, stable per place", () => {
+    expect(VIA_PALETTE).toContain(viaColor(9.18, 48.78, 1));
+    expect(viaColor(9.18, 48.78, 1)).toBe(viaColor(9.18, 48.78, 1));
+    const sameSpot = [1, 2, 3].map((i) => viaColor(9.18, 48.78, i));
+    expect(new Set(sameSpot).size).toBeGreaterThan(1);
+    expect(viaColor(9.18, 48.78, 1)).not.toBe(THEME.start);
+    expect(viaColor(9.18, 48.78, 1)).not.toBe(THEME.end);
   });
 });

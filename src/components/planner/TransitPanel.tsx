@@ -1,5 +1,6 @@
 "use client";
 
+import { setFieldAssign, type AssignField, type FieldAssign } from "@/lib/planner/assign";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MLMap, MapMouseEvent } from "maplibre-gl";
 import { HudPanel } from "@/components/hud/HudPanel";
@@ -149,8 +150,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
   const [viaOpen, setViaOpen] = useState(false);
   const [mapPick, setMapPick] = useState<"from" | "to" | null>(null);
-  /** Home/work assign-mode, also consumed by map-picked places. */
-  const [pickAssign, setPickAssign] = useState<"home" | "work" | null>(null);
+  /** Home/work assign-mode per input, also consumed by map-picked places. */
+  const [pickAssign, setPickAssign] = useState<FieldAssign>({ from: null, to: null });
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(0);
   const [swapTick, setSwapTick] = useState(0);
@@ -479,12 +480,14 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
         lon: event.lngLat.lng,
         kind: "address",
       };
-      // Assign-mode (home/work) takes the pick instead of the field.
-      if (pickAssign) {
-        if (pickAssign === "home") setHome(place);
+      // Assign-mode (home/work) takes the pick instead of the field. Only the
+      // field that armed it, so the other input keeps its own state.
+      const armed = mapPick ? pickAssign[mapPick] : null;
+      if (armed) {
+        if (armed === "home") setHome(place);
         else setWork(place);
         haptic("snap");
-        setPickAssign(null);
+        setPickAssign((state) => setFieldAssign(state, mapPick as AssignField, null));
         setMapPick(null);
         return;
       }
@@ -613,8 +616,10 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                 onAssignWork={setWork}
                 onToggleSaved={toggleSaved}
                 isSavedPlace={isSaved}
-                assigning={pickAssign}
-                onAssigningChange={setPickAssign}
+                assigning={pickAssign.from}
+                onAssigningChange={(v) =>
+                  setPickAssign((state) => setFieldAssign(state, "from", v))
+                }
                 onPickOnMap={() => setMapPick("from")}
                 onPick={(p) => pick("from", p)}
                 onClear={() => setFrom(null)}
@@ -643,8 +648,10 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                 onAssignWork={setWork}
                 onToggleSaved={toggleSaved}
                 isSavedPlace={isSaved}
-                assigning={pickAssign}
-                onAssigningChange={setPickAssign}
+                assigning={pickAssign.to}
+                onAssigningChange={(v) =>
+                  setPickAssign((state) => setFieldAssign(state, "to", v))
+                }
                 onPickOnMap={() => setMapPick("to")}
                 onPick={(p) => pick("to", p)}
                 onClear={() => setTo(null)}
@@ -672,8 +679,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           {mapPick && (
             <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--accent-soft)] px-2 py-2 text-[11.5px]">
               <span>
-                {pickAssign
-                  ? `Click the map to save as ${pickAssign}.`
+                {pickAssign[mapPick]
+                  ? `Click the map to save as ${pickAssign[mapPick]}.`
                   : `Click the map to set ${mapPick === "from" ? "A" : "B"}.`}
               </span>
               <button

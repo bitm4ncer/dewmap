@@ -283,6 +283,8 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
                     total={waypoints.length}
                     label={w.label}
                     source={w.source}
+                    lon={w.lon}
+                    lat={w.lat}
                     onUp={() => moveWaypoint(w.id, -1)}
                     onDown={() => moveWaypoint(w.id, 1)}
                     onDelete={() => removeWaypoint(w.id)}
@@ -678,6 +680,8 @@ function WaypointRow({
   total,
   label,
   source,
+  lon,
+  lat,
   onUp,
   onDown,
   onDelete,
@@ -686,6 +690,8 @@ function WaypointRow({
   total: number;
   label: string;
   source: string;
+  lon: number;
+  lat: number;
   onUp: () => void;
   onDown: () => void;
   onDelete: () => void;
@@ -696,7 +702,7 @@ function WaypointRow({
       ? COLOR_START
       : role === "end"
         ? COLOR_END
-        : viaColor(index);
+        : viaColor(lon, lat, index);
   return (
     <div className="flex items-center gap-2 rounded-full bg-[color:var(--surf-3)] px-2 py-1">
       <span

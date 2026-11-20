@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import { useHiking } from "@/lib/hiking/store";
-import { THEME, VIA_PALETTE } from "@/lib/theme";
+import { THEME, VIA_PALETTE, viaColor } from "@/lib/theme";
+import { applyWhenReady, asMapLike } from "@/lib/map/applyWhenReady";
 import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import type { RouteCandidate, Waypoint } from "@/lib/hiking/types";
 import { formatRouteLabel } from "@/lib/routing";
@@ -21,17 +22,15 @@ const ROUTE_LAYER_LABELS = "hiking-routes-labels";
 const ROUTE_LABEL_SOURCE = "hiking-route-labels";
 const ROUTE_LAYER_ALT_HIT = "hiking-routes-alt-hit";
 
-export const COLOR_START = THEME.accent;
-export const COLOR_END = THEME.warn;
+export const COLOR_START = THEME.start;
+export const COLOR_END = THEME.end;
 
-/** Six cool tones shared by alternative routes and via waypoints. */
-export function viaColor(index: number): string {
+/** Cool tones shared by alternative routes; via stops hash their own place. */
+export function colorForCandidate(index: number): string {
   return VIA_PALETTE[index % VIA_PALETTE.length];
 }
 
-export function colorForCandidate(index: number): string {
-  return viaColor(index);
-}
+export { viaColor };
 
 const HIKING_Z_ORDER: string[] = [
   ROUTE_LAYER_ALT_CASING,
@@ -91,7 +90,7 @@ function waypointFeatures(waypoints: Waypoint[]): GeoJSON.FeatureCollection {
           ? COLOR_START
           : role === "end"
             ? COLOR_END
-            : viaColor(i);
+            : viaColor(w.lon, w.lat, i);
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [w.lon, w.lat] },
@@ -248,8 +247,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
         });
       }
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    const stopRetry = applyWhenReady(asMapLike(map), apply);
     map.on("style.load", apply);
 
     // Tap a waypoint to remove it. The pipeline resolves the tap with
@@ -278,6 +276,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
       unregisterTaps();
       map.off("mouseenter", WAYPOINT_DOT_LAYER, onEnter);
       map.off("mouseleave", WAYPOINT_DOT_LAYER, onLeave);
+      stopRetry();
       map.off("style.load", apply);
     };
   }, [map, enabled, waypoints, removeWaypoint]);
@@ -358,7 +357,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
           filter: ["==", ["get", "selected"], true],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": THEME.danger,
+            "line-color": THEME.routeHike,
             "line-width": 4,
             "line-opacity": 0.95,
           },
@@ -398,8 +397,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
         });
       }
     };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    const stopRetry = applyWhenReady(asMapLike(map), apply);
     map.on("style.load", apply);
 
     const onEnter = () => {
@@ -436,6 +434,7 @@ export function useHikingLayers(map: MLMap | null, visible = true) {
       };
     }
     return () => {
+      stopRetry();
       map.off("style.load", apply);
     };
   }, [map, enabled, candidates, selectedCandidateId, finalized, selectCandidate]);

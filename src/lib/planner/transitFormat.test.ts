@@ -132,15 +132,15 @@ describe("labels and colours", () => {
     expect(legDirection(leg({ headsign: "Berlin Hbf" }))).toContain("Berlin Hbf");
   });
 
-  it("prefers provider colours and picks readable text", () => {
+  it("prefers provider colours for unclassified modes and picks readable text", () => {
     expect(
-      lineColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "ff0000" })),
+      lineColor(leg({ line: "X9", agency: "Unknown", rawMode: "RAIL", routeColor: "ff0000" })),
     ).toBe("#ff0000");
     expect(
-      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#ffffff" })),
+      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "RAIL", routeColor: "#ffffff" })),
     ).toBe("#10120b");
     expect(
-      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "BUS", routeColor: "#000000" })),
+      lineTextColor(leg({ line: "X9", agency: "Unknown", rawMode: "RAIL", routeColor: "#000000" })),
     ).toBe("#ffffff");
   });
 
@@ -179,11 +179,15 @@ describe("labels and colours", () => {
     expect(lineColor(leg({ line: "RE 10a", agency: "DB Regio" }))).toBe("#C7362F");
     expect(lineColor(leg({ line: "26", rawMode: "TRAM", agency: "RNV" }))).toBe("#E8C547");
     expect(lineColor(leg({ line: "FlixTrain 20", agency: "FlixTrain" }))).toBe("#A6F53C");
+    expect(
+      lineColor(leg({ line: "SB 66", rawMode: "BUS", agency: "SSB", routeColor: "#00A0E3" })),
+    ).toBe("#C3A9F0");
     expect(lineColor(leg({ line: "FlixBus 091", agency: "FlixBus" }))).toBe("#A6F53C");
     expect(lineTextColor(leg({ line: "S3" }))).toBe("#ffffff");
     expect(lineTextColor(leg({ line: "ICE 576" }))).toBe("#10120b");
     expect(lineTextColor(leg({ line: "RE 10a" }))).toBe("#ffffff");
     expect(lineTextColor(leg({ line: "26", rawMode: "TRAM" }))).toBe("#10120b");
+    expect(lineTextColor(leg({ line: "SB 66", rawMode: "BUS" }))).toBe("#10120b");
   });
 
   it("renders each stop in its own zone", () => {

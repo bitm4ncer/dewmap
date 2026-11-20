@@ -11,9 +11,12 @@ const car = readFileSync(
 );
 
 describe("car, walk and bike route layers", () => {
-  it("draws the primary route red and alternatives dashed in accent", () => {
+  it("gives each mode its own primary route colour", () => {
+    // A red car line under a green bike line is what made a stale car route
+    // look like the new one.
+    expect(car).toContain("THEME.danger");
+    expect(hiking).toContain("THEME.routeHike");
     for (const src of [hiking, car]) {
-      expect(src).toContain("THEME.danger");
       expect(src).toContain('"line-dasharray": [2, 1.5]');
     }
   });

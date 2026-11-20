@@ -318,6 +318,7 @@ const LINE_KIND_COLORS = {
   ice: "#F2F5F7",
   regio: "#C7362F",
   tram: "#E8C547",
+  bus: "#C3A9F0",
   flix: "#A6F53C",
 } as const;
 
@@ -333,6 +334,7 @@ export function transitLineKind(leg: TransitLeg): TransitLineKind {
     .toLowerCase();
   if (text.includes("flix")) return "flix";
   if (transitModeKey(leg) === "TRAM") return "tram";
+  if (transitModeKey(leg) === "BUS") return "bus";
   if (
     /\bs\d{1,3}\b/.test(line)
     || text.includes("s-bahn")
