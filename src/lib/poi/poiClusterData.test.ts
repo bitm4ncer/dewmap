@@ -108,3 +108,27 @@ describe("district aggregation", () => {
     expect(out.features[0].properties?.point_count).toBe(20);
   });
 });
+
+describe("district marker stability", () => {
+  const point = (lon: number, lat: number): GeoJSON.Feature<GeoJSON.Point> => ({
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [lon, lat] },
+    properties: {},
+  });
+
+  it("anchors a district on the cell centre, so positions do not drift", () => {
+    const base: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+      type: "FeatureCollection",
+      features: [point(6.7801, 51.2301), point(6.7802, 51.2302)],
+    };
+    const more: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+      type: "FeatureCollection",
+      features: [...base.features, point(6.7803, 51.2303), point(6.7804, 51.2304)],
+    };
+    const cell = 0.025;
+    const first = aggregatePoiDistricts(base, cell).features[0];
+    const later = aggregatePoiDistricts(more, cell).features[0];
+    expect(first.geometry.coordinates).toEqual(later.geometry.coordinates);
+    expect(later.properties?.point_count).toBe(4);
+  });
+});

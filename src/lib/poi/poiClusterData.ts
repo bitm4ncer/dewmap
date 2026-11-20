@@ -191,12 +191,6 @@ export async function fetchPoiClusterPoints(
   options?: {
     /** Tile fan-out cap for this call (see clusterTileBudget). */
     budget?: number;
-    /** Called with the features collected so far while tiles stream in. */
-    onPartial?: (
-      data: GeoJSON.FeatureCollection<GeoJSON.Point>,
-      done: number,
-      total: number,
-    ) => void;
   },
 ): Promise<GeoJSON.FeatureCollection<GeoJSON.Point>> {
   const budget = options?.budget ?? MAX_CLUSTER_TILES;
@@ -239,8 +233,6 @@ export async function fetchPoiClusterPoints(
   const seen = new Set<string>();
   const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
   const BATCH = 8;
-  const PARTIAL_EVERY = 5;
-  let done = 0;
   for (let i = 0; i < coords.length; i += BATCH) {
     const batch = coords.slice(i, i + BATCH);
     const loaded = await Promise.all(
@@ -267,14 +259,6 @@ export async function fetchPoiClusterPoints(
           },
         });
       }
-    }
-    done += batch.length;
-    if (options?.onPartial && (i / BATCH) % PARTIAL_EVERY === PARTIAL_EVERY - 1) {
-      options.onPartial(
-        { type: "FeatureCollection", features: [...features] },
-        done,
-        coords.length,
-      );
     }
     // Hand the main thread back between batches so panning stays fluid.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -336,11 +320,15 @@ export function aggregatePoiDistricts(
       out.push(cell.first);
       continue;
     }
+    // Anchor the marker on the cell centre, not on the running mean:
+    // streaming tiles then only change the count, never the position.
+    const gx = Math.floor(cell.sumLon / cell.count / cellDeg);
+    const gy = Math.floor(cell.sumLat / cell.count / cellDeg);
     out.push({
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [cell.sumLon / cell.count, cell.sumLat / cell.count],
+        coordinates: [(gx + 0.5) * cellDeg, (gy + 0.5) * cellDeg],
       },
       properties: {
         point_count: cell.count,
@@ -349,4 +337,87 @@ export function aggregatePoiDistricts(
     });
   }
   return { type: "FeatureCollection", features: out };
+}
+
+// ── Warm start ────────────────────────────────────────────────────────
+// The whole-city view needs hundreds of tiles; on a fresh app start the
+// map would be empty for seconds. Persist the last aggregated district
+// markers per view so the same picture appears instantly, then refresh.
+const VIEW_KEY = "kugelmaps.poi-view.v1";
+const VIEW_TTL_MS = 12 * 60 * 60_000;
+const VIEW_MAX_ENTRIES = 3;
+const VIEW_MAX_BYTES = 500_000;
+
+interface PersistedView {
+  at: number;
+  bbox: [number, number, number, number];
+  cellDeg: number;
+  features: GeoJSON.Feature<GeoJSON.Point>[];
+}
+
+function containsBbox(
+  outer: [number, number, number, number],
+  inner: [number, number, number, number],
+): boolean {
+  return (
+    inner[0] >= outer[0] &&
+    inner[1] >= outer[1] &&
+    inner[2] <= outer[2] &&
+    inner[3] <= outer[3]
+  );
+}
+
+function readViews(): PersistedView[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(VIEW_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { v?: number; views?: PersistedView[] };
+    if (parsed?.v !== 1 || !Array.isArray(parsed.views)) return [];
+    return parsed.views;
+  } catch {
+    return [];
+  }
+}
+
+export function persistPoiView(
+  bbox: [number, number, number, number],
+  cellDeg: number,
+  data: GeoJSON.FeatureCollection<GeoJSON.Point>,
+): void {
+  if (typeof window === "undefined" || data.features.length === 0) return;
+  try {
+    const views = readViews().filter(
+      (view) => Math.abs(view.cellDeg - cellDeg) > 1e-9,
+    );
+    views.unshift({ at: Date.now(), bbox, cellDeg, features: data.features });
+    let payload = JSON.stringify({
+      v: 1,
+      views: views.slice(0, VIEW_MAX_ENTRIES),
+    });
+    while (payload.length > VIEW_MAX_BYTES && views.length > 1) {
+      views.pop();
+      payload = JSON.stringify({ v: 1, views: views.slice(0, VIEW_MAX_ENTRIES) });
+    }
+    if (payload.length > VIEW_MAX_BYTES) return;
+    window.localStorage.setItem(VIEW_KEY, payload);
+  } catch {
+    // Quota or privacy mode: skip the warm start.
+  }
+}
+
+export function loadPoiView(
+  bbox: [number, number, number, number],
+  cellDeg: number,
+): GeoJSON.FeatureCollection<GeoJSON.Point> | null {
+  const now = Date.now();
+  let best: PersistedView | null = null;
+  for (const view of readViews()) {
+    if (now - view.at > VIEW_TTL_MS) continue;
+    if (Math.abs(view.cellDeg - cellDeg) > 1e-9) continue;
+    if (!containsBbox(view.bbox, bbox)) continue;
+    if (!best || view.at > best.at) best = view;
+  }
+  if (!best) return null;
+  return { type: "FeatureCollection", features: best.features };
 }

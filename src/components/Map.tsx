@@ -77,6 +77,8 @@ import {
   clusterTileBudget,
   districtCellDeg,
   fetchPoiClusterPoints,
+  loadPoiView,
+  persistPoiView,
 } from "@/lib/poi/poiClusterData";
 import { useHiking } from "@/lib/hiking/store";
 import { useLongPress } from "./hiking/useLongPress";
@@ -3287,6 +3289,13 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         Math.min(85, bounds.getNorth() + padLat),
         bounds.getEast() + padLng,
       ];
+      const cellDeg = districtCellDeg(zoom);
+      // Warm start: show the last identical view immediately. Positions
+      // and counts only change once, when the fresh tiles are complete.
+      if (poiKindsRef.current.length === 0) {
+        const cached = loadPoiView(bbox, cellDeg);
+        if (cached) source.setData?.(cached);
+      }
       clusterController?.abort();
       const ctrl = new AbortController();
       clusterController = ctrl;
@@ -3295,20 +3304,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       )?.tiles?.[0];
       fetchPoiClusterPoints(bbox, poiKindsRef.current, ctrl.signal, template, {
         budget: clusterTileBudget(zoom),
-        // Fill the overview while tiles stream in instead of waiting
-        // for the last one (a z10 viewport needs hundreds of tiles).
-        onPartial: (data) => {
-          if (cancelled || ctrl.signal.aborted) return;
-          source.setData?.(
-            aggregatePoiDistricts(data, districtCellDeg(zoom)),
-          );
-        },
       })
         .then((data) => {
           if (cancelled || ctrl.signal.aborted) return;
-          source.setData?.(
-            aggregatePoiDistricts(data, districtCellDeg(zoom)),
-          );
+          const aggregated = aggregatePoiDistricts(data, cellDeg);
+          source.setData?.(aggregated);
+          if (poiKindsRef.current.length === 0) {
+            persistPoiView(bbox, cellDeg, aggregated);
+          }
         })
         .catch((error) => {
           if ((error as Error).name === "AbortError") return;
@@ -3428,9 +3431,9 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         POI_CLUSTER_COUNT_LAYER_ID,
         POI_CLUSTER_POINT_LAYER_ID,
       ],
-      // Cluster circles can be 29 px wide; the pipeline measures to the
-      // centroid, so keep the grab radius above the largest radius.
-      tolerancePx: 28,
+      // Cluster circles max out at 15 px; keep the grab radius just
+      // above that (the pipeline measures to the centroid).
+      tolerancePx: 18,
       onFeature: onClusterTap,
     });
 

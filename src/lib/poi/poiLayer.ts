@@ -14,7 +14,7 @@ export const POI_SOURCE_ID = "poi-vector-src";
 export const POI_ICON_LAYER_ID = "poi-icons";
 export const POI_LABEL_LAYER_ID = "poi-labels";
 export const POI_HIT_LAYER_ID = "poi-hit";
-export const POI_MIN_ZOOM = 13;
+export const POI_MIN_ZOOM = 14;
 /** Dots carry every place between clusters and icons (no collision). */
 export const POI_DOT_LAYER_ID = "poi-mini-dots";
 export const POI_ICON_MIN_ZOOM = 16.5;
@@ -586,11 +586,11 @@ export function ensurePoiClusterLayers(map: MLMap) {
         "circle-radius": [
           "step",
           ["get", "point_count"],
-          14,
-          10, 17,
-          50, 21,
-          200, 25,
-          600, 29,
+          7,
+          10, 9,
+          50, 11,
+          200, 13,
+          600, 15,
         ],
         "circle-color": THEME.accent,
         "circle-opacity": 0.9,
@@ -609,7 +609,7 @@ export function ensurePoiClusterLayers(map: MLMap) {
       filter: ["has", "point_count"],
       layout: {
         "text-field": ["get", "point_count"],
-        "text-size": 12,
+        "text-size": 9,
         "text-font": clusterCountFont(map),
         // Centre the digits in the circle; the font box carries
         // descender space, which otherwise pushes them slightly high.
