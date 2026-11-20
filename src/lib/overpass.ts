@@ -1,12 +1,21 @@
 /**
- * Public Overpass mirrors. All three serve the planet; `overpass.osm.ch`
- * was removed because it only covers Switzerland and answers German
- * bboxes with a false-empty 200.
+ * Public Overpass mirrors, in try order.
+ *
+ * The regional dresel.systems extracts come first because the main
+ * overpass-api.de instance is frequently unreachable from mobile and
+ * home networks (406/502) and the public planet mirrors are often
+ * overloaded. Both regional endpoints answer empty outside their
+ * coverage, and `rejectEmpty` rotates to the planet mirrors for the
+ * rest of the world.
+ *
+ * `overpass.kumi.systems` was removed: it is the old name of
+ * private.coffee and hung instead of redirecting.
  */
 const ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
+  "https://ovp.dresel.systems/api/interpreter", // Europe extract
+  "https://ovp.dresel.systems/api-na/interpreter", // North America extract
+  "https://overpass-api.de/api/interpreter", // planet
+  "https://overpass.private.coffee/api/interpreter", // planet
 ];
 
 export interface OverpassNode {

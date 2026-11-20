@@ -327,7 +327,7 @@ export async function fetchBusNetwork(
   // returned every member of every intersecting relation with full
   // geometry — 45 MB for a small Zurich bbox, 73 MB for Düsseldorf.
   const query = `
-    [out:json][timeout:20];
+    [out:json][timeout:25];
     relation[route=bus](${s},${w},${n},${e})->.busRoutes;
     way(r.busRoutes)(${s},${w},${n},${e});
     out geom(${s},${w},${n},${e});
@@ -335,10 +335,10 @@ export async function fetchBusNetwork(
     node[public_transport=stop_position][bus=yes](${s},${w},${n},${e});
     out;
   `;
-  // Client timeout stays above the server's 20 s so a slow-but-valid
-  // answer is not discarded mid-flight.
+  // Client timeout stays above the server's 25 s so a slow-but-valid
+  // answer (a city cell is several MB) is not discarded mid-flight.
   const data = await overpassQuery(query, signal, {
-    timeoutMs: 25_000,
+    timeoutMs: 30_000,
     rejectEmpty: true,
   });
   const network = parseBusNetwork(data.elements);

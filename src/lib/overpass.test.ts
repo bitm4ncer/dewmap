@@ -15,6 +15,17 @@ afterEach(() => {
 });
 
 describe("overpassQuery", () => {
+  it("tries the regional Europe mirror first", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(oneNode));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await overpassQuery("node(1);");
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      "ovp.dresel.systems/api/interpreter",
+    );
+  });
+
   it("rotates to the next endpoint on a non-OK response", async () => {
     const fetchMock = vi
       .fn()
