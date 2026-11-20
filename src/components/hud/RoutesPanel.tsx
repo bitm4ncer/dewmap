@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import { BikeIcon, CarIcon, TransitIcon, WalkIcon } from "@/components/ui/icons";
 import { HikingPanel } from "./HikingPanel";
@@ -89,6 +89,17 @@ export function RoutesPanel({
     }
     useHiking.getState().setWaypoints(toWaypoints(input));
   };
+
+  // A pin from the place card lands in the mode that is already open, so
+  // tapping Route fills the destination without a second tap on a mode.
+  useEffect(() => {
+    if (!pendingPin || !pinStart) return;
+    writeInput(mode, inputWithPin(pinStart, pendingPin));
+    onPinConsumed?.();
+    onRouteStarted?.();
+    if (mode === "transit") useTransit.getState().requestSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- consume once per pin
+  }, [pendingPin]);
 
   const choose = (next: RoutesMode) => {
     if (pendingPin && pinStart) {

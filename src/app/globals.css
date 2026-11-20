@@ -652,6 +652,35 @@ body {
   }
 }
 
+/* Location notice — sits above the dock so it never hides the tabs. */
+.geo-notice {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--hud-peek-h) + 12px);
+  z-index: 46;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-pill);
+  background: var(--surf-2);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.geo-notice span { flex: 1; }
+
+@media (min-width: 768px) {
+  .geo-notice {
+    left: auto;
+    right: 16px;
+    bottom: 16px;
+    width: 340px;
+  }
+}
+
 /* ────────────────────────────────────────────────────────────────────────
    Sliders — slim track, fill matches accent
    ──────────────────────────────────────────────────────────────────── */
@@ -2622,6 +2651,9 @@ input[type="range"].hud-slider::-moz-range-thumb {
     z-index: var(--z-card);
     /* Rise from behind the dock bar instead of the 14px desktop nudge. */
     animation-name: poi-card-rise;
+    /* The card is the panel's top edge while it is up; a radius would show
+       the map through the notches. */
+    border-radius: 0;
   }
   /* The card sits on the dock, so 78dvh would push its top over the search
      bar on a notched phone. Cap it to the strip that is actually free. */

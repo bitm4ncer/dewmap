@@ -1708,6 +1708,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   } | null>(null);
   const poiSheetRef = useRef<PoiSheetState>({ saved: null });
   const [poiDismissing, setPoiDismissing] = useState(false);
+  const [geoNotice, setGeoNotice] = useState<string | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
     start: RoutePoint;
@@ -2399,6 +2400,44 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     if (sheetState === "full") snapTo("half");
   }, [sheetState, snapTo]);
 
+  /** Ask for the current position, including the browser's own prompt. */
+  const requestStartPoint = useCallback(async (): Promise<RoutePoint | null> => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setGeoNotice("This device cannot report its location. The route starts at the map centre.");
+      return null;
+    }
+    try {
+      const perm = await navigator.permissions?.query?.({
+        name: "geolocation" as PermissionName,
+      });
+      if (perm?.state === "denied") {
+        setGeoNotice(
+          "Location is blocked for this site. Allow it in the browser settings and tap Route again.",
+        );
+        return null;
+      }
+    } catch {
+      /* Permissions API missing (older iOS): fall through to the prompt. */
+    }
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({
+            name: "My location",
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+          }),
+        () => {
+          setGeoNotice(
+            "Location is off. Allow it and tap Route again to start from where you are.",
+          );
+          resolve(null);
+        },
+        { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
+      );
+    });
+  }, []);
+
   /** A POI detail becomes the destination in the expanded route planner. */
   const planPoiRoute = useCallback(
     (poi: PoiSelection) => {
@@ -2407,45 +2446,43 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       applyPoiSheet({ type: "dismiss" });
       setPoiDismissing(false);
       setPoiSelection(null);
+      setGeoNotice(null);
+
       const center = mapRef.current?.getCenter();
-      const start: RoutePoint = livePos
-        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
-        : center
-          ? { name: "Map center", lat: center.lat, lon: center.lng }
-          : { name: "Map center", lat: poi.lat, lon: poi.lon };
-      setPendingPin({
-        dest: {
-          name: poi.name || "Place",
-          lat: poi.lat,
-          lon: poi.lon,
-          city: poi.city,
-          kind: "address",
-        },
-        start,
-      });
-      if (!livePos && typeof navigator !== "undefined" && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            setPendingPin((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    start: {
-                      name: "My location",
-                      lat: pos.coords.latitude,
-                      lon: pos.coords.longitude,
-                    },
-                  }
-                : prev,
-            ),
-          () => {},
-          { enableHighAccuracy: true, maximumAge: 10_000, timeout: 8_000 },
-        );
-      }
+      const centerStart: RoutePoint = center
+        ? { name: "Map center", lat: center.lat, lon: center.lng }
+        : { name: "Map center", lat: poi.lat, lon: poi.lon };
+      const dest: RoutePoint = {
+        name: poi.name || "Place",
+        lat: poi.lat,
+        lon: poi.lon,
+        city: poi.city,
+        kind: "address",
+      };
+
+      // Open the planner right away; the pin follows as soon as the start is
+      // known, so a permission prompt never holds the sheet shut.
       if (activePane !== "hiking") setActivePane("hiking");
       snapTo("half");
+
+      const known: RoutePoint | null = livePos
+        ? { name: "My location", lat: livePos[1], lon: livePos[0] }
+        : null;
+      if (known) {
+        setPendingPin({ dest, start: known });
+        return;
+      }
+      void (async () => {
+        // Give the GPS a moment; the browser prompt counts as an answer even
+        // when it takes a beat, but the sheet must not wait for a timeout.
+        const asked = await Promise.race([
+          requestStartPoint(),
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2500)),
+        ]);
+        setPendingPin({ dest, start: asked ?? centerStart });
+      })();
     },
-    [activePane, applyPoiSheet, livePos, snapTo],
+    [activePane, applyPoiSheet, livePos, requestStartPoint, snapTo],
   );
 
   /** A search result opens its place card, with Plan Route as the action. */
@@ -5232,6 +5269,33 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         onCenter={centerPoi}
         onPlanRoute={planPoiRoute}
       />
+
+      {geoNotice && (
+        <div className="geo-notice" role="status">
+          <span>{geoNotice}</span>
+          <button
+            type="button"
+            className="ui-badge"
+            onClick={() => {
+              setGeoNotice(null);
+              void requestStartPoint().then((position) => {
+                if (!position) return;
+                setPendingPin((prev) => (prev ? { ...prev, start: position } : prev));
+              });
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            className="hud-icon-btn"
+            aria-label="Dismiss location notice"
+            onClick={() => setGeoNotice(null)}
+          >
+            <CloseIcon size={15} />
+          </button>
+        </div>
+      )}
 
       <NavigationOverlay
         progress={navigation.progress}
