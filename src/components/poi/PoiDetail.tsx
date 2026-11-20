@@ -37,6 +37,8 @@ interface Props {
   onPlanRoute?: (selection: PoiSelection) => void;
   /** Set by the shell when the bottom sheet takes the edge from the card. */
   dismissed?: boolean;
+  /** The place with its fetched name and address, so the shell can route to it. */
+  onResolved?: (selection: PoiSelection) => void;
 }
 
 interface ContentProps extends Omit<Props, "selection"> {
@@ -84,6 +86,7 @@ function PoiDetailContent({
   onCenter,
   onPlanRoute,
   dismissed,
+  onResolved,
 }: ContentProps) {
   const [details, setDetails] = useState<PoiDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -240,6 +243,17 @@ function PoiDetailContent({
     city: details?.city ?? selection.city,
     label: details?.address ?? selection.label,
   };
+
+  // Keep the shell's copy in step with what the card actually shows: the
+  // selection it opened with often has no name until the details arrive.
+  const resolvedRef = useRef(onResolved);
+  useEffect(() => {
+    resolvedRef.current = onResolved;
+  });
+  useEffect(() => {
+    resolvedRef.current?.(routeSelection);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- primitives only
+  }, [routeSelection.name, routeSelection.city, routeSelection.label]);
 
   const onImageError = (url: string) => {
     if (current && current.url !== url) return;

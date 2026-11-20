@@ -124,6 +124,7 @@ import { HudPanel } from "./hud/HudPanel";
 import { PaneToggle } from "./PaneToggle";
 import { measureSafeBottom, sheetMetrics, useSheetGesture, type SheetState } from "./shell/useSheetGesture";
 import { poiSheetReduce, type PoiSheetEvent, type PoiSheetState } from "./shell/poiSheet";
+import { expandIntent } from "@/lib/planner/panelIntent";
 import { OrientationControl } from "./OrientationControl";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
@@ -1709,6 +1710,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   } | null>(null);
   const poiSheetRef = useRef<PoiSheetState>({ saved: null });
   const [poiDismissing, setPoiDismissing] = useState(false);
+  const [poiResolved, setPoiResolved] = useState<PoiSelection | null>(null);
   const [geoNotice, setGeoNotice] = useState<string | null>(null);
   const [pendingPin, setPendingPin] = useState<{
     dest: RoutePoint;
@@ -2336,6 +2338,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     (selection: PoiSelection, options?: { keepCrosshair?: boolean }) => {
       if (!options?.keepCrosshair) setCrosshair(null);
       setPoiDismissing(false);
+      setPoiResolved(null);
       applyPoiSheet({ type: "open-poi", isMobile, sheetState });
       setPoiSelection(selection);
     },
@@ -2349,13 +2352,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     openPoiRef.current = openPoi;
   }, [openPoi]);
 
-  // A panel that opens while the card is up takes the bottom edge: the card
-  // animates out and the remembered sheet size is dropped, so closing the card
-  // cannot snap the sheet back behind the user's tap.
-  useEffect(() => {
-    if (!isMobile || !poiSelection) return;
-    applyPoiSheet({ type: "sheet-state", sheetState, cardOpen: true });
-  }, [applyPoiSheet, isMobile, poiSelection, sheetState]);
+
 
   // Long press = inspect this point. A normal tap never sets the
   // crosshair; the card opens with the crosshair kept in place. In the
@@ -2494,6 +2491,23 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     },
     [activePane, applyPoiSheet, livePos, requestStartPoint, snapTo],
   );
+
+  // A panel that opens while the card is up takes the bottom edge. When that
+  // panel is the route planner, the place the card showed becomes its
+  // destination, so opening Routes never loses the address the user was
+  // looking at. Any other pane just dismisses the card.
+  useEffect(() => {
+    if (!isMobile || !poiSelection) return;
+    const intent = expandIntent(activePane, sheetState, true);
+    if (intent === "adopt") {
+      // Adopting the card into the planner is the whole point of this effect.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      planPoiRoute(poiResolved ?? poiSelection);
+      return;
+    }
+    if (intent === "none") return;
+    applyPoiSheet({ type: "sheet-state", sheetState, cardOpen: true });
+  }, [activePane, applyPoiSheet, isMobile, planPoiRoute, poiResolved, poiSelection, sheetState]);
 
   /** A search result opens its place card, with Plan Route as the action. */
   const handleSearchSelect = useCallback(
@@ -5341,6 +5355,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       <PoiDetail
         selection={poiSelection}
         dismissed={poiDismissing}
+        onResolved={setPoiResolved}
         onClose={closePoi}
         onCenter={centerPoi}
         onPlanRoute={planPoiRoute}
