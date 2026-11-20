@@ -67,10 +67,14 @@ import {
   registerFeatureTaps,
 } from "@/lib/map/featureTaps";
 import {
+  BUS_LAYER_ID,
   BUS_MIN_ZOOM,
+  BUS_STOP_HIT_LAYER_ID,
+  BUS_STOP_LAYER_ID,
   ensureBusLayers,
-  fetchBusRoutes,
+  fetchBusNetwork,
   removeBusLayers,
+  type BusNetwork,
 } from "@/lib/bus/busRoutes";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
@@ -2981,9 +2985,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   }, [railwayOn, active]);
 
   // ── Bus lines overlay ─────────────────────────────────────────────
-  // Dedicated bus routes (OSM route=bus relations via Overpass) shown
-  // as dashed amber lines next to the rail network. Viewport-bound with
-  // a debounced refetch and a per-bbox TTL cache inside the module.
+  // Dedicated bus routes + stops (OSM route=bus relations and
+  // highway=bus_stop nodes via Overpass) as dashed amber lines next to
+  // the rail network. The effect is defensive: successful responses are
+  // kept locally, layers are re-asserted whenever they went missing
+  // (style swaps, zoom dance) and failed fetches are retried on the
+  // next moveend instead of poisoning the bbox key.
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
@@ -2998,17 +3005,51 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
 
     let cancelled = false;
     let timer: number | null = null;
+    let retryTimer: number | null = null;
     let controller: AbortController | null = null;
-    let requestedKey = "";
+    /** Bbox whose data is currently rendered. Reset on style swaps. */
+    let loadedKey = "";
+    /** Bbox with a request in flight — never set until data arrives. */
+    let inFlightKey: string | null = null;
+    /** Last successful payload so layers can be restored without network. */
+    let lastNetwork: BusNetwork | null = null;
+
+    const applyNetwork = (network: BusNetwork) => {
+      try {
+        ensureBusLayers(map, network);
+      } catch (error) {
+        console.warn("[bus-lines] layers could not be added", error);
+      }
+    };
+
+    /** Re-add layers from the last payload if they disappeared. */
+    const reassertLayers = () => {
+      if (cancelled || !lastNetwork) return;
+      if (!map.isStyleLoaded()) return;
+      if (map.getZoom() < BUS_MIN_ZOOM) return;
+      if (map.getLayer(BUS_LAYER_ID)) return;
+      applyNetwork(lastNetwork);
+    };
 
     const refresh = () => {
       if (cancelled) return;
+      if (!map.isStyleLoaded()) {
+        // Style still settling — retry shortly instead of dropping data.
+        if (retryTimer === null) {
+          retryTimer = window.setTimeout(() => {
+            retryTimer = null;
+            refresh();
+          }, 400);
+        }
+        return;
+      }
       if (map.getZoom() < BUS_MIN_ZOOM) {
         try {
           removeBusLayers(map);
         } catch {
           /* style swapping */
         }
+        loadedKey = "";
         return;
       }
       const bounds = map.getBounds();
@@ -3021,33 +3062,42 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         bounds.getEast() + padLng,
       ];
       const key = bbox.map((n) => n.toFixed(3)).join(",");
-      if (key === requestedKey) return;
-      requestedKey = key;
+      if (key === loadedKey) {
+        reassertLayers();
+        return;
+      }
+      if (inFlightKey === key) return;
+      inFlightKey = key;
       controller?.abort();
       const ctrl = new AbortController();
       controller = ctrl;
-      fetchBusRoutes(bbox, ctrl.signal)
-        .then((data) => {
+      fetchBusNetwork(bbox, ctrl.signal)
+        .then((network) => {
           if (cancelled || ctrl.signal.aborted) return;
-          try {
-            ensureBusLayers(map, data);
-          } catch (error) {
-            console.warn("[bus-lines] layers could not be added", error);
-          }
+          loadedKey = key;
+          lastNetwork = network;
+          applyNetwork(network);
         })
         .catch((error) => {
           if ((error as Error).name === "AbortError") return;
+          // Leave loadedKey empty so the next moveend retries this bbox.
           console.warn("[bus-lines] fetch failed", error);
+        })
+        .finally(() => {
+          if (inFlightKey === key) inFlightKey = null;
         });
     };
 
     const onMoveEnd = () => {
       if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(refresh, 700);
+      timer = window.setTimeout(refresh, 600);
     };
     const onStyle = () => {
-      // The style swap removed our source/layers; refetch this bbox.
-      requestedKey = "";
+      // The swap removed our source/layers; the cached payload may be
+      // for another bbox, so refetch — but re-assert instantly first.
+      loadedKey = "";
+      inFlightKey = null;
+      reassertLayers();
       refresh();
     };
 
@@ -3061,10 +3111,40 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     map.on("style.load", onStyle);
     map.on("moveend", onMoveEnd);
 
+    // Safety net: if a style swap or render quirk drops the layers
+    // without an event we listen to, restore them from the cache.
+    const watchdog = window.setInterval(reassertLayers, 2500);
+
+    // Bus stops are tappable exactly like rail stations: dropping a
+    // hiking waypoint at the stop.
+    const unregisterTaps = registerFeatureTaps(map, {
+      id: "bus-stops",
+      layers: [BUS_STOP_HIT_LAYER_ID, BUS_STOP_LAYER_ID],
+      tolerancePx: 18,
+      hapticKind: "select",
+      onFeature: (feature) => {
+        const coords = (feature.geometry as GeoJSON.Point).coordinates as [
+          number,
+          number,
+        ];
+        const name = (feature.properties?.name as string | undefined)
+          ?? "Bus stop";
+        useHiking.getState().addWaypoint({
+          lat: coords[1],
+          lon: coords[0],
+          label: name,
+          source: "station",
+        });
+      },
+    });
+
     return () => {
       cancelled = true;
+      unregisterTaps();
       controller?.abort();
       if (timer !== null) window.clearTimeout(timer);
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      window.clearInterval(watchdog);
       map.off("style.load", onStyle);
       map.off("moveend", onMoveEnd);
       try {
@@ -5063,7 +5143,7 @@ function ViewPanel({
           <div className="flex min-w-0 flex-col">
             <span className="ui-row-title">Bus lines</span>
             <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-              OSM bus routes · Overpass · from zoom 12
+              OSM bus routes &amp; stops · Overpass · from zoom 12
             </span>
           </div>
           <button
