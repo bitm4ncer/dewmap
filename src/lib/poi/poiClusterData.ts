@@ -289,6 +289,8 @@ export async function fetchPoiClusterData(
   options?: {
     /** Tile fan-out cap for this call (see clusterTileBudget). */
     budget?: number;
+    /** How many tiles failed after the retry, out of how many were asked. */
+    onPartial?: (failed: number, total: number) => void;
   },
 ): Promise<ClusterData> {
   const budget = options?.budget ?? MAX_CLUSTER_TILES;
@@ -401,6 +403,7 @@ export async function fetchPoiClusterData(
       `[poi] ${failed.length}/${coords.length} tiles failed after retry; using partial data`,
       firstError,
     );
+    options?.onPartial?.(failed.length, coords.length);
   }
 
   return { points, districts: [...districts.values()] };

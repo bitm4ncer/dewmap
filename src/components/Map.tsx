@@ -3845,6 +3845,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
      *  district/grid key. Only grows: a tile-budget cut at low zoom must
      *  never remove a district that was already on screen. */
     const renderedMarkers = new Map<string, GeoJSON.Feature<GeoJSON.Point>>();
+    // Last retry per built area, so a partial tile build cannot loop.
+    const poiRetryAt = new Map<string, number>();
     const rebuildClusters = (force = false) => {
       if (cancelled || !styleReady()) return;
       const zoom = map.getZoom();
@@ -3891,8 +3893,12 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       const template = (
         map.getSource(POI_SOURCE_ID) as { tiles?: string[] } | undefined
       )?.tiles?.[0];
+      let partialTiles = 0;
       fetchPoiClusterData(bbox, poiKindsRef.current, ctrl.signal, template, {
         budget: clusterTileBudget(zoom),
+        onPartial: (failed) => {
+          partialTiles = failed;
+        },
       })
         .then((data) => {
           if (cancelled || ctrl.signal.aborted) return;
@@ -3915,12 +3921,42 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             const after = Number(feature.properties?.point_count) || 0;
             if (after > before) renderedMarkers.set(key, feature);
           }
+          // Districts the new view no longer covers would otherwise pile up
+          // in the source for the rest of the session.
+          const [west, south, east, north] = bbox;
+          const padLon = (east - west) * 0.5;
+          const padLat = (north - south) * 0.5;
+          for (const [key, feature] of renderedMarkers) {
+            const [lon, lat] = feature.geometry.coordinates as [number, number];
+            if (
+              lon < west - padLon || lon > east + padLon ||
+              lat < south - padLat || lat > north + padLat
+            ) {
+              renderedMarkers.delete(key);
+            }
+          }
           source.setData?.({
             type: "FeatureCollection",
             features: [...renderedMarkers.values()],
           });
-          builtBbox = bbox;
-          builtKinds = kindsKey;
+          // A build with failed tiles undercounts its districts: leave the
+          // area unbuilt so it is retried, but only once in a while.
+          const buildKey = `${bbox.join(",")}|${kindsKey}`;
+          const now = Date.now();
+          if (partialTiles === 0) {
+            poiRetryAt.delete(buildKey);
+            builtBbox = bbox;
+            builtKinds = kindsKey;
+          } else {
+            const lastTry = poiRetryAt.get(buildKey) ?? 0;
+            if (now - lastTry > 20_000) {
+              poiRetryAt.set(buildKey, now);
+            } else {
+              poiRetryAt.delete(buildKey);
+              builtBbox = bbox;
+              builtKinds = kindsKey;
+            }
+          }
           if (poiKindsRef.current.length === 0) {
             persistPoiView(bbox, cellDeg, aggregated);
           }
