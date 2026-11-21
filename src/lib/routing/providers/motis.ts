@@ -6,6 +6,7 @@
  */
 
 import { GEOCODE_TIMEOUT_MS, PLAN_TIMEOUT_MS, fetchJson } from "../http";
+import { mergeAlerts, normalizeMotisAlert } from "../alerts";
 import { cumulativeDistances, haversineM } from "../geo";
 import { decodePolyline, toLonLat } from "../polyline";
 import {
@@ -19,6 +20,7 @@ import {
   type Maneuver,
   type RoutePlan,
   type RouteRequest,
+  type TransitAlert,
   type TransitJourney,
   type TransitLeg,
   type TransitLegMode,
@@ -128,6 +130,16 @@ function stopName(value: string | undefined): string {
   return value ?? "Unknown stop";
 }
 
+function parseAlerts(value: unknown, lines: string[] = []): TransitAlert[] {
+  if (!isRecord(value)) return [];
+  const alerts: TransitAlert[] = [];
+  for (const raw of readArray(value, "alerts")) {
+    const alert = normalizeMotisAlert(raw, { source: "route", lines });
+    if (alert) alerts.push(alert);
+  }
+  return mergeAlerts(alerts);
+}
+
 function parseStop(value: unknown): TransitStopRef {
   const stop = isRecord(value) ? value : undefined;
   const modes = readArray(stop, "modes").filter(
@@ -143,6 +155,7 @@ function parseStop(value: unknown): TransitStopRef {
   const departure = readString(stop, "departure");
   const scheduledArrival = readString(stop, "scheduledArrival");
   const scheduledDeparture = readString(stop, "scheduledDeparture");
+  const alerts = parseAlerts(stop);
   return {
     name: stopName(readString(stop, "name")),
     lat: readNumber(stop, "lat") ?? 0,
@@ -161,6 +174,7 @@ function parseStop(value: unknown): TransitStopRef {
     ...(scheduledArrival ? { scheduledArrival } : {}),
     ...(scheduledDeparture ? { scheduledDeparture } : {}),
     ...(readBoolean(stop, "cancelled") ? { cancelled: true } : {}),
+    ...(alerts.length > 0 ? { alerts } : {}),
   };
 }
 
@@ -325,6 +339,13 @@ function parseLeg(value: unknown): TransitLeg | null {
 
   const intermediateStops = parseIntermediateStops(value);
   if (intermediateStops) leg.intermediateStops = intermediateStops;
+
+  const legAlerts = mergeAlerts([
+    ...parseAlerts(value, line ? [line] : []),
+    ...parseAlerts(fromRaw, line ? [line] : []),
+    ...parseAlerts(toRaw, line ? [line] : []),
+  ]);
+  if (legAlerts.length > 0) leg.alerts = legAlerts;
 
   return leg;
 }

@@ -8,8 +8,11 @@ import {
   formatDayOffset,
   formatDuration,
   isProviderError,
+  mergeAlerts,
   type ProviderError,
   type RoutePlan,
+  type TransitAlert,
+  type TransitAlertSeverity,
   type TransitLeg,
   type TransitStopRef,
 } from "../routing";
@@ -163,6 +166,66 @@ export function journeyTimeZone(journey: RoutePlan): string | undefined {
     ?? legs.find((leg) => leg.from.tz)?.from.tz
     ?? [...legs].reverse().find((leg) => leg.to.tz)?.to.tz
   );
+}
+
+/** All alerts attached to a journey's legs, deduplicated. */
+export function journeyAlerts(journey: RoutePlan): TransitAlert[] {
+  const alerts = (journey.transit?.legs ?? []).flatMap(
+    (leg) => leg.alerts ?? [],
+  );
+  return mergeAlerts(alerts);
+}
+
+/** Lines that the selected journey's alerts apply to. */
+export function alertLines(alerts: readonly TransitAlert[]): string[] {
+  return [...new Set(alerts.flatMap((alert) => alert.lines))];
+}
+
+/** Coarse tone for an alert badge; unknown severity stays neutral. */
+export function alertSeverityTone(
+  severity: TransitAlertSeverity,
+): "danger" | "warn" | "info" | undefined {
+  if (severity === "SEVERE") return "danger";
+  if (severity === "WARNING") return "warn";
+  if (severity === "INFO") return "info";
+  return undefined;
+}
+
+export function alertSeverityLabel(severity: TransitAlertSeverity): string {
+  if (severity === "SEVERE") return "Severe";
+  if (severity === "WARNING") return "Warning";
+  if (severity === "INFO") return "Info";
+  return "";
+}
+
+function alertStamp(
+  iso: string,
+  locale?: string,
+  timeZone?: string,
+): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(locale, {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
+/** "04 Nov, 05:00 – 22:59", "from …", "until …" or "Active". */
+export function formatAlertPeriod(
+  alert: Pick<TransitAlert, "startsAt" | "endsAt">,
+  locale?: string,
+  timeZone?: string,
+): string {
+  const start = alert.startsAt ? alertStamp(alert.startsAt, locale, timeZone) : "";
+  const end = alert.endsAt ? alertStamp(alert.endsAt, locale, timeZone) : "";
+  if (start && end) return `${start} – ${end}`;
+  if (start) return `from ${start}`;
+  if (end) return `until ${end}`;
+  return "Active";
 }
 
 /** Clock at a specific stop, falling back to the journey zone. */

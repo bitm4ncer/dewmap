@@ -32,6 +32,26 @@ describe("transit panel layout", () => {
     expect(detail).toContain("Transfer colours: amber under 5 min");
   });
 
+  it("clears alert-line highlights when the transit panel unmounts", () => {
+    expect(src).toContain(
+      "return () => useTransit.getState().setLiveAlertLines([]);",
+    );
+  });
+
+  it("keeps every filter chip reachable and explains empty filters", () => {
+    const bar = readFileSync(
+      new URL("./LiveTransitBar.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(bar).toContain('className="sr-only" aria-live="polite"');
+    expect(bar).toContain("Live vehicles visible in this view.");
+    expect(bar.match(/aria-live="/g)?.length ?? 0).toBe(1);
+    expect(bar).not.toContain("disabled={!available");
+    expect(bar).toContain("No ${group.label.toLowerCase()} vehicles in this view.");
+    expect(bar).toContain("Show all");
+    expect(bar).toContain("The filter hides all");
+  });
+
   it("offers departure chips above the journey detail", () => {
     expect(src).toContain("journey-switcher");
     expect(src).toContain("Next departures");
@@ -41,6 +61,29 @@ describe("transit panel layout", () => {
 
   it("keeps the When field at a compact width", () => {
     expect(src).toContain('className="ui-input ui-input-date"');
+  });
+
+  it("keeps live vehicles outside Route options and always visible", () => {
+    const bar = readFileSync(
+      new URL("./LiveTransitBar.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(bar).toContain('role="switch"');
+    expect(bar).toContain("aria-checked={liveVehicles}");
+    expect(bar).toContain("Disruptions");
+    expect(bar).toContain("Vehicles in view");
+    // The old buried toggle is gone, the bar is a sibling of the collapsible
+    // form/summary rather than a child of "Route options".
+    expect(src).not.toContain('label="Live vehicles"');
+    // Expanded: the bar sits directly under the header, above When/Filters/
+    // Route options. Collapsed: it follows the summary line.
+    const barIndex = src.indexOf("<LiveTransitBar />");
+    expect(barIndex).toBeGreaterThan(src.indexOf("Train &amp; local transit"));
+    expect(barIndex).toBeLessThan(src.indexOf(">Route options<"));
+    expect(src).toContain("{!showForm && <LiveTransitBar />}");
+    expect(src.indexOf("transit-summary")).toBeLessThan(
+      src.indexOf("{!showForm && <LiveTransitBar />}"),
+    );
   });
 
   it("does not pin the journey actions while scrolling", () => {

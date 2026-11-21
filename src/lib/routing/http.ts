@@ -28,6 +28,11 @@ export interface FetchJsonInit {
   provider?: ProviderId;
   /** HTTP statuses that mean "there is no route" for this endpoint. */
   noRouteStatuses?: readonly number[];
+  /**
+   * Called with the decoded body length. Used by the live-vehicle layer to
+   * adapt its polling interval; the browser hides the compressed wire size.
+   */
+  onResponseSize?: (bytes: number) => void;
 }
 
 /** Map an HTTP status to a normalized error kind. */
@@ -181,6 +186,8 @@ export async function fetchJson<T>(
       cause: err,
     });
   }
+
+  init.onResponseSize?.(text.length);
 
   if (text.trim() === "") {
     throw new ProviderError("bad-response", "Provider returned an empty body.", {

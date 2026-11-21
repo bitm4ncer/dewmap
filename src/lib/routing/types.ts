@@ -56,6 +56,47 @@ export interface Maneuver {
   rawType?: number;
 }
 
+/** Severity levels used by GTFS-RT / MOTIS alerts. */
+export type TransitAlertSeverity =
+  | "UNKNOWN_SEVERITY"
+  | "INFO"
+  | "WARNING"
+  | "SEVERE";
+
+/** Where an alert point was discovered. */
+export type TransitAlertSource = "route" | "area";
+
+export interface TransitAlertStop {
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+/**
+ * Normalized service alert.
+ *
+ * MOTIS returns GTFS-RT alerts as HTML-ish prose; `description` is plain text
+ * and safe to render. Route alerts know their line, area alerts know the
+ * stops they were attached to.
+ */
+export interface TransitAlert {
+  /** Stable hash of header + start, so the same alert dedupes across calls. */
+  id: string;
+  header: string;
+  description?: string;
+  severity: TransitAlertSeverity;
+  effect?: string;
+  cause?: string;
+  url?: string;
+  startsAt?: string;
+  endsAt?: string;
+  /** Line labels this alert applies to, when the source knows them. */
+  lines: string[];
+  /** Stops the alert applies to, when the source knows them. */
+  stops: TransitAlertStop[];
+  source: TransitAlertSource;
+}
+
 export interface TransitStopRef {
   name: string;
   lat: number;
@@ -78,6 +119,8 @@ export interface TransitStopRef {
   scheduledArrival?: string;
   scheduledDeparture?: string;
   cancelled?: boolean;
+  /** Alerts attached to this stop by the provider. */
+  alerts?: TransitAlert[];
 }
 
 /** Whether a leg is walked, cycled, driven, or uses public transport. */
@@ -119,6 +162,8 @@ export interface TransitLeg {
   coordinates: [number, number][];
   intermediateStops?: TransitStopRef[];
   steps?: Maneuver[];
+  /** Service alerts that apply to this leg. */
+  alerts?: TransitAlert[];
 }
 
 export interface TransitJourney {
