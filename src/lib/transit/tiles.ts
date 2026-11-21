@@ -14,6 +14,7 @@ export const TRANSIT_TILES_ENABLED =
 export const TRANSIT_LINES_SOURCE = "transit-tiles-lines";
 export const TRANSIT_STOPS_SOURCE = "transit-tiles-stops";
 export const TRANSIT_BUS_CASING = "transit-bus-casing";
+export const TRANSIT_BUS_UNDERLAY = "transit-bus-underlay";
 export const TRANSIT_BUS_LINE = "transit-bus-line";
 export const TRANSIT_RAIL_LINE = "transit-rail-line";
 export const TRANSIT_BUS_STOP_HIT = "transit-bus-stop-hit";
@@ -22,6 +23,7 @@ export const TRANSIT_RAIL_STOP = "transit-rail-stop";
 
 const BUS_LAYERS = [
   TRANSIT_BUS_CASING,
+  TRANSIT_BUS_UNDERLAY,
   TRANSIT_BUS_LINE,
   TRANSIT_BUS_STOP_HIT,
   TRANSIT_BUS_STOP,
@@ -156,6 +158,28 @@ export function ensureTransitTileLayers(
   );
   addLineLayer(
     map,
+    TRANSIT_BUS_UNDERLAY,
+    "bus_routes",
+    BUS_MIN_ZOOM,
+    {
+      "line-color": BUS_LINE_COLOR,
+      "line-width": [
+        "interpolate", ["linear"], ["zoom"],
+        9, 0.4,
+        12, 0.8,
+        14, 1.4,
+        17, 2.0,
+      ],
+      "line-opacity": [
+        "interpolate", ["linear"], ["zoom"],
+        9, 0.18,
+        12, 0.28,
+      ],
+    },
+    beforeId,
+  );
+  addLineLayer(
+    map,
     TRANSIT_BUS_LINE,
     "bus_routes",
     BUS_MIN_ZOOM,
@@ -173,7 +197,7 @@ export function ensureTransitTileLayers(
         9, 0.55,
         12, 0.82,
       ],
-      "line-dasharray": [2, 1.4],
+      "line-dasharray": [3, 1.1],
     },
     beforeId,
   );
@@ -258,6 +282,7 @@ export function removeTransitTileLayers(map: MLMap): void {
     TRANSIT_BUS_STOP_HIT,
     TRANSIT_RAIL_LINE,
     TRANSIT_BUS_LINE,
+    TRANSIT_BUS_UNDERLAY,
     TRANSIT_BUS_CASING,
   ]) {
     if (map.getLayer(id)) map.removeLayer(id);
