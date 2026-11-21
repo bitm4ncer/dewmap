@@ -311,7 +311,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: var(--ink-dim);
+  color: var(--accent);
   text-transform: none;
 }
 .hud-label-bar { display: none; }
@@ -392,6 +392,19 @@ body {
     padding-top: var(--safe-top);
     border: 0;
     border-radius: 0;
+  }
+
+  /* Full height is the reading state: sections get room between them and
+     inside them. At half they fall back to the compact stack. */
+  .hud-bottom-sheet[data-sheet-state="full"] .ui-panel-body {
+    gap: var(--sp-5);
+    padding-top: var(--sp-4);
+  }
+  .hud-bottom-sheet[data-sheet-state="full"] .ui-section {
+    gap: var(--sp-4);
+  }
+  .hud-bottom-sheet[data-sheet-state="full"] .hud-panel {
+    padding: var(--sp-5);
   }
 
   .hud-bottom-sheet[data-sheet-state="peek"] .hud-sidebar { display: none; }
@@ -1571,7 +1584,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   font-weight: 650;
   letter-spacing: 0.075em;
   text-transform: uppercase;
-  color: var(--ink-mute);
+  color: var(--accent);
 }
 .ui-row {
   display: flex;

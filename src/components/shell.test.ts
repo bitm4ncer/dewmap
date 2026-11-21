@@ -31,6 +31,16 @@ describe("shell", () => {
     expect(map).not.toContain("Map orientation");
   });
 
+  it("breathes at full height and keeps the compact stack at half", () => {
+    expect(css).toContain(
+      '.hud-bottom-sheet[data-sheet-state="full"] .ui-panel-body',
+    );
+    expect(css).toContain(
+      '.hud-bottom-sheet[data-sheet-state="full"] .ui-section',
+    );
+    expect(css).toMatch(/\.ui-kicker \{[\s\S]*?color: var\(--accent\)/);
+  });
+
   it("shows the pane switcher instead of a burger when the drawer is closed", () => {
     expect(map).toContain("hud-desk-nav");
     expect(map).not.toContain("hud-drawer-open");
