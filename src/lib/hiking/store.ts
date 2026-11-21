@@ -152,7 +152,7 @@ export const useHiking = create<HikingState>()(
       setNotice: (notice) => set({ notice }),
     }),
     {
-      name: "kugelmaps:hiking",
+      name: "dewmap:hiking",
       // v4: route geometry moved out of localStorage (quota-safe); routes
       // are recomputed from waypoints on mount.
       version: 4,

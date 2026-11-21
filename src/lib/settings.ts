@@ -205,7 +205,7 @@ export const useSettings = create<Settings>()(
         }),
     }),
     {
-      name: "kugelmaps:settings",
+      name: "dewmap:settings",
       version: 27,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/readme/hero.png" alt="KugelMaps — Maps, trains and the real world." width="100%">
+  <img src="docs/readme/hero.png" alt="dewmap — Maps, trains and the real world." width="100%">
 </p>
 
-<h1 align="center">KugelMaps</h1>
+<h1 align="center">dewmap</h1>
 
 <p align="center">
   <strong>Maps, trains and the real world.</strong><br>
@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/bitm4ncer/kugelmaps/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bitm4ncer/kugelmaps/ci.yml?branch=main&label=ci"></a>
-  <a href="https://github.com/bitm4ncer/kugelmaps/actions/workflows/deploy.yml"><img alt="Deploy" src="https://img.shields.io/github/actions/workflow/status/bitm4ncer/kugelmaps/deploy.yml?branch=main&label=deploy"></a>
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/github/license/bitm4ncer/kugelmaps?label=license"></a>
+  <a href="https://github.com/bitm4ncer/dewmap/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bitm4ncer/dewmap/ci.yml?branch=main&label=ci"></a>
+  <a href="https://github.com/bitm4ncer/dewmap/actions/workflows/deploy.yml"><img alt="Deploy" src="https://img.shields.io/github/actions/workflow/status/bitm4ncer/dewmap/deploy.yml?branch=main&label=deploy"></a>
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/github/license/bitm4ncer/dewmap?label=license"></a>
   <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white">
   <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white">
   <img alt="TypeScript 5" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
@@ -21,16 +21,16 @@
 </p>
 
 <p align="center">
-  <a href="https://bitm4ncer.github.io/kugelmaps/"><strong>Open the live app →</strong></a>
+  <a href="https://bitm4ncer.github.io/dewmap/"><strong>Open the live app →</strong></a>
 </p>
 
-KugelMaps is a client-side navigation and exploration app. It plans train, bus, tram and ferry journeys; routes hikes, bike rides and drives with elevation; and layers satellite imagery, environmental data and historical maps on top. No backend, no accounts, no tracking — settings, saved places and credentials stay in your browser.
+dewmap is a client-side navigation and exploration app. It plans train, bus, tram and ferry journeys; routes hikes, bike rides and drives with elevation; and layers satellite imagery, environmental data and historical maps on top. No backend, no accounts, no tracking — settings, saved places and credentials stay in your browser.
 
 ## Screenshots
 
 <p align="center">
-  <img src="docs/readme/desktop.jpg" alt="KugelMaps desktop — map, routes, nature and history panes" width="76%">
-  <img src="docs/readme/mobile.jpg" alt="KugelMaps mobile — bottom sheet with travel modes" width="22%">
+  <img src="docs/readme/desktop.jpg" alt="dewmap desktop — map, routes, nature and history panes" width="76%">
+  <img src="docs/readme/mobile.jpg" alt="dewmap mobile — bottom sheet with travel modes" width="22%">
 </p>
 
 ## Features
@@ -162,12 +162,12 @@ The free tier includes 30,000 Processing Units per month. Credentials never leav
 
 Pushing to `main` triggers the Pages workflow. It derives the base path and canonical URL from the repository name, builds the static export and publishes `out/`.
 
-Override with:
+Override with repository variables under **Settings → Secrets and variables → Actions → Variables**:
 
-- `NEXT_PUBLIC_BASE_PATH` — path prefix, e.g. `/kugelmaps` (empty for a root domain).
-- `NEXT_PUBLIC_SITE_URL` — canonical origin plus base path.
+- `NEXT_PUBLIC_BASE_PATH` — path prefix, e.g. `/dewmap` (empty for a root domain).
+- `NEXT_PUBLIC_SITE_URL` — canonical origin plus base path, e.g. `https://dewmap.app`.
 
-Enable Pages under **Settings → Pages → Source: GitHub Actions**.
+When `NEXT_PUBLIC_SITE_URL` is set, the workflow assumes the site is served from the root and uses an empty base path. Enable Pages under **Settings → Pages → Source: GitHub Actions**.
 
 ## Live location
 
@@ -179,7 +179,7 @@ No backend, no analytics. Settings, planner state and credentials live in `local
 
 ## Status
 
-The train planner is the focus. KugelMaps is not yet a drop-in replacement for DB Navigator, the VRR app or Google Maps — coverage and live data depend on the upstream APIs. The dark vector basemap with the Graphite tint is the default; satellite imagery is one tap away.
+The train planner is the focus. dewmap is not yet a drop-in replacement for DB Navigator, the VRR app or Google Maps — coverage and live data depend on the upstream APIs. The dark vector basemap with the Graphite tint is the default; satellite imagery is one tap away.
 
 Next up: broader live-transit coverage and more real-time feeds.
 

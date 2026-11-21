@@ -1,7 +1,7 @@
 # Place Images: Street-Level, Hausfronten und Place-Fotos
 
 **Stand:** 2026-11-18  
-**Ziel:** Automatisiert und sinnvoll Bilder für viele Places in KugelMaps sammeln — ohne Backend, ohne offene API-Keys im Client, mit klarer Lizenz.  
+**Ziel:** Automatisiert und sinnvoll Bilder für viele Places in dewmap sammeln — ohne Backend, ohne offene API-Keys im Client, mit klarer Lizenz.  
 **Geprüft:** Panoramax, KartaView und Wikimedia Commons live per `curl` mit Browser-UA und `Origin`; Mapillary/Google gegen die aktuelle Dokumentation.
 
 ---
@@ -300,7 +300,7 @@ Das ist der Teil, der bei „Geschäfte, Restaurants, Museen“ oft gemeint ist 
 
 ## 4. Kommerzielle Street-Level-Anbieter
 
-| Anbieter | Zugang | Für KugelMaps? |
+| Anbieter | Zugang | Für dewmap? |
 |---|---|---|
 | **Google Street View** | Key + Billing; Static API $7/1k; kein Caching/Bulk | Nur Premium/Fallback, nicht statisch |
 | **HERE Street Level** | Enterprise/API-Key | Nein, kommerziell |
@@ -341,7 +341,7 @@ Das ist der Teil, der bei „Geschäfte, Restaurants, Museen“ oft gemeint ist 
 
 ---
 
-## 6. Empfohlene Architektur für KugelMaps
+## 6. Empfohlene Architektur für dewmap
 
 ### 6.1 Prinzip
 

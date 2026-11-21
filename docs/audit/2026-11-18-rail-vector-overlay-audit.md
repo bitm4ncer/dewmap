@@ -438,4 +438,4 @@ Details und Messwerte:
 
 Verifikation: 236 Tests, Lint, Typecheck, Build; headless Chromium mit echten
 CARTO-Tiles: 121 Rail-Features bei z12, 68 bei z14, ORM-Fallback bei z9.
-Deploy: https://bitm4ncer.github.io/kugelmaps/
+Deploy: https://bitm4ncer.github.io/dewmap/

@@ -388,7 +388,7 @@ export const useTransit = create<TransitState>()(
         })),
     }),
     {
-      name: "kugelmaps:transit",
+      name: "dewmap:transit",
       version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({

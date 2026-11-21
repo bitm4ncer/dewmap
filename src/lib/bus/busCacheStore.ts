@@ -10,7 +10,7 @@ import type { Bbox, BusNetwork } from "./busRoutes";
  * goes much further.
  */
 
-const DB_NAME = "kugelmaps-bus-cache";
+const DB_NAME = "dewmap-bus-cache";
 const DB_VERSION = 1;
 const STORE = "networks";
 

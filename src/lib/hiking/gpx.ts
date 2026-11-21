@@ -28,7 +28,7 @@ export function routeToGpx(
     .join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="kugelmaps" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="dewmap" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata>
     <name>${trkName}</name>
     <desc>${candidate.distanceKm.toFixed(1)} km · ${Math.round(candidate.durationMin)} min · +${Math.round(candidate.ascentM)} m</desc>

@@ -1,4 +1,4 @@
-/* KugelMaps shell service worker.
+/* dewmap shell service worker.
  *
  * Caches the app shell and hashed Next.js chunks so the interface opens
  * offline after the first visit. Map tiles and routing APIs stay
@@ -9,7 +9,7 @@
 /* Bump on every change that must reach an installed home-screen app: the
  * shell (index, manifest, icons) is cache-first, so a new cache name is what
  * forces the manifest colours and the shell to be re-read. */
-const CACHE = "kugelmaps-shell-v2";
+const CACHE = "dewmap-shell-v2";
 const SCOPE = self.registration.scope;
 
 const SHELL = [

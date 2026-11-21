@@ -256,7 +256,7 @@ describe("warm start", () => {
     persistPoiView([2, 2, 3, 3], 0.02, frame("three"));
     persistPoiView([3, 3, 4, 4], 0.02, frame("four"));
 
-    const stored = JSON.parse(store.get("kugelmaps.poi-view.v2") ?? "{}");
+    const stored = JSON.parse(store.get("dewmap.poi-view.v2") ?? "{}");
     expect(stored.v).toBe(2);
     expect(stored.views).toHaveLength(3);
     expect(stored.views.map((v: { bbox: number[] }) => v.bbox)).toEqual([

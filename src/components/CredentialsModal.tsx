@@ -78,7 +78,7 @@ export function CredentialsModal({ initial, onSave, onClose, onClear }: Props) {
               className="mt-1.5 space-y-2 text-[14px] leading-relaxed text-[color:var(--ink-dim)]"
             >
               <p>
-                KugelMaps runs entirely in your browser — no backend, no proxy.
+                dewmap runs entirely in your browser — no backend, no proxy.
               </p>
               <ul className="list-disc space-y-1 pl-4">
                 <li>

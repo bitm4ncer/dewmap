@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-11-21 — Rebrand: KugelMaps → dewmap
+
+- New name **dewmap**, always written lowercase: window title, PWA
+  manifest, Apple web app name, SEO metadata, README, generated files and
+  the UI copy.
+- Repository renamed to `bitm4ncer/dewmap`; GitHub Pages now serves the
+  app from `/dewmap`.
+- Zustand keys, the POI cache and the bus IndexedDB moved from
+  `kugelmaps:*` to `dewmap:*`. `legacyStorage.ts` migrates both the
+  KugelMaps and the older BiosphereOne keys, so settings, saved places,
+  favourites and POI caches survive. The bus IndexedDB is a cold cache;
+  the old localStorage bus cache is still imported.
+- Service-worker shell cache is `dewmap-shell-v2`; the previous shell
+  cache is removed on activation.
+- `package.json` renamed to `dewmap`, version `0.3.0`.
+- `dewmap.app` is registered. Connecting it to GitHub Pages is a separate
+  DNS step; the deploy workflow already accepts `NEXT_PUBLIC_SITE_URL` as
+  a repository variable and switches to an empty base path for a root
+  domain.
+
 ## 2026-11-19 — Two detents and over-scroll collapse
 
 - The mobile panel now has exactly two positions: half (48dvh) and full

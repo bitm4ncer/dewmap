@@ -23,7 +23,7 @@ export type {
 } from "./types";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
-const STORAGE_PREFIX = "kugelmaps.poi.v2.";
+const STORAGE_PREFIX = "dewmap.poi.v2.";
 const memory = new Map<string, { at: number; value: PoiDetails }>();
 
 function cacheKey(selection: PoiSelection): string {

@@ -193,7 +193,7 @@ describe("createHistoryProtocol", () => {
   it("opens a range-mode archive under its absolute URL", async () => {
     const map = maplibre();
     const { protocol, open } = createHistoryProtocol(map, {
-      baseUrl: "https://example.test/KugelMaps/",
+      baseUrl: "https://example.test/dewmap/",
     });
     const url = await open(
       {
@@ -204,7 +204,7 @@ describe("createHistoryProtocol", () => {
       "range",
     );
     expect(url).toBe(
-      "pmtiles://https://example.test/KugelMaps/data/history/history-20261118-0400/history-sites.pmtiles",
+      "pmtiles://https://example.test/dewmap/data/history/history-20261118-0400/history-sites.pmtiles",
     );
     expect(protocol.tiles.size).toBe(1);
   });

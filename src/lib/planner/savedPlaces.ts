@@ -50,7 +50,7 @@ export const useSavedPlaces = create<SavedPlacesState>()(
         }),
     }),
     {
-      name: "kugelmaps.saved-places",
+      name: "dewmap.saved-places",
       version: 1,
       storage: createJSONStorage(() => localStorage),
     },

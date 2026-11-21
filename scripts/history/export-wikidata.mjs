@@ -86,7 +86,7 @@ async function fetchPage({
           headers: {
             Accept: "text/csv",
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "kugelmaps-history-build/1.0",
+            "User-Agent": "dewmap-history-build/1.0",
           },
           body: `query=${encodeURIComponent(query)}`,
           signal: AbortSignal.timeout(90_000),

@@ -1948,14 +1948,14 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   const [activePane, setActivePane] = useState<SidebarPane>("hiking");
   const [routesMode, setRoutesMode] = useState<RoutesMode>(() => {
     if (typeof window === "undefined") return "transit";
-    const stored = window.localStorage.getItem("kugelmaps.routesMode");
+    const stored = window.localStorage.getItem("dewmap.routesMode");
     return stored === "walk" || stored === "bike" || stored === "car"
       ? stored
       : "transit";
   });
   useEffect(() => {
     try {
-      window.localStorage.setItem("kugelmaps.routesMode", routesMode);
+      window.localStorage.setItem("dewmap.routesMode", routesMode);
     } catch {
       /* private mode */
     }
@@ -2713,7 +2713,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     // we just skip the manual tap when we're confident it was already
     // granted before. If the OS has revoked it, the standard prompt
     // re-appears as expected.
-    const GEO_FLAG = "kugelmaps.geo.autoTrack";
+    const GEO_FLAG = "dewmap.geo.autoTrack";
     geolocate.on("geolocate", () => {
       try {
         window.localStorage.setItem(GEO_FLAG, "1");
@@ -4129,7 +4129,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
 
     map.on("moveend", scheduleClusters);
-    map.on("kugelmaps:poi-kinds", onKindsChanged);
+    map.on("dewmap:poi-kinds", onKindsChanged);
     map.on("mouseenter", POI_HIT_LAYER_ID, showPointer);
     map.on("mouseleave", POI_HIT_LAYER_ID, hidePointer);
     map.on("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
@@ -4148,7 +4148,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       map.off("style.load", apply);
       map.off("idle", apply);
       map.off("moveend", scheduleClusters);
-      map.off("kugelmaps:poi-kinds", onKindsChanged);
+      map.off("dewmap:poi-kinds", onKindsChanged);
       map.off("mouseenter", POI_HIT_LAYER_ID, showPointer);
       map.off("mouseleave", POI_HIT_LAYER_ID, hidePointer);
       map.off("mouseenter", POI_CLUSTER_CIRCLE_LAYER_ID, showPointer);
@@ -4215,7 +4215,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       // Style not parsed yet; the POI effect re-applies filters on apply.
       return;
     }
-    mapInstance.fire("kugelmaps:poi-kinds");
+    mapInstance.fire("dewmap:poi-kinds");
   }, [poiOn, mapInstance, poiKinds]);
 
   // ── Biosphere · Species (GBIF) ────────────────────────────────────

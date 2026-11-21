@@ -328,5 +328,5 @@ With the dev server up at 390×844:
 
 - [ ] **Step 3: Build the export**
 
-Run: `NEXT_PUBLIC_BASE_PATH=/kugelmaps NEXT_PUBLIC_SITE_URL=https://bitm4ncer.github.io/kugelmaps npm run build`
+Run: `NEXT_PUBLIC_BASE_PATH=/dewmap NEXT_PUBLIC_SITE_URL=https://bitm4ncer.github.io/dewmap npm run build`
 Expected: static export succeeds, 9 pages.

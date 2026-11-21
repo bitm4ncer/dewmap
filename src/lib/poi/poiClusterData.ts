@@ -619,7 +619,7 @@ export function aggregatePoiDistricts(
 // The whole-city view needs hundreds of tiles; on a fresh app start the
 // map would be empty for seconds. Persist the last aggregated district
 // markers per view so the same picture appears instantly, then refresh.
-const VIEW_KEY = "kugelmaps.poi-view.v2";
+const VIEW_KEY = "dewmap.poi-view.v2";
 const VIEW_VERSION = 2;
 const VIEW_TTL_MS = 12 * 60 * 60_000;
 const VIEW_MAX_ENTRIES = 3;

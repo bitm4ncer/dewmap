@@ -120,7 +120,7 @@ export const useCar = create<CarState>()(
       setNotice: (notice) => set({ notice }),
     }),
     {
-      name: "kugelmaps:car",
+      name: "dewmap:car",
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({

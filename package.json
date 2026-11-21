@@ -1,6 +1,6 @@
 {
-  "name": "kugelmaps",
-  "version": "0.2.0",
+  "name": "dewmap",
+  "version": "0.3.0",
   "description": "Maps, trains and the real world — a client-side navigation and exploration app.",
   "private": true,
   "scripts": {

@@ -42,7 +42,7 @@ const GRID_STEP = 0.05;
 /** Rough transfer size of one cell in the prefetch budget. */
 const BUS_ROUTE_BYTES = 520;
 const BUS_STOP_BYTES = 120;
-/** Legacy localStorage key, migrated into IndexedDB on first load. */
+/** Pre-dewmap localStorage key, migrated into IndexedDB on first load. */
 const LEGACY_PERSIST_KEY = "kugelmaps.bus-cache.v1";
 const PERSIST_MAX_ENTRIES = 6;
 

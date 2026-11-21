@@ -35,10 +35,22 @@ jobs:
         run: npm ci
 
       - name: Compute Pages URLs
+        env:
+          CUSTOM_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          CUSTOM_BASE_PATH: ${{ vars.NEXT_PUBLIC_BASE_PATH }}
         run: |
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          echo "NEXT_PUBLIC_BASE_PATH=/${REPO_NAME}" >> "$GITHUB_ENV"
-          echo "NEXT_PUBLIC_SITE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}" >> "$GITHUB_ENV"
+          if [ -n "$CUSTOM_SITE_URL" ]; then
+            # A custom domain is served from the root, so it has no base path.
+            SITE_URL="$CUSTOM_SITE_URL"
+            DEFAULT_BASE_PATH=""
+          else
+            SITE_URL="https://${GITHUB_REPOSITORY_OWNER}.github.io/${REPO_NAME}"
+            DEFAULT_BASE_PATH="/${REPO_NAME}"
+          fi
+          BASE_PATH="${CUSTOM_BASE_PATH:-$DEFAULT_BASE_PATH}"
+          echo "NEXT_PUBLIC_BASE_PATH=${BASE_PATH}" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SITE_URL=${SITE_URL}" >> "$GITHUB_ENV"
 
       - name: Download latest history data
         continue-on-error: true

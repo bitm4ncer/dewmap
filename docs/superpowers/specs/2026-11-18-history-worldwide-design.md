@@ -1,6 +1,6 @@
 # History Worldwide — Design Spec
 
-_2026-11-18 · KugelMaps History tab · status: proposed_
+_2026-11-18 · dewmap History tab · status: proposed_
 
 ## 1. Intent
 
