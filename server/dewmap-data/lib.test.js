@@ -468,3 +468,60 @@ test("stripNoDataPng survives a truncated IDAT", () => {
   broken[broken.length - 20] = 0x00; // corrupt the compressed stream
   assert.doesNotThrow(() => lib.stripNoDataPng(broken));
 });
+
+/* ------------------------------------------------------------- semaphore */
+
+test("semaphore admits exactly `limit` callers and queues the rest", async () => {
+  const sem = lib.createSemaphore(3, 12);
+  const tickets = [];
+  for (let i = 0; i < 6; i += 1) tickets.push(sem.acquire());
+  await Promise.resolve();
+  assert.equal(sem.active, 3);
+  assert.equal(sem.queued, 3);
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal(await tickets[i], true, `ticket ${i} was admitted`);
+  }
+
+  sem.release();
+  assert.equal(await tickets[3], true, "first waiter got the slot");
+  assert.equal(sem.active, 3, "the count stays at the limit during handover");
+  assert.equal(sem.queued, 2);
+
+  // Each release hands the slot to the next waiter; the two remaining waiters
+  // only free their slots when they release too.
+  sem.release();
+  sem.release();
+  sem.release();
+  assert.equal(sem.active, 2, "handovers keep the slots occupied");
+  assert.equal(sem.queued, 0);
+  sem.release();
+  sem.release();
+  assert.equal(sem.active, 0, "all six holders released");
+});
+
+test("semaphore rejects past the queue limit instead of growing forever", async () => {
+  const sem = lib.createSemaphore(2, 3);
+  const accepted = [];
+  const rejected = [];
+  for (let i = 0; i < 10; i += 1) {
+    const ticket = sem.acquire();
+    if (ticket === null) rejected.push(i);
+    else accepted.push(ticket);
+  }
+  assert.equal(sem.active, 2);
+  assert.equal(sem.queued, 3);
+  assert.equal(rejected.length, 5, "everything past limit + queue is refused");
+  for (const ticket of accepted) {
+    sem.release();
+    await ticket;
+  }
+});
+
+test("semaphore recovers after busy work completes", async () => {
+  const sem = lib.createSemaphore(1, 0);
+  assert.equal(await sem.acquire(), true);
+  assert.equal(sem.acquire(), null, "no queue space");
+  sem.release();
+  assert.equal(sem.active, 0);
+  assert.equal(await sem.acquire(), true, "the slot is available again");
+});

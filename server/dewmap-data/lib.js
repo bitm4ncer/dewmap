@@ -388,6 +388,47 @@ function warningsRequest(cql) {
   return params.toString();
 }
 
+/* -------------------------------------------------------------- semaphore */
+
+/**
+ * Counting semaphore with a bounded wait queue.
+ *
+ * `acquire()` resolves with true when a slot is free or the caller may wait,
+ * and with null when the queue is already full — the caller answers 503
+ * instead of letting unbounded work pile up behind a slow upstream.
+ */
+function createSemaphore(limit, queueLimit) {
+  let active = 0;
+  const queue = [];
+  return {
+    get active() {
+      return active;
+    },
+    get queued() {
+      return queue.length;
+    },
+    acquire() {
+      if (active < limit) {
+        active += 1;
+        return Promise.resolve(true);
+      }
+      if (queue.length >= queueLimit) return null;
+      return new Promise((resolve) => {
+        queue.push(resolve);
+      });
+    },
+    release() {
+      const next = queue.shift();
+      if (next) {
+        // Hand the slot straight over; the count stays the same.
+        next(true);
+        return;
+      }
+      active = Math.max(0, active - 1);
+    },
+  };
+}
+
 /* ---------------------------------------------------------------- routing */
 
 const FRAME_PATH = /^\/api\/weather\/radar\/frames\/(\d{8}T\d{4})\.png$/;
@@ -677,6 +718,7 @@ module.exports = {
   radarCacheName,
   isPng,
   frameEtag,
+  createSemaphore,
   matchRoute,
   missingWarncells,
   MAX_PNG_PIXELS,

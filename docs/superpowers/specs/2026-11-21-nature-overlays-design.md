@@ -65,6 +65,9 @@ deshalb jedes Frame (8-bit, non-interlaced, RGB/RGBA), setzt genau diese Pixel
 auf transparent und kodiert neu:
 
 - Grau: `max−min ≤ 12` und `100 < max < 160` und Alpha < 200,
+- Grenzen: `maxOutputLength = height·(stride+1) + 1024` beim `inflateSync`,
+  maximal 4 Mio. Pixel und 20 MB Rohpuffer — der 1000×974-Frame liegt bei
+  0,97 Mio. Pixel, alles darüber wird unverändert durchgereicht statt dekodiert,
 - Magenta: `g < 115`, `r > 150`, `b > 120`, `|r−b| < 45` — trifft die
   DWD-Klassen nicht (`#cc0098`, `#6600cb`, `#e5004c` haben andere Kanäle).
 
@@ -172,6 +175,11 @@ Andockpunkt für weitere Module: `registerShadowOverlay()` (Agent C) ruft späte
 nur `registerOverlay({ ... group: "shadow" ... })` auf — es gibt bewusst keine
 shadow-spezifische Datei und keine Sonderlogik in der Registry.
 
+Radar-Ebene: `maxzoom: 12`. Das Komposit liegt bei ~1,3 km pro Quellpixel;
+darüber hinaus wäre nur noch ein weicher Fleck zu sehen, also endet die Ebene
+dort (Caption und Design sagen dasselbe). Warnungsflächen haben kein
+Zoom-Limit — Polygone skalieren verlustfrei.
+
 `src/lib/overlays/apply.ts` ist die **eine** Stelle, die MapLibre mutiert:
 
 - Source-ID = `overlay:{id}`, Layer-IDs = `overlay:{id}:{n}`.
@@ -186,6 +194,9 @@ shadow-spezifische Datei und keine Sonderlogik in der Registry.
   Style-Validator komplett ab (Quelle wird nicht angelegt). Radarframes tragen
   ihre Quellenangabe deshalb ausschließlich im Panel; die Warnungen zusätzlich
   im MapLibre-Attributionscontrol.
+- Wechselt eine Definition den Quelltyp (`geojson` ↔ `image` ↔ `raster`), wird
+  die Source neu aufgebaut — MapLibre kann eine Source nicht umtypisieren, und
+  `setData` auf einer Image-Source ist ein stummer No-op.
 - Robustheit gegen Style-Wechsel: der Hook hört auf `style.load` **und** `idle`
   (ein `style.load` kann vor dem Effekt gefeuert haben) und reconciliert erneut.
 
@@ -234,7 +245,10 @@ im gleichen `HudPanel`-Muster wie die bestehenden:
 1. **Rain radar** — Schalter, Opazität, Zeit-Slider mit Frame-Label
    (`04:50 · vor 10 Min` / `Nowcast +15`), Play/Pause (44 × 44 px), Legende
    (DWD-Palette als CSS-Gradient, Klassen 0,1 / 1 / 5 / 20 / 150 mm/h),
-   Statuszeile, Attribution.
+   Statuszeile, Attribution. Der Slider läuft auf **Minuten**, nicht auf
+   Frame-Indizes: die Frame-Folge ist ungleichmäßig (5-Minuten-Analyse,
+   15-Minuten-Nowcast), und eine Index-Achse würde „Jetzt" an die falsche
+   Stelle setzen (65 % statt 38 %).
 2. **Weather warnings** — Schalter, Zähler je Stufe, Liste der aktiven Warnungen
    (Stufe, Ereignis, Gebiet, Gültigkeit), Attribution.
 
@@ -272,7 +286,12 @@ https://www.dwd.de/DWD/warnungen/...    (Warnungen)
 https://maps.dwd.de/geoserver/dwd/ows   (WFS Warngebiete)
 ```
 
-Jeder Request: `AbortSignal.timeout(12000)`, Größenlimit 5 MB (Stream-Abbruch),
+Jeder Request: `AbortSignal.timeout(12000)`, Größenlimit 5 MB — **beim Lesen
+gezählt** (Stream, `controller.abort()` beim Überschreiten), nicht am
+`content-length`, weil chunked-Antworten keinen Header haben und gzip die
+komprimierte Größe meldet. `isPng` verlangt Magic Bytes **und** einen
+PNG-Content-Type; eine falsch deklarierte Antwort wird nie als `immutable`
+gecacht.
 `User-Agent: dewmap-data/0.2 (+https://dewmap.app)`.
 
 ### 4.3 Cache
@@ -282,10 +301,18 @@ Jeder Request: `AbortSignal.timeout(12000)`, Größenlimit 5 MB (Stream-Abbruch)
 - Memory: `Map` mit LRU-Kappe (radar 64 Einträge, warnings 4) für die
   heißen Pfade; Disk ist die Wahrheit über Neustarts.
 - Radar-Frames sind unveränderlich (`immutable`, 1 Jahr). Cleanup beim Schreiben:
-  alle `radar/*.png` mit Slot älter als 3 h löschen; harte Obergrenze 400 Dateien
-  / 200 MB.
+  alle `radar/*.png` mit Slot älter als 6 h löschen; harte Obergrenze 400
+  Dateien. Bei ~40 KB pro Frame sind das worst case ~28 MB — deutlich unter dem
+  1-GB-Budget.
 - Warnungen: 5 min frisch, danach `stale-while-revalidate`: bei Upstream-Fehler
   wird die letzte Fassung bis 30 min weiter ausgeliefert (`X-Cache: stale`).
+- **Inflight-Dedupe + Render-Cap:** identische Slots teilen sich ein Promise
+  (`X-Cache: coalesced`); hoechstens 3 Upstream-Renderings laufen gleichzeitig,
+  bis zu 12 warten in der Queue, alles darüber bekommt `503` mit
+  `Retry-After: 3`. Ohne das kostete ein kalter Frame ~7 MB RSS und ~90 ms
+  Event-Loop — bei 128 MB Limit reichten wenige Dutzend parallele Requests für
+  ein OOM. Gemessen mit 8 parallelen kalten Slots: Peak 48,9 MB RSS,
+  Latenzen gestaffelt 0,15–10 s, kein OOM.
 - **Warmer:** `/frames` stößt sofort einen Warm-Lauf an, danach prüft ein 60-s-Tick
   den neuesten Analyse-Slot. Ein bis zwei DWD-Requests pro 5 Minuten — der
   Grund, warum echte Nutzer selten kalt treffen. Gemessen: `/frames` 84 ms,
@@ -293,7 +320,8 @@ Jeder Request: `AbortSignal.timeout(12000)`, Größenlimit 5 MB (Stream-Abbruch)
   braucht.
 - **Client-Prefetch:** die erste Wiedergabe lädt alle Frame-URLs einmal in den
   Browser-Cache (18 × ~40 KB), damit die Animation nicht ruckelt. Ohne Play
-  wird genau ein Frame geladen.
+  wird genau ein Frame geladen. Die URLs laufen dabei durch `dataApiUrl()`
+  (Gateway-Origin), nie gegen die App-Origin.
 
 ### 4.4 Fehler-Normalisierung
 

@@ -378,29 +378,17 @@ const UPSTREAM_QUEUE_LIMIT = 12;
 /** slot -> Promise<Buffer> for renders that are already running. */
 const radarInflight = new Map();
 
-let activeRenders = 0;
-const renderQueue = [];
+const renderSlots = lib.createSemaphore(
+  UPSTREAM_CONCURRENCY,
+  UPSTREAM_QUEUE_LIMIT,
+);
 
-/** Resolves with a ticket once a render slot is free; null when the queue is full. */
 function acquireRenderSlot() {
-  if (activeRenders < UPSTREAM_CONCURRENCY) {
-    activeRenders += 1;
-    return Promise.resolve(true);
-  }
-  if (renderQueue.length >= UPSTREAM_QUEUE_LIMIT) return null;
-  return new Promise((resolve) => {
-    renderQueue.push(resolve);
-  });
+  return renderSlots.acquire();
 }
 
 function releaseRenderSlot() {
-  const next = renderQueue.shift();
-  if (next) {
-    // Hand the slot straight to the next waiter; the count stays the same.
-    next(true);
-  } else {
-    activeRenders = Math.max(0, activeRenders - 1);
-  }
+  renderSlots.release();
 }
 
 /**
