@@ -893,27 +893,34 @@ input[type="range"].hud-slider::-moz-range-thumb {
 }
 
 /* Desktop: when the panel is closed, one calm reopen button remains. */
-.hud-drawer-open {
+/* Desktop: with the drawer closed the pane switcher floats bottom-right —
+   the whole navigation stays reachable instead of hiding behind a burger. */
+.hud-desk-nav {
   position: absolute;
   right: 12px;
   bottom: calc(var(--safe-bottom) + 24px);
-  top: auto;
   z-index: var(--z-chrome);
   display: none;
-  width: 44px;
-  height: 44px;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--r-pill);
+  gap: 4px;
+  padding: 5px;
+  border-radius: 16px;
   background: var(--glass-strong);
   backdrop-filter: blur(22px) saturate(1.1);
-  color: var(--ink);
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease), transform var(--dur-press) var(--ease);
+  pointer-events: auto;
 }
-.hud-drawer-open:hover { background: var(--surf-2); }
-.hud-drawer-open:active { transform: scale(var(--press-btn)); }
-@media (min-width: 768px) { .hud-drawer-open { display: inline-flex; } }
+.hud-desk-nav .hud-panel-tab {
+  height: 40px;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+.hud-desk-nav .hud-panel-tab svg { width: 17px; height: 17px; }
+/* The floating bar is sized by its labels, not by a panel column. */
+.hud-desk-nav .hud-panel-tab { flex: 0 0 auto; min-width: 0; }
+.hud-desk-nav .hud-panel-tab .hud-tab-label { overflow: visible; text-overflow: clip; }
+@media (min-width: 768px) { .hud-desk-nav { display: flex; } }
 
 /* ────────────────────────────────────────────────────────────────────────
    Tab row — inline segmented switcher (used inside panels, no borders)
@@ -1381,7 +1388,7 @@ input[type="range"].hud-slider::-moz-range-thumb {
   pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease);
 }
-[data-navigating="true"] .hud-drawer-open { display: none; }
+[data-navigating="true"] .hud-desk-nav { display: none; }
 @media (max-width: 767px) {
   [data-navigating="true"] .hud-bottom-sheet { display: none; }
   [data-navigating="true"] .maplibregl-ctrl-bottom-left,

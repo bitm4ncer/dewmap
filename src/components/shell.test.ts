@@ -31,6 +31,15 @@ describe("shell", () => {
     expect(map).not.toContain("Map orientation");
   });
 
+  it("shows the pane switcher instead of a burger when the drawer is closed", () => {
+    expect(map).toContain("hud-desk-nav");
+    expect(map).not.toContain("hud-drawer-open");
+    expect(css).toContain(".hud-desk-nav");
+    expect(css).not.toContain(".hud-drawer-open");
+    // The floating bar is desktop-only; phones keep the bottom sheet tabs.
+    expect(css).toMatch(/@media \(min-width: 768px\) \{ \.hud-desk-nav \{ display: flex; \} \}/);
+  });
+
   it("orders the pane tabs History, Nature, Map, Routes", () => {
     const start = map.indexOf("const SIDEBAR_PANES");
     const block = map.slice(start, map.indexOf("\n];", start) + 3);

@@ -5271,29 +5271,22 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         </div>
       </div>
 
-      {/* Desktop: one calm reopen affordance when the panel is closed. */}
+      {/* Desktop: when the drawer is closed, the pane switcher itself is the
+          way back in — no hidden burger in between. */}
       {!sidebarOpen && (
-        <button
-          type="button"
-          className="hud-drawer-open"
-          onClick={() => snapTo("half")}
-          aria-label="Open panel"
-          aria-expanded={false}
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M4 6h16M4 12h16M4 18h10" />
-          </svg>
-        </button>
+        <nav className="hud-desk-nav" aria-label="Panel switcher">
+          {SIDEBAR_PANES.map((p) => (
+            <PaneToggle
+              key={p.key}
+              active={activePane === p.key}
+              label={p.label}
+              onToggle={() => selectPane(p.key)}
+              variant="panel"
+            >
+              {p.icon}
+            </PaneToggle>
+          ))}
+        </nav>
       )}
 
       {/* Sidebar — bottom-sheet on mobile, floating drawer on desktop. */}
