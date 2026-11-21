@@ -1,0 +1,102 @@
+/**
+ * The overlays this build ships: DWD rain radar and DWD weather warnings.
+ *
+ * Both are registered into the generic registry; nothing here is special-cased
+ * in the map code. A future layer (lightning, wind, river levels, …) only
+ * needs another `registerOverlay` call.
+ */
+import { dataApiUrl } from "./api";
+import { registerOverlay } from "./index";
+import { radarCoordinates } from "./radar";
+import { severityColorExpression, warningPopupHtml } from "./warnings";
+import type { OverlayDefinition } from "./types";
+
+export const RADAR_OVERLAY_ID = "weather-radar";
+export const WARNINGS_OVERLAY_ID = "weather-warnings";
+
+const DWD: OverlayDefinition["attribution"] = {
+  label: "Deutscher Wetterdienst (DWD)",
+  url: "https://www.dwd.de/DE/service/copyright/copyright_node.html",
+};
+
+export const radarOverlay: OverlayDefinition = {
+  id: RADAR_OVERLAY_ID,
+  label: "Rain radar",
+  group: "weather",
+  kind: "raster",
+  description:
+    "Radar composite RV · 1 km · 5 min · analysis plus 90 min nowcast · Germany",
+  attribution: DWD,
+  opacity: 0.72,
+  timeAware: true,
+  order: 100,
+  resolve: ({ opacity, radar }) => {
+    if (!radar) return null;
+    const frame = radar.frames[radar.index];
+    if (!frame) return null;
+    return {
+      source: {
+        type: "image",
+        url: dataApiUrl(frame.url),
+        coordinates: radarCoordinates(radar.image.bounds),
+      },
+      layers: [
+        {
+          type: "raster",
+          paint: {
+            "raster-opacity": opacity,
+            "raster-fade-duration": 0,
+            "raster-resampling": "linear",
+          },
+        },
+      ],
+    };
+  },
+};
+
+export const warningsOverlay: OverlayDefinition = {
+  id: WARNINGS_OVERLAY_ID,
+  label: "Weather warnings",
+  group: "weather",
+  kind: "geojson",
+  description:
+    "Official DWD warnings by district and municipality · severity areas",
+  attribution: DWD,
+  opacity: 1,
+  timeAware: false,
+  order: 110,
+  popup: warningPopupHtml,
+  resolve: ({ opacity, warnings }) => {
+    if (!warnings) return null;
+    return {
+      source: { type: "geojson", data: warnings },
+      layers: [
+        {
+          type: "fill",
+          paint: {
+            "fill-color": severityColorExpression(),
+            "fill-opacity": 0.18 * opacity,
+          },
+        },
+        {
+          type: "line",
+          paint: {
+            "line-color": severityColorExpression(),
+            "line-width": 1.2,
+            "line-opacity": 0.9 * opacity,
+          },
+        },
+      ],
+    };
+  },
+};
+
+let registered = false;
+
+/** Idempotent: safe on HMR and in React strict mode. */
+export function registerWeatherOverlays(): void {
+  if (registered) return;
+  registered = true;
+  registerOverlay(radarOverlay);
+  registerOverlay(warningsOverlay);
+}

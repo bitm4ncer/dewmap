@@ -13,6 +13,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".worktrees/**",
+    // VPS gateway: CommonJS, runs from /opt/dewmap-data on Node, not bundled.
+    "server/**",
   ]),
 ]);
 

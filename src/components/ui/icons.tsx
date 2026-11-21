@@ -528,3 +528,40 @@ export function ParkIcon({ size = 18, className }: IconProps) {
     </svg>
   );
 }
+
+/** Rain radar: a cloud with rain below it. */
+export function RainIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M7.5 15a4 4 0 0 1 .2-8 5 5 0 0 1 9.5 1.4A3.3 3.3 0 0 1 17 15" />
+      <path d="M8.5 17.8 7.2 20.5M12 17.8l-1.3 2.7M15.5 17.8l-1.3 2.7" />
+    </svg>
+  );
+}
+
+/** Weather warning: triangle with an exclamation mark. */
+export function WarningIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M12 3.6 21 20H3L12 3.6Z" />
+      <path d="M12 9.5v4.6" />
+      <path d="M12 17.2v.1" />
+    </svg>
+  );
+}
+
+export function PlayIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M8.5 5.5 18.5 12l-10 6.5Z" fill="currentColor" fillOpacity="0.9" />
+    </svg>
+  );
+}
+
+export function PauseIcon({ size = 18, className }: IconProps) {
+  return (
+    <svg {...base(size, className)}>
+      <path d="M9 5.5v13M15 5.5v13" />
+    </svg>
+  );
+}
