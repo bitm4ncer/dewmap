@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import { solarPosition, shadowLengthMeters } from "./sun";
 import {
+  bboxSpanM,
   isBuildingUsable,
   localFrame,
   projectFootprint,
@@ -47,6 +48,9 @@ export {
 } from "./sun";
 export {
   localFrame,
+  bboxSpanM,
+  normalizeLon,
+  lonDelta,
   shadowOffset,
   convexHull,
   projectFootprint,
@@ -112,10 +116,9 @@ export function computeShadowLayer(
 ): ShadowResult {
   const started = performance.now();
   const { bbox, mode } = request;
-  const [west, south, east, north] = bbox;
-  const centerLon = (west + east) / 2;
-  const centerLat = (south + north) / 2;
   const frame = localFrame(bbox);
+  const centerLon = frame.lon0;
+  const centerLat = frame.lat0;
   const sun = request.sun ?? solarPosition(request.time, centerLat, centerLon);
   const buildings = (request.buildings ?? []).filter(isBuildingUsable);
 
@@ -151,8 +154,9 @@ export function computeShadowLayer(
   }
 
   const resolutionM = request.resolutionM ?? 2;
-  const width = Math.max(1, Math.ceil(metricSpan(bbox, frame, "x") / resolutionM));
-  const height = Math.max(1, Math.ceil(metricSpan(bbox, frame, "y") / resolutionM));
+  const span = bboxSpanM(bbox, frame);
+  const width = Math.max(1, Math.ceil(span.x / resolutionM));
+  const height = Math.max(1, Math.ceil(span.y / resolutionM));
   const cells = width * height;
   const maxCells = options.maxCells ?? MAX_RASTER_CELLS;
   if (cells > maxCells) {
@@ -231,13 +235,6 @@ export function maxShadowLengthM(
     }
   }
   return shadowLengthMeters(maxHeight, elevationDeg);
-}
-
-function metricSpan(bbox: Bbox, frame: LocalFrame, axis: "x" | "y"): number {
-  const [west, south, east, north] = bbox;
-  const a = frame.project([west, south]);
-  const b = frame.project([east, north]);
-  return axis === "x" ? b[0] - a[0] : b[1] - a[1];
 }
 
 function resampleTerrain(

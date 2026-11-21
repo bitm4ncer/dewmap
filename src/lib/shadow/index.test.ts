@@ -6,6 +6,14 @@ import type { Bbox, BuildingFootprint } from "./types";
 const BBOX: Bbox = [6.77, 51.22, 6.7714, 51.2209];
 const frame = localFrame(BBOX);
 const TIME = new Date("2026-06-21T09:00:00Z");
+const BASE_SUN = {
+  azimuthDeg: 180,
+  elevationDeg: 45,
+  elevationGeometricDeg: 45,
+  declinationDeg: 0,
+  hourAngleDeg: 0,
+  equationOfTimeMin: 0,
+};
 
 function building(x0: number, y0: number, x1: number, y1: number, heightM: number): BuildingFootprint {
   return {
@@ -70,20 +78,43 @@ describe("computeShadowLayer", () => {
   });
 
   it("honours the terrain grid", () => {
-    const result = computeShadowLayer({
+    const bare = computeShadowLayer({
       bbox: BBOX,
       time: TIME,
       mode: "raster",
       resolutionM: 4,
       buildings: [],
+      sun: { ...BASE_SUN, azimuthDeg: 90, elevationDeg: 20, elevationGeometricDeg: 20 },
+    });
+    const withTerrain = computeShadowLayer({
+      bbox: BBOX,
+      time: TIME,
+      mode: "raster",
+      resolutionM: 4,
+      buildings: [],
+      sun: { ...BASE_SUN, azimuthDeg: 90, elevationDeg: 20, elevationGeometricDeg: 20 },
       terrain: {
         bbox: BBOX,
         width: 2,
         height: 2,
-        data: Float32Array.from([0, 200, 0, 0]),
+        // Row 0 is south: a 100 m block in the south-east quadrant.
+        data: Float32Array.from([0, 100, 0, 0]),
       },
     });
-    expect(result.mask).toBeDefined();
+    expect(bare.stats.shadowFraction).toBe(0);
+    expect(withTerrain.stats.shadowFraction).toBeGreaterThan(0.05);
+  });
+
+  it("handles a bbox that crosses the antimeridian", () => {
+    const result = computeShadowLayer({
+      bbox: [179.9, -0.001, -179.9, 0.001],
+      time: TIME,
+      mode: "raster",
+      resolutionM: 100,
+      buildings: [],
+    });
+    expect(result.mask?.width).toBeGreaterThan(150);
+    expect(result.mask?.height).toBeGreaterThanOrEqual(1);
   });
 
   it("refuses to allocate an absurd raster", () => {

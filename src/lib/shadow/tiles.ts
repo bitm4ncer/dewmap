@@ -16,7 +16,7 @@ export interface TileCoord {
   y: number;
 }
 
-/** Fractional tile coordinates. */
+/** Fractional tile coordinates. `lon = 180` yields exactly `x = 2^z`; wrap it. */
 export function lonLatToTile(lon: number, lat: number, z: number): { x: number; y: number } {
   const n = 2 ** z;
   const clampedLat = Math.max(-WEB_MERCATOR_MAX_LAT, Math.min(WEB_MERCATOR_MAX_LAT, lat));
@@ -40,19 +40,37 @@ export function tileResolutionM(z: number, lat: number, tileSize = 256): number 
   return (EARTH_CIRCUMFERENCE_M * Math.cos((lat * Math.PI) / 180)) / (tileSize * 2 ** z);
 }
 
+/**
+ * All XYZ tiles covering a bbox.
+ *
+ * `west > east` means the bbox crosses the antimeridian; it is split into
+ * two ranges that wrap around x. Latitudes are clamped to the Web Mercator
+ * limit, and x is taken modulo the zoom's tile count, so no tile index falls
+ * outside `[0, 2^z)`.
+ */
 export function tilesForBbox(bbox: Bbox, z: number): TileCoord[] {
   const [west, south, east, north] = bbox;
+  const n = 2 ** z;
   const topLeft = lonLatToTile(west, north, z);
   const bottomRight = lonLatToTile(east, south, z);
   const x0 = Math.floor(topLeft.x);
-  const x1 = Math.floor(bottomRight.x);
-  const y0 = Math.floor(topLeft.y);
-  const y1 = Math.floor(bottomRight.y);
+  let x1 = Math.floor(bottomRight.x);
+  const crossing = east < west;
+  if (crossing) {
+    // Crossing: the eastern end is numerically smaller; walk forward.
+    x1 += n;
+  } else {
+    // lon = 180 yields x = n; the bbox ends on the last tile, not on tile 0.
+    x1 = Math.min(x1, n - 1);
+  }
+  if (x1 < x0) return [];
+  const y0 = Math.max(0, Math.floor(topLeft.y));
+  const y1 = Math.min(n - 1, Math.floor(bottomRight.y));
   const tiles: TileCoord[] = [];
-  const n = 2 ** z;
   for (let x = x0; x <= x1; x++) {
+    const wrapped = ((x % n) + n) % n;
     for (let y = y0; y <= y1; y++) {
-      tiles.push({ z, x: ((x % n) + n) % n, y });
+      tiles.push({ z, x: wrapped, y });
     }
   }
   return tiles;

@@ -51,7 +51,7 @@ Sonne: NOAA/Meeus, validiert gegen NREL SPA (siehe Design-Dokument, 8,4″).
 | Auflösung | Zellen | 13:00 (61,4°) | 09:00 (31,3°) | 19:00 (23,4°) |
 |---|---:|---:|---:|---:|
 | 1 m | 4.000.000 | 2,2 s | 5,4 s | 7,3 s |
-| 4 m | 250.000 | 0,12 s | 0,32 s | 0,42 s |
+| 4 m Ausgabe, 1-m-Schritte | 250.000 | 0,12 s | 0,32 s | 0,42 s |
 
 Die Zeit hängt fast linear an `Höhe / tan(Elevation)`: bei 61° sind es 35
 Schritte, bei 23° 147 Schritte (bei 2 m Schrittweite).
@@ -135,8 +135,11 @@ Die POC-Skripte lagen unter `/tmp/opencode/shadow/` (nicht im Repo, weil sie
 curl -s https://www.opengeodata.nrw.de/produkte/geobasis/hm/dgm1_tiff/dgm1_tiff/ -o dgm1.jsonl
 
 # 2. Kacheln für das Fenster herunterladen (Beispiel Düsseldorf)
+# Das Jahr steht im Verzeichnis, nicht im Muster:
+# Düsseldorf 2022, Siebengebirge 2021. Namen aus dgm1.jsonl ableiten.
 for x in 343 344 345; do for y in 5676 5677 5678; do
-  curl -O "https://www.opengeodata.nrw.de/produkte/geobasis/hm/dgm1_tiff/dgm1_tiff/dgm1_32_${x}_${y}_1_nw_2022.tif"
+  name=$(node -e "const m=require('./tile-map.json');console.log(m['${x}_${y}'])")
+  curl -O "https://www.opengeodata.nrw.de/produkte/geobasis/hm/dgm1_tiff/dgm1_tiff/$name"
 done; done
 
 # 3. Gebäude

@@ -66,12 +66,38 @@ describe("tilesForBbox", () => {
     const tiles = tilesForBbox([6.7, 51.1, 6.9, 51.3], 12);
     expect(tiles.length).toBeGreaterThan(1);
   });
+
+  it("covers both sides of the antimeridian", () => {
+    const tiles = tilesForBbox([179.9, -1, -179.9, 1], 5);
+    // Two rows of latitude, two tile columns at the seam.
+    expect(tiles).toHaveLength(4);
+    expect([...new Set(tiles.map((t) => t.x))].sort((a, b) => a - b)).toEqual([0, 31]);
+    expect(tiles.every((t) => t.x >= 0 && t.x < 32)).toBe(true);
+  });
+
+  it("does not repeat the first column on a world bbox", () => {
+    const tiles = tilesForBbox([-180, -85, 180, 85], 2);
+    // 4 columns x 4 rows, not 5 columns.
+    expect(tiles).toHaveLength(16);
+    expect([...new Set(tiles.map((t) => t.x))].sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("documents that lon 180 yields x = n and must be wrapped", () => {
+    expect(lonLatToTile(180, 0, 2).x).toBe(4);
+  });
 });
 
 describe("resolutionForZoom", () => {
   it("gets finer with zoom", () => {
     const values = [14, 15, 16.5, 18].map((z) => resolutionForZoom(z, 51.2));
     expect(values).toEqual([...values].sort((a, b) => b - a));
+  });
+
+  it("matches the documented steps at mid-latitude", () => {
+    expect(resolutionForZoom(14, 51.2)).toBe(8);
+    expect(resolutionForZoom(15, 51.2)).toBe(4);
+    expect(resolutionForZoom(16, 51.2)).toBe(2);
+    expect(resolutionForZoom(17, 51.2)).toBe(1);
   });
 
   it("uses 1 m at street zoom", () => {

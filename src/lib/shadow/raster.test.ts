@@ -129,6 +129,38 @@ describe("castShadowMask", () => {
     });
     expect(shadowFraction(mask)).toBe(0);
   });
+
+  it("keeps the shadow length when stepM differs from the cell size", () => {
+    // 20 m wall, sun 30 deg -> 34.64 m shadow. A step in metres must stay a
+    // step in metres; the bug was a step of one cell regardless of stepM.
+    const wallDsm = flatGrid(width, height);
+    for (let row = 0; row < height; row++) {
+      for (let col = 48; col <= 52; col++) wallDsm[row * width + col] = 20;
+    }
+    const lengths = [0.5, 1, 2].map((stepM) => {
+      const mask = castShadowMask(wallDsm, {
+        width,
+        height,
+        resolutionM: 1,
+        stepM,
+        sun: { azimuthDeg: 90, elevationDeg: 30 },
+      });
+      let firstShadow = -1;
+      for (let col = 0; col < 48; col++) {
+        if (mask[50 * width + col]) {
+          firstShadow = col;
+          break;
+        }
+      }
+      return 48 - firstShadow;
+    });
+    for (const length of lengths) {
+      expect(length).toBeGreaterThanOrEqual(33);
+      expect(length).toBeLessThanOrEqual(36);
+    }
+    // Every step size must agree with the others, not scale with 1 / stepM.
+    expect(Math.abs(lengths[2] - lengths[1])).toBeLessThanOrEqual(1);
+  });
 });
 
 describe("combineHeights", () => {

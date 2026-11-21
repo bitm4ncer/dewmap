@@ -11,6 +11,19 @@ import { shadowLengthMeters } from "./sun";
 const RAD = Math.PI / 180;
 const EARTH_RADIUS_M = 6_371_008.8;
 
+/** Web Mercator's latitude limit; frames and tiles are only valid inside it. */
+export const MAX_FRAME_LAT = 85.05112878;
+
+/** Wrap a longitude into [-180, 180). */
+export function normalizeLon(lon: number): number {
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
+}
+
+/** Shortest signed difference `to - from`, in (-180, 180]. */
+export function lonDelta(from: number, to: number): number {
+  return (((to - from + 540) % 360) + 360) % 360 - 180;
+}
+
 export interface LocalFrame {
   lon0: number;
   lat0: number;
@@ -22,10 +35,21 @@ export interface LocalFrame {
   unproject(point: [number, number]): LngLat;
 }
 
+/**
+ * Planar frame around a bbox.
+ *
+ * The frame is exact at its centre and drifts by `tan(lat0) * dLat` across
+ * the box: 0.02 % per km at 51 deg, i.e. ~0.4 m over 2 km and ~500 m over
+ * 50 km. It is meant for viewports of a few kilometres, not for countries.
+ * Longitudes are handled modulo 360, so a bbox that crosses the antimeridian
+ * works; latitudes are clamped to the Web Mercator limit.
+ */
 export function localFrame(bbox: Bbox): LocalFrame {
   const [west, south, east, north] = bbox;
-  const lon0 = (west + east) / 2;
-  const lat0 = (south + north) / 2;
+  const crosses = east < west;
+  const span = crosses ? east + 360 - west : east - west;
+  const lon0 = normalizeLon(west + span / 2);
+  const lat0 = clamp((south + north) / 2, -MAX_FRAME_LAT, MAX_FRAME_LAT);
   const mPerDegLat = EARTH_RADIUS_M * RAD;
   const mPerDegLon = mPerDegLat * Math.cos(lat0 * RAD);
   return {
@@ -33,8 +57,26 @@ export function localFrame(bbox: Bbox): LocalFrame {
     lat0,
     mPerDegLon,
     mPerDegLat,
-    project: ([lon, lat]) => [(lon - lon0) * mPerDegLon, (lat - lat0) * mPerDegLat],
-    unproject: ([x, y]) => [lon0 + x / mPerDegLon, lat0 + y / mPerDegLat],
+    project: ([lon, lat]) => [lonDelta(lon0, lon) * mPerDegLon, (lat - lat0) * mPerDegLat],
+    unproject: ([x, y]) => [normalizeLon(lon0 + x / mPerDegLon), lat0 + y / mPerDegLat],
+  };
+}
+
+/**
+ * Metric size of a bbox. Refuses boxes wider than 180 degrees: at that point
+ * the planar frame is no longer a meaningful approximation.
+ */
+export function bboxSpanM(bbox: Bbox, frame: LocalFrame): { x: number; y: number } {
+  const [west, south, east, north] = bbox;
+  const spanLon = east < west ? east + 360 - west : east - west;
+  if (spanLon > 180) {
+    throw new RangeError(
+      `shadow bbox spans ${spanLon.toFixed(1)} degrees of longitude; the planar frame supports at most 180`,
+    );
+  }
+  return {
+    x: spanLon * frame.mPerDegLon,
+    y: (north - south) * frame.mPerDegLat,
   };
 }
 
@@ -190,15 +232,20 @@ export function ringBbox(ring: LngLat[]): Bbox {
 /** Bbox with a margin in metres, clamped to valid lon/lat. */
 export function expandBboxM(bbox: Bbox, marginM: number): Bbox {
   const [west, south, east, north] = bbox;
-  const lat0 = (south + north) / 2;
+  const lat0 = clamp((south + north) / 2, -MAX_FRAME_LAT, MAX_FRAME_LAT);
   const dLat = marginM / (EARTH_RADIUS_M * RAD);
   const dLon = dLat / Math.max(1e-6, Math.cos(lat0 * RAD));
-  return [
-    Math.max(-180, west - dLon),
-    Math.max(-90, south - dLat),
-    Math.min(180, east + dLon),
-    Math.min(90, north + dLat),
-  ];
+  const crosses = east < west;
+  let w = west - dLon;
+  let e = east + dLon;
+  if (crosses) {
+    w = normalizeLon(w);
+    e = normalizeLon(e);
+  } else {
+    w = Math.max(-180, w);
+    e = Math.min(180, e);
+  }
+  return [w, Math.max(-90, south - dLat), e, Math.min(90, north + dLat)];
 }
 
 /** Heights used for a building, following the documented fallback chain. */
@@ -241,4 +288,8 @@ export function isBuildingUsable(building: BuildingFootprint): boolean {
     Number.isFinite(building.heightM) &&
     building.heightM > 0
   );
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

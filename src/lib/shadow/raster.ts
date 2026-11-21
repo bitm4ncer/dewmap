@@ -7,9 +7,10 @@
  * polygons, no union and no z-buffer. Cost is O(cells x steps).
  *
  * Measured on one Node process (AMD/Intel desktop, no WASM), 2 x 2 km:
- *   1 m, 4.0 M cells: 1.8 s (sun 61 deg) to 7.3 s (sun 23 deg)
- *   2 m, 1.0 M cells: 0.5 s to 1.9 s
+ *   1 m, 4.0 M cells: 2.2 s (sun 61 deg) to 7.3 s (sun 23 deg)
  *   4 m, 0.25 M cells: 0.12 s to 0.42 s
+ * The 2 m step (1.0 M cells) was only measured in the browser worker:
+ * 0.23 s to 0.89 s.
  * A 4 GB VPS has no GPU; a phone is roughly 3-5x slower per core, which is
  * why the layer picks resolution by zoom instead of always using 1 m.
  */
@@ -97,7 +98,14 @@ export interface CastShadowOptions {
   height: number;
   resolutionM: number;
   sun: Pick<SolarPosition, "azimuthDeg" | "elevationDeg">;
-  /** March step in metres. Defaults to `resolutionM`. */
+  /**
+   * March step in metres. Defaults to `resolutionM`.
+   *
+   * The step is a real distance: the ray advances `stepM` metres per
+   * iteration, independent of the cell size. Values above `resolutionM` skip
+   * cells and can miss thin occluders; values below it cost time without
+   * adding accuracy. Keep it at or below `resolutionM`.
+   */
   stepM?: number;
   /** Clamp for the search distance. Defaults to 1500 m. */
   maxDistanceM?: number;
@@ -127,7 +135,6 @@ export function castShadowMask(dsm: Float32Array, options: CastShadowOptions): U
     maxHeight / tanEl + 2 * stepM,
   );
   const steps = Math.max(1, Math.floor(maxDistance / stepM));
-  const invStep = 1 / stepM;
   const mask = new Uint8Array(width * height);
 
   for (let row = 0; row < height; row++) {
@@ -136,9 +143,10 @@ export function castShadowMask(dsm: Float32Array, options: CastShadowOptions): U
       const z0 = dsm[index];
       let hit = false;
       for (let s = 1; s <= steps; s++) {
+        // `distance` is in metres; the cell offset is metres / metres-per-cell.
         const distance = s * stepM;
-        const sx = Math.floor(col + ux * distance * invStep);
-        const sy = Math.floor(row + uy * distance * invStep);
+        const sx = Math.floor(col + (ux * distance) / resolutionM);
+        const sy = Math.floor(row + (uy * distance) / resolutionM);
         if (sx < 0 || sy < 0 || sx >= width || sy >= height) break;
         if (dsm[sy * width + sx] > z0 + distance * tanEl + 0.35) {
           hit = true;

@@ -7,12 +7,13 @@
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { ShadowResult } from "./types";
+import { shadowAttribution } from "./attribution";
 
 export const SHADOW_SOURCE_ID = "shadow-cast-src";
 export const SHADOW_LAYER_ID = "shadow-cast";
 export const SHADOW_RASTER_SOURCE_ID = "shadow-raster-src";
 export const SHADOW_RASTER_LAYER_ID = "shadow-raster";
-/** Below this zoom the raster mask is sub-pixel at 4 m and not worth a fetch. */
+/** Below this zoom the raster mask is sub-pixel at 8 m and not worth a fetch. */
 export const SHADOW_MIN_ZOOM = 14;
 
 export const SHADOW_FILL_COLOR = "#0b1a33";
@@ -22,6 +23,8 @@ export interface ShadowLayerOptions {
   color?: string;
   /** Insert the layer below this layer id. */
   beforeId?: string;
+  /** Defaults to `SHADOW_MIN_ZOOM`. */
+  minzoom?: number;
 }
 
 const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
@@ -46,7 +49,7 @@ export function applyShadowLayer(
         id: SHADOW_LAYER_ID,
         type: "fill",
         source: SHADOW_SOURCE_ID,
-        minzoom: SHADOW_MIN_ZOOM,
+        minzoom: options.minzoom ?? SHADOW_MIN_ZOOM,
         paint: {
           "fill-color": options.color ?? SHADOW_FILL_COLOR,
           "fill-opacity": options.opacity ?? 0.45,
@@ -85,18 +88,23 @@ export interface ShadowRasterOptions extends ShadowLayerOptions {
   /** XYZ template, e.g. `https://tiles.example/shadow/{z}/{x}/{y}.png`. */
   tiles: string[];
   tileSize?: number;
+  /** Keys into `SHADOW_SOURCES`; drives the attribution line. */
+  sourceIds?: string[];
 }
 
 /** Add a precomputed shadow raster (server tiles) instead of polygons. */
 export function applyShadowRaster(map: MapLibreMap, options: ShadowRasterOptions): void {
+  const attribution =
+    options.sourceIds && options.sourceIds.length > 0
+      ? shadowAttribution(options.sourceIds)
+      : shadowAttribution(["nrwDgm1"]);
   const source = map.getSource(SHADOW_RASTER_SOURCE_ID);
   if (!source) {
     map.addSource(SHADOW_RASTER_SOURCE_ID, {
       type: "raster",
       tiles: options.tiles,
       tileSize: options.tileSize ?? 512,
-      attribution:
-        'Shadow: <a href="https://www.govdata.de/dl-de/zero-2-0" target="_blank" rel="noreferrer">Geobasis NRW DGM1/DOM1 (dl-de/zero-2-0)</a>',
+      attribution,
     });
   }
   if (!map.getLayer(SHADOW_RASTER_LAYER_ID)) {
@@ -105,7 +113,7 @@ export function applyShadowRaster(map: MapLibreMap, options: ShadowRasterOptions
         id: SHADOW_RASTER_LAYER_ID,
         type: "raster",
         source: SHADOW_RASTER_SOURCE_ID,
-        minzoom: SHADOW_MIN_ZOOM,
+        minzoom: options.minzoom ?? SHADOW_MIN_ZOOM,
         paint: {
           "raster-opacity": options.opacity ?? 0.55,
           "raster-fade-duration": 0,

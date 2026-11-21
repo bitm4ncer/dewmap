@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   bboxAround,
+  bboxSpanM,
   buildingHeightFromTags,
   convexHull,
   expandBboxM,
   localFrame,
+  MAX_FRAME_LAT,
   polygonAreaM2,
   projectFootprint,
   ringBbox,
@@ -174,5 +176,38 @@ describe("bbox helpers", () => {
 
   it("returns the ring bounds", () => {
     expect(ringBbox([[6.77, 51.22], [6.78, 51.23]])).toEqual([6.77, 51.22, 6.78, 51.23]);
+  });
+});
+
+describe("global bounds", () => {
+  it("round-trips a point across the antimeridian", () => {
+    const frame = localFrame([179.9, -1, -179.9, 1]);
+    const point: LngLat = [179.95, 0.5];
+    const back = frame.unproject(frame.project(point));
+    expect(back[0]).toBeCloseTo(point[0], 6);
+    expect(back[1]).toBeCloseTo(point[1], 6);
+  });
+
+  it("measures a crossing bbox the short way round", () => {
+    const box: Bbox = [179.9, -1, -179.9, 1];
+    const span = bboxSpanM(box, localFrame(box));
+    expect(span.x).toBeGreaterThan(20_000);
+    expect(span.x).toBeLessThan(25_000);
+  });
+
+  it("clamps the frame latitude to the Web Mercator limit", () => {
+    const polar = localFrame([0, 89, 1, 90]);
+    expect(polar.lat0).toBe(MAX_FRAME_LAT);
+    expect(Number.isFinite(polar.mPerDegLon)).toBe(true);
+  });
+
+  it("refuses a bbox wider than 180 degrees", () => {
+    const world: Bbox = [-180, -85, 180, 85];
+    expect(() => bboxSpanM(world, localFrame(world))).toThrow(RangeError);
+  });
+
+  it("keeps a crossing bbox crossing when expanded", () => {
+    const expanded = expandBboxM([179.9, -1, -179.9, 1], 1000);
+    expect(expanded[2]).toBeLessThan(expanded[0]);
   });
 });
