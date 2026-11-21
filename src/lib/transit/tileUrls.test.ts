@@ -12,7 +12,7 @@ describe("transit tile URLs", () => {
       `pmtiles://${TRANSIT_TILES_BASE}/${TRANSIT_LINES_FILE}`,
     );
     expect(transitTileUrl(TRANSIT_STOPS_FILE)).toContain(
-      "/tiles/transit-stops-v2.pmtiles",
+      `/tiles/${TRANSIT_STOPS_FILE}`,
     );
   });
 });
