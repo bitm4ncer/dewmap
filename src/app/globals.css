@@ -1278,6 +1278,17 @@ input[type="range"].hud-slider::-moz-range-thumb {
   border-bottom-color: var(--glass-strong);
 }
 
+/* The tip rotates with the anchor; keep every side in the theme colour. */
+.hud-popup .maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: var(--glass-strong);
+}
+.hud-popup .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--glass-strong);
+}
+.hud-popup .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--glass-strong);
+}
+
 .hud-popup .maplibregl-popup-close-button {
   color: var(--ink-dim);
   padding: 4px 8px;

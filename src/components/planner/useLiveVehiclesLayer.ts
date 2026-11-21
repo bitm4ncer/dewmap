@@ -141,13 +141,13 @@ function popupHtml(properties: Record<string, unknown>): string {
     iso ? formatClock(iso, undefined, tz || undefined) : "";
   return `<div style="max-width:240px;font:12px/1.45 system-ui,sans-serif">
     <strong>${escapeHtml(properties.line)}</strong>
-    <span style="color:#666"> · ${escapeHtml(properties.mode)}</span>
+    <span style="color:var(--ink-mute)"> · ${escapeHtml(properties.mode)}</span>
     <div style="margin-top:3px">${escapeHtml(properties.from)} → ${escapeHtml(properties.to)}</div>
-    <div style="color:#666">${time(departure, fromTz)} – ${time(arrival, toTz)}</div>
-    <div style="margin-top:3px;color:${delay > 0 ? "#9a5a00" : "#2f6b3f"}">
+    <div style="color:var(--ink-mute)">${time(departure, fromTz)} – ${time(arrival, toTz)}</div>
+    <div style="margin-top:3px;color:${delay > 0 ? "var(--warn)" : "var(--accent)"}">
       ${live ? "Live" : "Timetable"}${delay > 0 ? ` · +${delay} min` : ""}
     </div>
-    <div style="margin-top:3px;color:#888">Position interpolated between stops.</div>
+    <div style="margin-top:3px;color:var(--ink-mute)">Position interpolated between stops.</div>
   </div>`;
 }
 
@@ -257,7 +257,7 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
     };
 
     const openVehiclePopup = (feature: MapGeoJSONFeature) => {
-      new Popup({ offset: 12, closeButton: true })
+      new Popup({ className: "hud-popup", offset: 12, closeButton: true })
         .setLngLat(
           (feature.geometry as GeoJSON.Point).coordinates as [number, number],
         )

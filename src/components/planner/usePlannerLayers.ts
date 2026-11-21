@@ -285,7 +285,7 @@ function popupHtml(properties: Record<string, unknown>): string {
   }
   return `<div style="max-width:230px;font:12px/1.4 system-ui,sans-serif">
     <strong>${escapeHtml(properties.name)}</strong>
-    <div style="color:#666">${roleLabel}${line ? ` · ${escapeHtml(line)}` : ""}</div>
+    <div style="color:var(--ink-mute)">${roleLabel}${line ? ` · ${escapeHtml(line)}` : ""}</div>
     ${platform ? `<div>Platform ${escapeHtml(platform)}</div>` : ""}
     ${timeLabel ? `<div>${escapeHtml(timeLabel)}</div>` : ""}
   </div>`;
@@ -589,7 +589,7 @@ export function usePlannerLayers(map: MLMap | null, mode: "car" | "transit" | nu
       }
     };
 
-    const openStopPopup = (feature: MapGeoJSONFeature) => {      new Popup({ offset: 10, closeButton: true })
+    const openStopPopup = (feature: MapGeoJSONFeature) => {      new Popup({ className: "hud-popup", offset: 10, closeButton: true })
         .setLngLat(
           (feature.geometry as GeoJSON.Point).coordinates as [number, number],
         )
