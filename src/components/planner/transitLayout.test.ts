@@ -43,6 +43,29 @@ describe("transit panel layout", () => {
     expect(src).toContain('className="ui-input ui-input-date"');
   });
 
+  it("keeps live vehicles outside Route options and always visible", () => {
+    const bar = readFileSync(
+      new URL("./LiveTransitBar.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(bar).toContain('role="switch"');
+    expect(bar).toContain("aria-checked={liveVehicles}");
+    expect(bar).toContain("Disruptions");
+    expect(bar).toContain("Vehicles in view");
+    // The old buried toggle is gone, the bar is a sibling of the collapsible
+    // form/summary rather than a child of "Route options".
+    expect(src).not.toContain('label="Live vehicles"');
+    // Expanded: the bar sits directly under the header, above When/Filters/
+    // Route options. Collapsed: it follows the summary line.
+    const barIndex = src.indexOf("<LiveTransitBar />");
+    expect(barIndex).toBeGreaterThan(src.indexOf("Train &amp; local transit"));
+    expect(barIndex).toBeLessThan(src.indexOf(">Route options<"));
+    expect(src).toContain("{!showForm && <LiveTransitBar />}");
+    expect(src.indexOf("transit-summary")).toBeLessThan(
+      src.indexOf("{!showForm && <LiveTransitBar />}"),
+    );
+  });
+
   it("does not pin the journey actions while scrolling", () => {
     expect(journeyDetail).not.toContain("sticky");
   });

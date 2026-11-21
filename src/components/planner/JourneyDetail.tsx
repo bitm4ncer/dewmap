@@ -5,8 +5,12 @@ import { formatClock, formatDayOffset, formatDistance, formatDuration } from "@/
 import { WalkIcon } from "@/components/ui/icons";
 import type { RoutePlan, TransitStopRef } from "@/lib/routing";
 import {
+  alertSeverityLabel,
+  alertSeverityTone,
   allowsBikes,
+  formatAlertPeriod,
   isAccessibleJourney,
+  journeyAlerts,
   delayIntensity,
   isLiveJourney,
   journeyDelayMinutes,
@@ -58,6 +62,7 @@ export function JourneyDetail({
   const cancelled = transit.legs.some((leg) => leg.cancelled);
   const live = isLiveJourney(journey);
   const walk = walkTotals(journey);
+  const alerts = journeyAlerts(journey);
   const warnings = transferWarnings(transit.legs);
   const firstLeg = transit.legs[0];
   const lastLeg = transit.legs[transit.legs.length - 1];
@@ -116,6 +121,50 @@ export function JourneyDetail({
           </span>
         )}
       </div>
+
+      {alerts.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-[10px] bg-[color:var(--surf-2)] p-2">
+          <span className="ui-kicker">
+            Service alerts · {alerts.length}
+          </span>
+          {alerts.map((alert) => {
+            const severity = alertSeverityLabel(alert.severity);
+            return (
+              <div key={alert.id} className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-1">
+                  {severity && (
+                    <span
+                      className="ui-badge"
+                      data-tone={alertSeverityTone(alert.severity)}
+                    >
+                      {severity}
+                    </span>
+                  )}
+                  {alert.lines.map((line) => (
+                    <span key={line} className="ui-badge">
+                      {line}
+                    </span>
+                  ))}
+                  <span className="text-[10.5px] text-[color:var(--ink-mute)]">
+                    {formatAlertPeriod(alert)}
+                  </span>
+                </div>
+                <span className="text-[11.5px] font-semibold text-[color:var(--ink)]">
+                  {alert.header}
+                </span>
+                {alert.description && (
+                  <details className="text-[11px] text-[color:var(--ink-dim)]">
+                    <summary className="cursor-pointer text-[color:var(--ink-mute)]">
+                      Details
+                    </summary>
+                    <p className="mt-1 whitespace-pre-line">{alert.description}</p>
+                  </details>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {needsReservation(journey) && (
         <p className="text-[10.5px] leading-relaxed text-[color:var(--ink-mute)]">

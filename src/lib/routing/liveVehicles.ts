@@ -27,12 +27,37 @@ const ACTIVE_GRACE_MS = 2 * 60_000;
 const LOOKBACK_MS = 2 * 60_000;
 const LOOKAHEAD_MS = 10 * 60_000;
 
+/** Below this zoom the map window is too large for a useful vehicle feed. */
+export const LIVE_MIN_ZOOM = 8;
+/** Freshness beats battery: positions are interpolated, 30 s keeps them live. */
+export const LIVE_POLL_MS = 30_000;
+/** Upper bound per frame; circle layers stay cheap well above this. */
+export const MAX_LIVE_VEHICLES = 1_200;
+
+export type LiveVehicleSource = "interpolated" | "gps";
+export type LiveVehiclePhase = "moving" | "dwell";
+export type LiveModeGroup =
+  | "RAIL"
+  | "BUS"
+  | "TRAM"
+  | "SUBWAY"
+  | "FERRY"
+  | "OTHER";
+
+export interface LiveVehicleStop {
+  id?: string;
+  name: string;
+  lat: number;
+  lon: number;
+}
+
 export interface LiveVehicle {
   id: string;
   tripId: string;
   line: string;
   mode: string;
   modeLabel: string;
+  modeGroup: LiveModeGroup;
   /** Hex colour with a leading `#`. */
   color: string;
   textColor: string;
@@ -41,6 +66,11 @@ export interface LiveVehicle {
   bearing: number;
   delayMin: number;
   realTime: boolean;
+  /** How the position was obtained; a future server feed reports "gps". */
+  source: LiveVehicleSource;
+  /** Dwell means the vehicle is at `from` or `to` within the grace window. */
+  phase: LiveVehiclePhase;
+  stops: { from: LiveVehicleStop; to: LiveVehicleStop };
   fromName: string;
   toName: string;
   fromTz?: string;
@@ -85,6 +115,61 @@ const MODE_LABELS: Record<string, string> = {
 export function liveModeLabel(mode: string | undefined): string {
   if (!mode) return "Transit";
   return MODE_LABELS[mode.toUpperCase()] ?? mode.replaceAll("_", " ").toLowerCase();
+}
+
+/** Coarse grouping used by filters, the legend and the map layers. */
+export function liveModeGroup(mode: string | undefined): LiveModeGroup {
+  switch ((mode ?? "").toUpperCase()) {
+    case "HIGHSPEED_RAIL":
+    case "LONG_DISTANCE":
+    case "REGIONAL_RAIL":
+    case "REGIONAL_EXPRESS":
+    case "SUBURBAN":
+    case "NIGHT_RAIL":
+      return "RAIL";
+    case "BUS":
+    case "COACH":
+      return "BUS";
+    case "TRAM":
+    case "LIGHT_RAIL":
+      return "TRAM";
+    case "METRO":
+    case "SUBWAY":
+      return "SUBWAY";
+    case "FERRY":
+      return "FERRY";
+    default:
+      return "OTHER";
+  }
+}
+
+/** Empty `groups` means "all". Unknown groups are ignored. */
+export function filterLiveVehicles(
+  vehicles: readonly LiveVehicle[],
+  groups: readonly string[],
+): LiveVehicle[] {
+  if (groups.length === 0) return [...vehicles];
+  const wanted = new Set(groups);
+  return vehicles.filter((vehicle) => wanted.has(vehicle.modeGroup));
+}
+
+/**
+ * Combine a future GPS feed with the interpolated feed.
+ *
+ * One position per `tripId`: a GPS fix always wins, everything else keeps the
+ * interpolated value. The UI does not care which source produced a vehicle.
+ */
+export function mergeVehiclePositions(
+  interpolated: readonly LiveVehicle[],
+  gps: readonly LiveVehicle[],
+): LiveVehicle[] {
+  const byTrip = new Map<string, LiveVehicle>();
+  for (const vehicle of interpolated) byTrip.set(vehicle.tripId, vehicle);
+  for (const vehicle of gps) {
+    if (vehicle.source !== "gps") continue;
+    byTrip.set(vehicle.tripId, vehicle);
+  }
+  return [...byTrip.values()];
 }
 
 /** Normalize a provider colour (`00aa00`, `#0a0`, ...) to `#rrggbb`. */
@@ -156,6 +241,19 @@ function pointAtFraction(
   };
 }
 
+function liveStop(
+  value: Record<string, unknown> | undefined,
+  fallback: { lat: number; lon: number },
+): LiveVehicleStop {
+  const stopId = readString(value, "parentId") ?? readString(value, "stopId");
+  return {
+    ...(stopId ? { id: stopId } : {}),
+    name: readString(value, "name") ?? "Unknown stop",
+    lat: readNumber(value, "lat") ?? fallback.lat,
+    lon: readNumber(value, "lon") ?? fallback.lon,
+  };
+}
+
 interface Candidate {
   vehicle: LiveVehicle;
   /** Distance of `now` from the middle of this segment; lower wins. */
@@ -213,6 +311,8 @@ export function normalizeLiveVehicles(
       ?? tripId;
     const routeColor = readString(value, "routeColor");
     const routeTextColor = readString(value, "routeTextColor");
+    const fromStop = liveStop(from, point);
+    const toStop = liveStop(to, point);
 
     const vehicle: LiveVehicle = {
       id: `${tripId}:${departure}`,
@@ -220,6 +320,7 @@ export function normalizeLiveVehicles(
       line,
       mode,
       modeLabel: liveModeLabel(mode),
+      modeGroup: liveModeGroup(mode),
       color: vehicleColor(mode, routeColor),
       textColor: textColorFor(mode, routeTextColor),
       lat: point.lat,
@@ -227,6 +328,9 @@ export function normalizeLiveVehicles(
       bearing: point.bearing,
       delayMin: Math.max(departureDelay, arrivalDelay),
       realTime: readBoolean(value, "realTime") ?? false,
+      source: "interpolated",
+      phase: nowMs < dep || nowMs > arr ? "dwell" : "moving",
+      stops: { from: fromStop, to: toStop },
       fromName,
       toName,
       ...(readString(from, "tz") ? { fromTz: readString(from, "tz") } : {}),
@@ -248,6 +352,93 @@ export function normalizeLiveVehicles(
   }
 
   return [...byTrip.values()].map((candidate) => candidate.vehicle);
+}
+
+/** Stops worth asking for alerts, ordered rail-first. */
+export interface AlertStopCandidate {
+  /** Parent station id where available; MOTIS resolves children too. */
+  stopId: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** Higher wins when more than `max` candidates are available. */
+  priority?: number;
+}
+
+export interface AlertBounds {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+const MODE_PRIORITY: Record<LiveModeGroup, number> = {
+  RAIL: 6,
+  SUBWAY: 5,
+  TRAM: 4,
+  FERRY: 3,
+  BUS: 2,
+  OTHER: 1,
+};
+
+export function liveModePriority(group: LiveModeGroup): number {
+  return MODE_PRIORITY[group] ?? 0;
+}
+
+/**
+ * Stops worth asking for alerts: rail first, deduplicated by parent id and
+ * restricted to the current view. A vehicle heading to Heidelberg must not
+ * make Heidelberg one of the sampled stops while the map shows Frankfurt.
+ */
+export function alertStopCandidates(
+  vehicles: readonly LiveVehicle[],
+  bounds: AlertBounds,
+  max = 3,
+): AlertStopCandidate[] {
+  const byId = new Map<
+    string,
+    { candidate: AlertStopCandidate; count: number }
+  >();
+  for (const vehicle of vehicles) {
+    for (const stop of [vehicle.stops.from, vehicle.stops.to]) {
+      if (!stop.id) continue;
+      if (
+        stop.lat < bounds.south
+        || stop.lat > bounds.north
+        || stop.lon < bounds.west
+        || stop.lon > bounds.east
+      ) {
+        continue;
+      }
+      const priority = liveModePriority(vehicle.modeGroup);
+      const existing = byId.get(stop.id);
+      if (!existing) {
+        byId.set(stop.id, {
+          candidate: {
+            stopId: stop.id,
+            name: stop.name,
+            lat: stop.lat,
+            lon: stop.lon,
+            priority,
+          },
+          count: 1,
+        });
+        continue;
+      }
+      existing.count += 1;
+      if (priority > (existing.candidate.priority ?? 0)) {
+        existing.candidate.priority = priority;
+      }
+    }
+  }
+  return [...byId.values()]
+    .sort(
+      (a, b) =>
+        (b.candidate.priority ?? 0) - (a.candidate.priority ?? 0)
+        || b.count - a.count,
+    )
+    .slice(0, max)
+    .map((entry) => entry.candidate);
 }
 
 /** Fetch and interpolate active vehicles for a map window. */

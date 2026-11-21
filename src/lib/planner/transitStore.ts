@@ -2,7 +2,12 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { RoutePlan } from "../routing";
+import type {
+  LiveModeGroup,
+  LiveVehicle,
+  RoutePlan,
+  TransitAlert,
+} from "../routing";
 import type { PlannerPhase } from "./carStore";
 import { bestJourneyId, type JourneySort } from "./transitFormat";
 import { migrateLegacyStorage } from "../legacyStorage";
@@ -41,11 +46,25 @@ interface TransitState {
   accessible: boolean;
   bike: boolean;
   autoRefresh: boolean;
-  /** Show real-time vehicle positions on the map. */
+  /** Derived: true unless the user explicitly opted out. */
   liveVehicles: boolean;
+  /** Explicit opt-out. Persisted; the only durable "off" signal. */
+  liveVehiclesOptOut: boolean;
+  /** Mode groups to show; empty means all. */
+  liveVehicleGroups: LiveModeGroup[];
   liveVehicleCount: number;
   liveVehiclesUpdatedAt: number | null;
   liveVehiclesError: string | null;
+  /** True while the view is below `LIVE_MIN_ZOOM`. */
+  liveVehiclesZoomLow: boolean;
+  /** Latest normalized vehicles (not persisted). */
+  liveVehicleData: LiveVehicle[];
+  /** Alerts near the current view (not persisted). */
+  liveAlerts: TransitAlert[];
+  liveAlertsUpdatedAt: number | null;
+  liveAlertsError: string | null;
+  /** Lines highlighted on the map because the selected journey has alerts. */
+  liveAlertLines: string[];
   journeys: RoutePlan[];
   selectedId: string | null;
   phase: PlannerPhase;
@@ -85,8 +104,17 @@ interface TransitState {
   setBike: (v: boolean) => void;
   setAutoRefresh: (v: boolean) => void;
   setLiveVehicles: (v: boolean) => void;
-  setLiveVehicleStatus: (count: number, updatedAt: number | null) => void;
+  setLiveVehicleGroups: (groups: string[]) => void;
+  setLiveVehicleStatus: (
+    count: number,
+    updatedAt: number | null,
+    options?: { zoomLow?: boolean },
+  ) => void;
   setLiveVehiclesError: (message: string | null) => void;
+  setLiveVehiclesData: (vehicles: LiveVehicle[]) => void;
+  setLiveAlerts: (alerts: TransitAlert[], updatedAt: number | null) => void;
+  setLiveAlertsError: (message: string | null) => void;
+  setLiveAlertLines: (lines: string[]) => void;
   setJourneys: (j: RoutePlan[], meta?: TransitPageMeta) => void;
   selectJourney: (id: string | null) => void;
   setPhase: (p: PlannerPhase) => void;
@@ -111,6 +139,26 @@ const defaultWhen = nowLocalInput;
 function clamp(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+const LIVE_GROUPS: readonly LiveModeGroup[] = [
+  "RAIL",
+  "BUS",
+  "TRAM",
+  "SUBWAY",
+  "FERRY",
+  "OTHER",
+];
+
+function validLiveGroups(value: unknown): LiveModeGroup[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter((group): group is LiveModeGroup =>
+        LIVE_GROUPS.includes(group as LiveModeGroup),
+      ),
+    ),
+  ];
 }
 
 function placeKey(place: TransitPlace): string {
@@ -163,10 +211,19 @@ const initialState = {
   accessible: false,
   bike: false,
   autoRefresh: false,
-  liveVehicles: false,
+  /* On by default: live vehicles must be visible without hunting for them. */
+  liveVehicles: true,
+  liveVehiclesOptOut: false,
+  liveVehicleGroups: [] as LiveModeGroup[],
   liveVehicleCount: 0,
   liveVehiclesUpdatedAt: null as number | null,
   liveVehiclesError: null as string | null,
+  liveVehiclesZoomLow: false,
+  liveVehicleData: [] as LiveVehicle[],
+  liveAlerts: [] as TransitAlert[],
+  liveAlertsUpdatedAt: null as number | null,
+  liveAlertsError: null as string | null,
+  liveAlertLines: [] as string[],
   journeys: [] as RoutePlan[],
   selectedId: null,
   phase: { kind: "idle" } as PlannerPhase,
@@ -330,14 +387,36 @@ export const useTransit = create<TransitState>()(
       setBike: (bike) => set((s) => ({ bike, ...invalidate(s) })),
       setAutoRefresh: (autoRefresh) => set({ autoRefresh }),
       setLiveVehicles: (liveVehicles) =>
-        set({ liveVehicles, liveVehiclesError: null }),
-      setLiveVehicleStatus: (count, updatedAt) =>
+        set({
+          liveVehicles,
+          liveVehiclesOptOut: !liveVehicles,
+          liveVehiclesError: null,
+          ...(liveVehicles ? {} : { liveVehicleData: [] as LiveVehicle[] }),
+        }),
+      setLiveVehicleGroups: (groups) =>
+        set({ liveVehicleGroups: validLiveGroups(groups) }),
+      setLiveVehicleStatus: (count, updatedAt, options) =>
         set({
           liveVehicleCount: Math.max(0, Math.round(count)),
           liveVehiclesUpdatedAt: updatedAt,
+          liveVehiclesZoomLow: options?.zoomLow ?? false,
         }),
       setLiveVehiclesError: (liveVehiclesError) =>
         set({ liveVehiclesError }),
+      setLiveVehiclesData: (vehicles) =>
+        set({
+          liveVehicleData: vehicles,
+          liveVehicleCount: vehicles.length,
+        }),
+      setLiveAlerts: (alerts, updatedAt) =>
+        set({
+          liveAlerts: alerts,
+          liveAlertsUpdatedAt: updatedAt,
+          liveAlertsError: null,
+        }),
+      setLiveAlertsError: (liveAlertsError) => set({ liveAlertsError }),
+      setLiveAlertLines: (lines) =>
+        set({ liveAlertLines: [...new Set(lines.filter(Boolean))] }),
       setJourneys: (journeys, meta) =>
         set((s) => {
           const keep =
@@ -385,11 +464,14 @@ export const useTransit = create<TransitState>()(
           ...initialState,
           favorites: s.favorites,
           recents: s.recents,
+          liveVehicles: s.liveVehicles,
+          liveVehiclesOptOut: s.liveVehiclesOptOut,
+          liveVehicleGroups: s.liveVehicleGroups,
         })),
     }),
     {
       name: "dewmap:transit",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         from: s.from,
@@ -405,10 +487,18 @@ export const useTransit = create<TransitState>()(
         accessible: s.accessible,
         bike: s.bike,
         autoRefresh: s.autoRefresh,
-        liveVehicles: s.liveVehicles,
+        liveVehiclesOptOut: s.liveVehiclesOptOut,
+        liveVehicleGroups: s.liveVehicleGroups,
         favorites: s.favorites,
         recents: s.recents,
       }),
+      /**
+       * v2 persisted a bare `liveVehicles` boolean that defaulted to false and
+       * had no interaction marker, so an old false cannot be told apart from
+       * "never touched". Keep the stored state and let `merge` apply the new
+       * default (on); explicit opt-outs are recorded from v3 onwards.
+       */
+      migrate: (persisted) => persisted as Partial<TransitState>,
       merge: (persisted, current) => {
         const p = (
           typeof persisted === "object" && persisted !== null ? persisted : {}
@@ -448,12 +538,20 @@ export const useTransit = create<TransitState>()(
           autoRefresh:
             typeof p.autoRefresh === "boolean" ? p.autoRefresh : current.autoRefresh,
           liveVehicles:
-            typeof p.liveVehicles === "boolean"
-              ? p.liveVehicles
-              : current.liveVehicles,
+            typeof p.liveVehiclesOptOut === "boolean"
+              ? !p.liveVehiclesOptOut
+              : true,
+          liveVehiclesOptOut: p.liveVehiclesOptOut === true,
+          liveVehicleGroups: validLiveGroups(p.liveVehicleGroups),
           liveVehicleCount: 0,
           liveVehiclesUpdatedAt: null,
           liveVehiclesError: null,
+          liveVehiclesZoomLow: false,
+          liveVehicleData: [],
+          liveAlerts: [],
+          liveAlertsUpdatedAt: null,
+          liveAlertsError: null,
+          liveAlertLines: [],
           favorites: validPlaces(p.favorites, 12),
           recents: validPlaces(p.recents, 8),
           journeys: [],

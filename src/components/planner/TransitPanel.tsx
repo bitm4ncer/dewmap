@@ -16,6 +16,7 @@ import {
 import { PlacePicker, type PickedPlace } from "./PlacePicker";
 import { JourneyCard } from "./JourneyCard";
 import { JourneyDetail } from "./JourneyDetail";
+import { LiveTransitBar } from "./LiveTransitBar";
 import { useNavigation } from "@/lib/navigation/store";
 import { haptic } from "@/lib/haptics";
 import { ChevronDownIcon, SwapIcon } from "@/components/ui/icons";
@@ -25,7 +26,9 @@ import {
   buildIcs,
   buildShareUrl,
   describeTransitError,
+  alertLines,
   filterJourneys,
+  journeyAlerts,
   journeyTimeZone,
   parseShareParams,
   sortJourneys,
@@ -93,10 +96,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const accessible = useTransit((s) => s.accessible);
   const bike = useTransit((s) => s.bike);
   const autoRefresh = useTransit((s) => s.autoRefresh);
-  const liveVehicles = useTransit((s) => s.liveVehicles);
-  const liveVehicleCount = useTransit((s) => s.liveVehicleCount);
-  const liveVehiclesUpdatedAt = useTransit((s) => s.liveVehiclesUpdatedAt);
-  const liveVehiclesError = useTransit((s) => s.liveVehiclesError);
   const journeys = useTransit((s) => s.journeys);
   const selectedId = useTransit((s) => s.selectedId);
   const phase = useTransit((s) => s.phase);
@@ -134,7 +133,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   const setAccessible = useTransit((s) => s.setAccessible);
   const setBike = useTransit((s) => s.setBike);
   const setAutoRefresh = useTransit((s) => s.setAutoRefresh);
-  const setLiveVehicles = useTransit((s) => s.setLiveVehicles);
   const setJourneys = useTransit((s) => s.setJourneys);
   const selectJourney = useTransit((s) => s.selectJourney);
   const setPhase = useTransit((s) => s.setPhase);
@@ -179,6 +177,16 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     ?? visibleJourneys.find((j) => j.id === bestId)
     ?? visibleJourneys[0]
     ?? null;
+  const routeAlerts = useMemo(
+    () => (journey ? journeyAlerts(journey) : []),
+    [journey],
+  );
+  // The vehicle layer highlights vehicles whose line appears in an alert of
+  // the selected connection. Area alerts carry no line information, so they
+  // mark their stops instead.
+  useEffect(() => {
+    useTransit.getState().setLiveAlertLines(alertLines(routeAlerts));
+  }, [routeAlerts]);
   const detailRef = useRef<HTMLDivElement>(null);
   // The form folds into a one-line summary once both ends are known, so the
   // route sits directly under it instead of below a tall input block.
@@ -777,6 +785,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           </div>
         </HudPanel>
 
+        <LiveTransitBar />
+
         <HudPanel>
           <div className="ui-section">
             <span className="ui-kicker">When</span>
@@ -1041,27 +1051,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
                     </div>
                   )}
                 </div>
-                <OptionToggle
-                  label="Live vehicles"
-                  description="Show real-time vehicles in the current map view."
-                  checked={liveVehicles}
-                  onChange={setLiveVehicles}
-                />
-                {liveVehicles && (
-                  <p className="text-[11px] text-[color:var(--ink-dim)]" aria-live="polite">
-                    {liveVehiclesError
-                      ? liveVehiclesError
-                      : liveVehicleCount > 0
-                        ? `${liveVehicleCount} vehicle${liveVehicleCount === 1 ? "" : "s"} in view`
-                        : "No vehicles in view; pan or zoom in."}
-                    {liveVehiclesUpdatedAt && !liveVehiclesError
-                      ? ` · updated ${new Date(liveVehiclesUpdatedAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}`
-                      : ""}
-                  </p>
-                )}
               </>
             )}
           </div>
@@ -1103,6 +1092,8 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           </button>
         </HudPanel>
       )}
+
+      {!showForm && <LiveTransitBar />}
 
       {phase.kind === "routing" && journeys.length === 0 && (
         <p className="px-1 text-[12px] text-[color:var(--ink-dim)]">

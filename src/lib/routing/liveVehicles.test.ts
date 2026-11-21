@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  alertStopCandidates,
   fetchLiveVehicles,
+  filterLiveVehicles,
+  liveModeGroup,
+  mergeVehiclePositions,
   normalizeLiveVehicles,
   type LiveVehicleQuery,
 } from "./liveVehicles";
@@ -156,5 +160,164 @@ describe("fetchLiveVehicles", () => {
     expect(url.searchParams.get("endTime")).toBe(
       "2026-11-18T10:21:00.000Z",
     );
+  });
+});
+
+describe("live vehicle model", () => {
+  const now = Date.parse("2026-11-18T10:11:00Z");
+
+  it("records the source, phase, mode group and stop ids", () => {
+    const [vehicle] = normalizeLiveVehicles(
+      [
+        {
+          ...SEGMENT,
+          from: { ...SEGMENT.from, stopId: "child-1", parentId: "parent-1" },
+        },
+      ],
+      now,
+    );
+    expect(vehicle.source).toBe("interpolated");
+    expect(vehicle.phase).toBe("moving");
+    expect(vehicle.modeGroup).toBe("RAIL");
+    expect(vehicle.stops.from.id).toBe("parent-1");
+    expect(vehicle.stops.from.name).toBe("Heidelberg Hbf");
+    expect(vehicle.stops.to.id).toBeUndefined();
+  });
+
+  it("dwells at the origin inside the grace window before departure", () => {
+    const [vehicle] = normalizeLiveVehicles(
+      [SEGMENT],
+      Date.parse("2026-11-18T10:05:00Z"),
+    );
+    expect(vehicle.phase).toBe("dwell");
+    expect(vehicle.lat).toBeCloseTo(49, 5);
+    expect(vehicle.lon).toBeCloseTo(8, 5);
+  });
+
+  it("dwells at the destination after arrival", () => {
+    const [vehicle] = normalizeLiveVehicles(
+      [SEGMENT],
+      Date.parse("2026-11-18T10:17:00Z"),
+    );
+    expect(vehicle.phase).toBe("dwell");
+    expect(vehicle.lat).toBeCloseTo(49.1, 5);
+  });
+});
+
+describe("live mode helpers", () => {
+  it("groups provider modes into filter buckets", () => {
+    expect(liveModeGroup("HIGHSPEED_RAIL")).toBe("RAIL");
+    expect(liveModeGroup("NIGHT_RAIL")).toBe("RAIL");
+    expect(liveModeGroup("COACH")).toBe("BUS");
+    expect(liveModeGroup("LIGHT_RAIL")).toBe("TRAM");
+    expect(liveModeGroup("METRO")).toBe("SUBWAY");
+    expect(liveModeGroup("FERRY")).toBe("FERRY");
+    expect(liveModeGroup(undefined)).toBe("OTHER");
+  });
+
+  it("filters by group and keeps everything when no group is selected", () => {
+    const [rail] = normalizeLiveVehicles(
+      [SEGMENT],
+      Date.parse("2026-11-18T10:11:00Z"),
+    );
+    const [ferry] = normalizeLiveVehicles(
+      [{ ...SEGMENT, mode: "FERRY", trips: [{ tripId: "ferry-1", displayName: "62" }] }],
+      Date.parse("2026-11-18T10:11:00Z"),
+    );
+    expect(filterLiveVehicles([rail, ferry], [])).toHaveLength(2);
+    expect(filterLiveVehicles([rail, ferry], ["FERRY"])).toEqual([ferry]);
+  });
+
+  it("prefers a GPS position for the same trip", () => {
+    const [interpolated] = normalizeLiveVehicles(
+      [SEGMENT],
+      Date.parse("2026-11-18T10:11:00Z"),
+    );
+    const gps = {
+      ...interpolated,
+      source: "gps" as const,
+      lat: 49.06,
+      lon: 8.06,
+    };
+    const extra = { ...interpolated, id: "other", tripId: "trip-2" };
+    const merged = mergeVehiclePositions([interpolated, extra], [gps]);
+    expect(merged).toHaveLength(2);
+    expect(merged.find((vehicle) => vehicle.tripId === "trip-1")?.source).toBe("gps");
+    expect(merged.find((vehicle) => vehicle.tripId === "trip-1")?.lat).toBe(49.06);
+    expect(merged.find((vehicle) => vehicle.tripId === "trip-2")?.source).toBe(
+      "interpolated",
+    );
+  });
+});
+
+describe("alert stop candidates", () => {
+  const bounds = { south: 50, west: 8, north: 50.2, east: 8.8 };
+
+  function vehicleWithStops(
+    base: ReturnType<typeof normalizeLiveVehicles>[number],
+    id: string,
+    group: "RAIL" | "BUS",
+    from: { id: string; name: string; lat: number; lon: number },
+    to: { id: string; name: string; lat: number; lon: number },
+  ) {
+    return {
+      ...base,
+      id,
+      tripId: id,
+      modeGroup: group,
+      stops: { from, to },
+    };
+  }
+
+  it("keeps only stops inside the view and prefers rail", () => {
+    const [base] = normalizeLiveVehicles(
+      [SEGMENT],
+      Date.parse("2026-11-18T10:11:00Z"),
+    );
+    const rail = vehicleWithStops(
+      base,
+      "rail",
+      "RAIL",
+      { id: "hbf", name: "Hbf", lat: 50.1, lon: 8.6 },
+      { id: "far", name: "Far", lat: 49, lon: 9 },
+    );
+    const bus = vehicleWithStops(
+      base,
+      "bus",
+      "BUS",
+      { id: "busstop", name: "Busstop", lat: 50.11, lon: 8.61 },
+      { id: "busstop2", name: "Busstop 2", lat: 50.12, lon: 8.62 },
+    );
+    const candidates = alertStopCandidates([bus, rail], bounds, 3);
+    expect(candidates.map((entry) => entry.stopId)).toEqual([
+      "hbf",
+      "busstop",
+      "busstop2",
+    ]);
+    expect(candidates.some((entry) => entry.stopId === "far")).toBe(false);
+  });
+
+  it("caps the candidates and deduplicates parent stops", () => {
+    const [base] = normalizeLiveVehicles(
+      [SEGMENT],
+      Date.parse("2026-11-18T10:11:00Z"),
+    );
+    const one = vehicleWithStops(
+      base,
+      "one",
+      "RAIL",
+      { id: "hbf", name: "Hbf", lat: 50.1, lon: 8.6 },
+      { id: "hbf", name: "Hbf", lat: 50.1, lon: 8.6 },
+    );
+    const two = vehicleWithStops(
+      base,
+      "two",
+      "RAIL",
+      { id: "sued", name: "Süd", lat: 50.09, lon: 8.62 },
+      { id: "west", name: "West", lat: 50.1, lon: 8.63 },
+    );
+    const candidates = alertStopCandidates([one, two], bounds, 2);
+    expect(candidates).toHaveLength(2);
+    expect(candidates[0].stopId).toBe("hbf");
   });
 });

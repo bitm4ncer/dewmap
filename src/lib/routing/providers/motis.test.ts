@@ -273,6 +273,68 @@ describe("normalizeMotisItinerary", () => {
     expect(plan.transit?.legs[0].rawMode).toBe("ODM");
   });
 
+  it("attaches normalized alerts to the affected leg and its line", () => {
+    const plan = normalizeMotisItinerary({
+      id: "alert-1",
+      legs: [
+        {
+          mode: "SUBWAY",
+          from: { name: "A", lat: 50.1, lon: 8.6, tz: "Europe/Berlin" },
+          to: { name: "B", lat: 50.11, lon: 8.61, tz: "Europe/Berlin" },
+          startTime: "2026-11-21T10:00:00Z",
+          endTime: "2026-11-21T10:10:00Z",
+          routeShortName: "U3",
+          alerts: [
+            {
+              headerText: "U3: Umleitung",
+              descriptionText: "<b>Grund:</b><br>Bauarbeiten",
+              severityLevel: "SEVERE",
+              impactPeriod: [
+                {
+                  start: "2026-11-21T03:00:00Z",
+                  end: "2026-11-22T03:00:00Z",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const alerts = plan.transit?.legs[0].alerts ?? [];
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].header).toBe("U3: Umleitung");
+    expect(alerts[0].description).toBe("Grund:\nBauarbeiten");
+    expect(alerts[0].severity).toBe("SEVERE");
+    expect(alerts[0].lines).toEqual(["U3"]);
+    expect(alerts[0].source).toBe("route");
+    expect(alerts[0].startsAt).toBe("2026-11-21T03:00:00Z");
+  });
+
+  it("keeps alerts from a leg's stop when the leg has none", () => {
+    const plan = normalizeMotisItinerary({
+      id: "alert-2",
+      legs: [
+        {
+          mode: "TRAM",
+          from: {
+            name: "A",
+            lat: 50.1,
+            lon: 8.6,
+            alerts: [{ headerText: "Haltestelle verlegt" }],
+          },
+          to: { name: "B", lat: 50.11, lon: 8.61 },
+          startTime: "2026-11-21T10:00:00Z",
+          endTime: "2026-11-21T10:10:00Z",
+          routeShortName: "12",
+        },
+      ],
+    });
+    const alerts = plan.transit?.legs[0].alerts ?? [];
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].header).toBe("Haltestelle verlegt");
+    expect(alerts[0].lines).toEqual(["12"]);
+  });
+
   it("rejects itineraries without legs", () => {
     expect(() => normalizeMotisItinerary({ legs: [] })).toThrow(ProviderError);
   });

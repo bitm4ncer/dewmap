@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 import { delayIntensity, transferSeverity } from "./transitFormat";
 import { ProviderError, type RoutePlan, type TransitLeg } from "../routing";
 import {
+  alertLines,
+  alertSeverityLabel,
+  alertSeverityTone,
   bestJourneyId,
   buildIcs,
   buildShareUrl,
   describeTransitError,
   filterJourneys,
+  formatAlertPeriod,
   isLiveJourney,
+  journeyAlerts,
   journeyDelayMinutes,
   journeyTimeZone,
   legDelayMinutes,
@@ -382,5 +387,71 @@ describe("delay and transfer urgency", () => {
     expect(transferSeverity(1)).toBe("critical");
     expect(transferSeverity(-1)).toBe("critical");
     expect(transferSeverity(null)).toBe("none");
+  });
+});
+
+describe("service alerts", () => {
+  function alert(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "a1",
+      header: "Bauarbeiten",
+      severity: "WARNING" as const,
+      lines: ["S1"],
+      stops: [],
+      source: "route" as const,
+      ...overrides,
+    };
+  }
+
+  it("collects and dedupes alerts from every leg", () => {
+    const plan: RoutePlan = {
+      id: "j1",
+      mode: "transit",
+      provider: "motis",
+      distanceKm: 1,
+      durationMin: 10,
+      coordinates: [],
+      maneuvers: [],
+      transit: {
+        departure: "2026-11-21T10:00:00Z",
+        arrival: "2026-11-21T10:10:00Z",
+        durationMin: 10,
+        transfers: 0,
+        legs: [
+          leg({ alerts: [alert({ id: "a1", lines: ["S1"] })] }),
+          leg({ alerts: [alert({ id: "a1", lines: ["S1"] }), alert({ id: "a2", lines: ["U3"] })] }),
+        ],
+      },
+    };
+    expect(journeyAlerts(plan).map((entry) => entry.id)).toEqual(["a1", "a2"]);
+    expect(alertLines(journeyAlerts(plan))).toEqual(["S1", "U3"]);
+  });
+
+  it("maps severity to tones without inflating unknown alerts", () => {
+    expect(alertSeverityTone("SEVERE")).toBe("danger");
+    expect(alertSeverityTone("WARNING")).toBe("warn");
+    expect(alertSeverityTone("INFO")).toBe("info");
+    expect(alertSeverityTone("UNKNOWN_SEVERITY")).toBeUndefined();
+    expect(alertSeverityLabel("UNKNOWN_SEVERITY")).toBe("");
+  });
+
+  it("formats the alert period, including open ends", () => {
+    expect(
+      formatAlertPeriod(
+        {
+          startsAt: "2026-11-21T04:00:00Z",
+          endsAt: "2026-11-22T04:00:00Z",
+        },
+        "en-GB",
+        "UTC",
+      ),
+    ).toBe("21 Nov, 04:00 – 22 Nov, 04:00");
+    expect(formatAlertPeriod({ startsAt: "2026-11-21T04:00:00Z" }, "en-GB", "UTC")).toBe(
+      "from 21 Nov, 04:00",
+    );
+    expect(formatAlertPeriod({ endsAt: "2026-11-21T04:00:00Z" }, "en-GB", "UTC")).toBe(
+      "until 21 Nov, 04:00",
+    );
+    expect(formatAlertPeriod({}, "en-GB", "UTC")).toBe("Active");
   });
 });
