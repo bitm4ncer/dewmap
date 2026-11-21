@@ -2,6 +2,9 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { migrateLegacyStorage } from "../legacyStorage";
+
+migrateLegacyStorage();
 
 /**
  * Home, work and manually saved places, shared by every route planner.
