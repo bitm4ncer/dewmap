@@ -206,6 +206,8 @@ import {
 import { useHikingLayers } from "./hiking/useHikingLayers";
 import { usePlannerLayers } from "./planner/usePlannerLayers";
 import { useLiveVehiclesLayer } from "./planner/useLiveVehiclesLayer";
+import { useOverlayLayers } from "./hud/useOverlayLayers";
+import { useWeatherOverlayData } from "@/lib/overlays/useWeatherData";
 import { useNavigationEngine } from "@/lib/navigation/useNavigation";
 import { useNavigation } from "@/lib/navigation/store";
 import { NavigationOverlay } from "./navigation/NavigationOverlay";
@@ -2352,6 +2354,8 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     routesMode === "car" ? "car" : routesMode === "transit" ? "transit" : null,
   );
   useLiveVehiclesLayer(mapInstance);
+  useOverlayLayers(mapInstance);
+  useWeatherOverlayData();
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
 

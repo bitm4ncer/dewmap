@@ -1,7 +1,7 @@
 {
   "name": "dewmap",
   "version": "0.3.0",
-  "description": "Maps, trains and the real world — a client-side navigation and exploration app.",
+  "description": "Maps, trains and the real world \u2014 a client-side navigation and exploration app.",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,12 +9,13 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:server",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:scripts": "node --test scripts/history/*.test.mjs",
     "history:build": "node scripts/history/build-all.mjs",
-    "check:no-emoji": "node scripts/check-no-emoji.mjs"
+    "check:no-emoji": "node scripts/check-no-emoji.mjs",
+    "test:server": "node --test server/dewmap-data/lib.test.js"
   },
   "dependencies": {
     "@mapbox/vector-tile": "^2.0.4",

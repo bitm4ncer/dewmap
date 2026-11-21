@@ -36,6 +36,14 @@ export const THEME = {
   narrowGauge: "#9DB0A8",
   landmarkWikidata: "#C08FA3",
   landmarkOsm: "#7FB3C4",
+  // DWD warning severities: 1 Vorabinformation, 2 Wetterwarnung,
+  // 3 markante Wetterwarnung, 4 Unwetterwarnung. 1/3/4 reuse the info, warn
+  // and danger tokens; level 2 gets its own yellow so the three severity
+  // steps stay distinguishable on a dark basemap.
+  warningLevel1: "#8FBCDE",
+  warningLevel2: "#E3C25E",
+  warningLevel3: "#D8A25F",
+  warningLevel4: "#DE8A7E",
   // Fixed route endpoint roles: start stays red, destination stays green.
   start: "#E4574A",
   end: "#6FCB96",
