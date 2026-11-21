@@ -363,9 +363,12 @@ async function radarFrame(slot) {
     });
   }
   noteUpstream("radar", started, null);
-  radarMemory.set(slot, result.buffer);
-  await safeWrite(RADAR_DIR, lib.radarCacheName(slot), result.buffer);
-  return { buffer: result.buffer, cache: "miss", upstreamMs: Date.now() - started };
+  // Drop DWD's translucent "no data" wash and the magenta coverage ring; the
+  // overlay should paint precipitation only.
+  const stripped = lib.stripNoDataPng(result.buffer);
+  radarMemory.set(slot, stripped);
+  await safeWrite(RADAR_DIR, lib.radarCacheName(slot), stripped);
+  return { buffer: stripped, cache: "miss", upstreamMs: Date.now() - started };
 }
 
 let framesCache = { at: 0, payload: null };
@@ -387,6 +390,8 @@ function framesPayload(nowMs) {
  * (i.e. every 5 minutes) turns a 1–7 s GeoServer render into a disk read for
  * every real visitor.
  */
+let warming = false;
+
 async function warmRadar() {
   if (!radarWanted) return;
   const nowMs = Date.now();
@@ -406,8 +411,9 @@ async function warmRadar() {
     try {
       const result = await fetchBuffer(lib.radarFrameUrl(slot, { baseUrl: WMS_ENDPOINT }));
       if (lib.isPng(result.contentType, result.buffer)) {
-        radarMemory.set(slot, result.buffer);
-        await safeWrite(RADAR_DIR, lib.radarCacheName(slot), result.buffer);
+        const stripped = lib.stripNoDataPng(result.buffer);
+        radarMemory.set(slot, stripped);
+        await safeWrite(RADAR_DIR, lib.radarCacheName(slot), stripped);
         noteUpstream("radar", started, null);
         log("warmed radar", slot, `${Date.now() - started}ms`);
       } else {
@@ -570,6 +576,17 @@ async function handleRadarFrames(req, res, nowMs) {
     cacheControl: "public, max-age=60",
     extra: { "Access-Control-Allow-Origin": "*" },
   });
+  // Someone wants the radar: start warming right away instead of waiting for
+  // the next minute tick. GeoServer renders take seconds, so warming early is
+  // the difference between "blank map" and "instant" for the next visitor.
+  if (!warming) {
+    warming = true;
+    warmRadar()
+      .catch(() => {})
+      .finally(() => {
+        warming = false;
+      });
+  }
 }
 
 async function handleRadarFrame(req, res, slot, nowMs) {

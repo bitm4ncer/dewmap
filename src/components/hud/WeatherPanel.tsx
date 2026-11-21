@@ -9,7 +9,7 @@ import { LayerCard } from "./LayerCard";
 import { PauseIcon, PlayIcon, RainIcon, WarningIcon } from "../ui/icons";
 import { RADAR_GRADIENT, formatClock, frameHint } from "@/lib/overlays/radar";
 import { RADAR_OVERLAY_ID, WARNINGS_OVERLAY_ID } from "@/lib/overlays/definitions";
-import { useOverlays } from "@/lib/overlays/store";
+import { latestAnalysisIndex, useOverlays } from "@/lib/overlays/store";
 import {
   severityColor,
   severityCounts,
@@ -58,6 +58,9 @@ function RadarControls() {
   const frame = list[Math.min(index, list.length - 1)];
   if (!frame) return null;
   const last = list.length - 1;
+  const nowPct = last
+    ? (latestAnalysisIndex(frames) / last) * 100
+    : 0;
 
   return (
     <div className="flex flex-col gap-1">
@@ -98,10 +101,15 @@ function RadarControls() {
           />
         </div>
       </div>
-      <div className="flex justify-between px-1 text-[10.5px] text-[color:var(--ink-mute)]">
-        <span>-60 Min</span>
-        <span>Jetzt</span>
-        <span>+90 Min</span>
+      <div className="relative h-3 text-[10.5px] text-[color:var(--ink-mute)]">
+        <span className="absolute left-0">-60 Min</span>
+        <span
+          className="absolute -translate-x-1/2"
+          style={{ left: `${nowPct}%` }}
+        >
+          Jetzt
+        </span>
+        <span className="absolute right-0">+90 Min</span>
       </div>
     </div>
   );

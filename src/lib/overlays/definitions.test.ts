@@ -78,15 +78,23 @@ describe("warnings overlay", () => {
     expect(JSON.stringify(resolved?.layers[0].paint)).toContain(THEME.warningLevel4);
   });
 
-  it("scales the fill and line opacity with the overlay opacity", () => {
+  it("scales severity fill and outline, and follows the opacity", () => {
     const areas = { type: "FeatureCollection" as const, features: [] };
-    const dim = warningsOverlay.resolve({
+    const resolved = warningsOverlay.resolve({
       opacity: 0.5,
       radar: null,
       warnings: areas,
     });
-    expect(dim?.layers[0].paint?.["fill-opacity"]).toBeCloseTo(0.09);
-    expect(dim?.layers[1].paint?.["line-opacity"]).toBeCloseTo(0.45);
+    const fill = resolved?.layers[0].paint?.["fill-opacity"] as unknown[];
+    expect(fill[0]).toBe("match");
+    // level 4 branch: 0.26 * 0.5, level 3: 0.16 * 0.5, fallback: 0.08 * 0.5
+    expect(fill[3]).toBeCloseTo(0.13);
+    expect(fill[5]).toBeCloseTo(0.08);
+    expect(fill[6]).toBeCloseTo(0.04);
+    const line = resolved?.layers[1].paint?.["line-width"] as unknown[];
+    expect(line[0]).toBe("match");
+    expect(line[3]).toBeGreaterThan(line[5] as number);
+    expect(resolved?.layers[1].paint?.["line-opacity"]).toBeCloseTo(0.45);
   });
 
   it("offers a popup for tapped areas", () => {

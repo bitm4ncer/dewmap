@@ -387,6 +387,195 @@ function frameEtag(slot) {
   return `"radar-${slot}"`;
 }
 
+/* ------------------------------------------------------------------- png */
+
+/**
+ * DWD renders two things we do not want over a basemap: a 30 %-alpha grey
+ * wash for "no echo / no data" across the whole radar coverage, and a
+ * magenta outline around the composite's edge. Both are style artefacts of
+ * the GeoServer layer, not weather. We strip exactly those pixels and keep
+ * everything else byte-for-byte.
+ *
+ * Implemented on node:zlib only: 8-bit non-interlaced RGB/RGBA PNGs are
+ * decoded, filtered and re-encoded. Anything else is returned untouched, so
+ * a format change upstream degrades to the old behaviour instead of breaking
+ * the overlay.
+ */
+
+const zlib = require("node:zlib");
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buffer.length; i += 1) {
+    c = CRC_TABLE[(c ^ buffer[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function readPngChunks(buffer) {
+  const chunks = [];
+  let offset = 8;
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.toString("ascii", offset + 4, offset + 8);
+    const data = buffer.subarray(offset + 8, offset + 8 + length);
+    chunks.push({ type, data });
+    offset += 12 + length;
+    if (type === "IEND") break;
+  }
+  return chunks;
+}
+
+function pngChunk(type, data) {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, "ascii");
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, "ascii"), data])), 0);
+  return Buffer.concat([head, data, crc]);
+}
+
+function paeth(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  return pb <= pc ? b : c;
+}
+
+/** Near-neutral mid-grey: DWD's "no echo / no data" tone. */
+function isNoDataGrey(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max - min <= 12 && max > 100 && max < 160;
+}
+
+/** Grey wash: the no-data tone, painted translucent so the map shows through. */
+function isNoDataWash(r, g, b, a) {
+  if (a === 0 || a > 200) return false;
+  return isNoDataGrey(r, g, b);
+}
+
+/**
+ * Coverage outline: magenta and its anti-aliased blends. The radar classes
+ * never land here — the closest ones (#e5004c, #cc0098, #6600cb) have either
+ * a low blue channel or a large red/blue split.
+ */
+function isCoverageRing(r, g, b, a) {
+  if (a === 0 || g >= 115) return false;
+  return r > 150 && b > 120 && Math.abs(r - b) < 45;
+}
+
+function stripNoDataPng(buffer) {
+  if (!isPng("", buffer)) return buffer;
+  let chunks;
+  try {
+    chunks = readPngChunks(buffer);
+  } catch {
+    return buffer;
+  }
+  const ihdr = chunks.find((c) => c.type === "IHDR");
+  if (!ihdr || ihdr.data.length < 13) return buffer;
+  const width = ihdr.data.readUInt32BE(0);
+  const height = ihdr.data.readUInt32BE(4);
+  const bitDepth = ihdr.data[8];
+  const colorType = ihdr.data[9];
+  const interlace = ihdr.data[12];
+  if (bitDepth !== 8 || interlace !== 0) return buffer;
+  if (colorType !== 6 && colorType !== 2) return buffer;
+  if (width === 0 || height === 0 || width * height > 40_000_000) return buffer;
+
+  const bpp = colorType === 6 ? 4 : 3;
+  const stride = width * bpp;
+  let inflated;
+  try {
+    inflated = zlib.inflateSync(
+      Buffer.concat(chunks.filter((c) => c.type === "IDAT").map((c) => c.data)),
+    );
+  } catch {
+    return buffer;
+  }
+  if (inflated.length < height * (stride + 1)) return buffer;
+
+  const out = Buffer.alloc(height * (stride + 1));
+  let previous = Buffer.alloc(stride);
+  let changed = false;
+  for (let y = 0; y < height; y += 1) {
+    const filter = inflated[y * (stride + 1)];
+    const rowIn = inflated.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    const row = Buffer.alloc(stride);
+    for (let x = 0; x < stride; x += 1) {
+      const a = x >= bpp ? row[x - bpp] : 0;
+      const b = previous[x];
+      const c = x >= bpp ? previous[x - bpp] : 0;
+      let value;
+      switch (filter) {
+        case 0:
+          value = rowIn[x];
+          break;
+        case 1:
+          value = rowIn[x] + a;
+          break;
+        case 2:
+          value = rowIn[x] + b;
+          break;
+        case 3:
+          value = rowIn[x] + ((a + b) >> 1);
+          break;
+        case 4:
+          value = rowIn[x] + paeth(a, b, c);
+          break;
+        default:
+          return buffer;
+      }
+      row[x] = value & 0xff;
+    }
+    for (let x = 0; x < width; x += 1) {
+      const i = x * bpp;
+      const r = row[i];
+      const g = row[i + 1];
+      const b = row[i + 2];
+      const alpha = bpp === 4 ? row[i + 3] : 255;
+      const noData =
+        bpp === 4 ? isNoDataWash(r, g, b, alpha) : isNoDataGrey(r, g, b);
+      if (noData || isCoverageRing(r, g, b, alpha)) {
+        if (bpp === 4) row[i + 3] = 0;
+        else {
+          row[i] = 0;
+          row[i + 1] = 0;
+          row[i + 2] = 0;
+        }
+        changed = true;
+      }
+    }
+    out[y * (stride + 1)] = 0;
+    row.copy(out, y * (stride + 1) + 1);
+    previous = row;
+  }
+  if (!changed) return buffer;
+
+  const body = zlib.deflateSync(out, { level: 6 });
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr.data),
+    pngChunk("IDAT", body),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 module.exports = {
   SLOT_MS,
   RADAR_BBOX,
@@ -420,4 +609,8 @@ module.exports = {
   radarCacheName,
   isPng,
   frameEtag,
+  stripNoDataPng,
+  isCoverageRing,
+  isNoDataWash,
+  isNoDataGrey,
 };

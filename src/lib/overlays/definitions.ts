@@ -75,14 +75,32 @@ export const warningsOverlay: OverlayDefinition = {
           type: "fill",
           paint: {
             "fill-color": severityColorExpression(),
-            "fill-opacity": 0.18 * opacity,
+            // A level-2 warning can cover half of Germany, so the fill stays
+            // light; severity reads through colour and outline weight.
+            "fill-opacity": [
+              "match",
+              ["get", "level"],
+              4,
+              0.26 * opacity,
+              3,
+              0.16 * opacity,
+              0.08 * opacity,
+            ],
           },
         },
         {
           type: "line",
           paint: {
             "line-color": severityColorExpression(),
-            "line-width": 1.2,
+            "line-width": [
+              "match",
+              ["get", "level"],
+              4,
+              2.2,
+              3,
+              1.6,
+              1.1,
+            ],
             "line-opacity": 0.9 * opacity,
           },
         },

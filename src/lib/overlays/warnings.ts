@@ -6,7 +6,7 @@
  * functions so the panel and the map share exactly one vocabulary.
  */
 import { THEME } from "../theme";
-import { formatDateTime } from "./radar";
+import { WEATHER_TZ, formatDateTime, weatherDayKey } from "./radar";
 
 export const SEVERITY_COLORS: Record<number, string> = {
   1: THEME.warningLevel1,
@@ -70,12 +70,13 @@ export function validityHint(
   const end = new Date(to);
   if (Number.isNaN(end.getTime())) return "";
   if (end.getTime() <= now.getTime()) return "abgelaufen";
-  const sameDay = end.toDateString() === now.toDateString();
+  const sameDay = weatherDayKey(end) === weatherDayKey(now);
   if (sameDay) {
     return `bis ${new Intl.DateTimeFormat("de-DE", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
+      timeZone: WEATHER_TZ,
     }).format(end)}`;
   }
   return `bis ${formatDateTime(to)}`;

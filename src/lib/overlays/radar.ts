@@ -79,8 +79,15 @@ export function frameHint(
   return `Nowcast +${offset} Min`;
 }
 
-/** `HH:MM` in the visitor's timezone (or an explicit one for tests). */
-export function formatClock(iso: string, timeZone?: string): string {
+/**
+ * Weather is a German product: DWD timestamps, warning windows and the
+ * "bis 09:00" phrasing all mean German local time. Pinning the zone keeps the
+ * panel unambiguous for a visitor in another timezone.
+ */
+export const WEATHER_TZ = "Europe/Berlin";
+
+/** `HH:MM` in German local time (or an explicit zone for tests). */
+export function formatClock(iso: string, timeZone: string = WEATHER_TZ): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "--:--";
   return new Intl.DateTimeFormat("de-DE", {
@@ -92,7 +99,10 @@ export function formatClock(iso: string, timeZone?: string): string {
 }
 
 /** `Sa 21.11. · 14:30` for warning validity ranges. */
-export function formatDateTime(iso: string, timeZone?: string): string {
+export function formatDateTime(
+  iso: string,
+  timeZone: string = WEATHER_TZ,
+): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "-";
   return new Intl.DateTimeFormat("de-DE", {
@@ -104,4 +114,14 @@ export function formatDateTime(iso: string, timeZone?: string): string {
     hour12: false,
     timeZone,
   }).format(new Date(ms));
+}
+
+/** Calendar day in German local time, `YYYY-MM-DD`. */
+export function weatherDayKey(date: Date, timeZone: string = WEATHER_TZ): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).format(date);
 }

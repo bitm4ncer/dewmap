@@ -103,10 +103,34 @@ export function useWeatherWarnings(): void {
   }, [enabled]);
 }
 
-/** Step through the frames while the animation is running. */
+/** Frames already handed to the browser cache, per session. */
+const prefetched = new Set<string>();
+
+function prefetchFrames(urls: string[]): void {
+  if (typeof Image === "undefined") return;
+  for (const url of urls) {
+    if (prefetched.has(url)) continue;
+    prefetched.add(url);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = url;
+  }
+}
+
+/**
+ * Step through the frames while the animation is running. Pressing play also
+ * warms the browser cache for the whole sequence once, so the first loop does
+ * not stutter on a cold cache.
+ */
 export function useRadarPlayback(): void {
   const playing = useOverlays((s) => s.radarPlaying);
   const enabled = useOverlays((s) => s.enabled[RADAR_OVERLAY_ID] ?? false);
+  const frames = useOverlays((s) => s.radarFrames);
+
+  useEffect(() => {
+    if (!playing || !enabled || !frames) return;
+    prefetchFrames(frames.frames.map((frame) => frame.url));
+  }, [playing, enabled, frames]);
 
   useEffect(() => {
     if (!playing || !enabled) return;

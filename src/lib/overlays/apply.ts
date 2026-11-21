@@ -40,8 +40,14 @@ export function overlayBeforeId(map: MLMap): string | undefined {
   return undefined;
 }
 
-function sourceSpec(source: OverlaySource): SourceSpecification {
+function sourceSpec(
+  source: OverlaySource,
+  attribution?: string,
+): SourceSpecification {
   if (source.type === "image") {
+    // MapLibre's image source has no `attribution` property (the style
+    // validator rejects the whole source), so image overlays carry their
+    // credit in the panel instead.
     return {
       type: "image",
       url: source.url,
@@ -53,9 +59,14 @@ function sourceSpec(source: OverlaySource): SourceSpecification {
       type: "raster",
       tiles: source.tiles,
       tileSize: source.tileSize ?? 256,
+      ...(attribution ? { attribution } : {}),
     };
   }
-  return { type: "geojson", data: source.data };
+  return {
+    type: "geojson",
+    data: source.data,
+    ...(attribution ? { attribution } : {}),
+  };
 }
 
 function layerSpec(
@@ -105,9 +116,16 @@ function removeSourceLayers(map: MLMap, id: string): void {
 }
 
 /** Replace only the parts that changed. Idempotent. */
-function upsert(map: MLMap, id: string, resolved: ResolvedOverlay, beforeId?: string): void {
+function upsert(
+  map: MLMap,
+  id: string,
+  resolved: ResolvedOverlay,
+  beforeId?: string,
+  attribution?: string,
+): void {
   const sourceId = overlaySourceId(id);
   const existing = map.getSource(sourceId);
+  const spec = () => sourceSpec(resolved.source, attribution);
 
   if (resolved.source.type === "geojson") {
     if (existing) {
@@ -116,11 +134,11 @@ function upsert(map: MLMap, id: string, resolved: ResolvedOverlay, beforeId?: st
       };
       withData.setData?.(resolved.source.data);
     } else {
-      map.addSource(sourceId, sourceSpec(resolved.source));
+      map.addSource(sourceId, spec());
     }
   } else if (resolved.source.type === "image") {
     if (!existing) {
-      map.addSource(sourceId, sourceSpec(resolved.source));
+      map.addSource(sourceId, spec());
     } else if (sourceUrl(map, sourceId) !== resolved.source.url) {
       const image = existing as unknown as {
         updateImage?: (options: { url: string; coordinates?: unknown }) => void;
@@ -132,14 +150,14 @@ function upsert(map: MLMap, id: string, resolved: ResolvedOverlay, beforeId?: st
         });
       } else {
         removeSourceLayers(map, id);
-        map.addSource(sourceId, sourceSpec(resolved.source));
+        map.addSource(sourceId, spec());
       }
     }
   } else if (!existing) {
-    map.addSource(sourceId, sourceSpec(resolved.source));
+    map.addSource(sourceId, spec());
   } else if (sourceTiles(map, sourceId) !== resolved.source.tiles[0]) {
     removeSourceLayers(map, id);
-    map.addSource(sourceId, sourceSpec(resolved.source));
+    map.addSource(sourceId, spec());
   }
 
   resolved.layers.forEach((layer, index) => {
@@ -194,7 +212,13 @@ export function reconcileOverlays(map: MLMap, active: ActiveOverlay[]): void {
     if (!entry.resolved) continue;
     wanted.add(entry.definition.id);
     try {
-      upsert(map, entry.definition.id, entry.resolved, beforeId);
+      upsert(
+        map,
+        entry.definition.id,
+        entry.resolved,
+        beforeId,
+        entry.definition.attribution?.label,
+      );
     } catch {
       // A style swap can invalidate the style between check and add. The
       // next reconcile (style.load / idle) repairs it.

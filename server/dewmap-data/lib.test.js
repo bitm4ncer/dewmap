@@ -246,3 +246,148 @@ test("cache keys and etags are stable per slot", () => {
   assert.equal(lib.frameEtag("20261121T0450"), '"radar-20261121T0450"');
   assert.equal(lib.frameEtag("20261121T0450"), lib.frameEtag("20261121T0450"));
 });
+
+/* ------------------------------------------------------------- png strip */
+
+const zlib = require("node:zlib");
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+function crc32(buffer) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buffer.length; i += 1) {
+    c = CRC_TABLE[(c ^ buffer[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+function chunk(type, data) {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, "ascii");
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, "ascii"), data])), 0);
+  return Buffer.concat([head, data, crc]);
+}
+/** Independent encoder for fixtures: no filters, one IDAT chunk. */
+function encodePng(width, height, rows, colorType = 6) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = colorType;
+  const raw = Buffer.alloc(height * (rows[0].length + 1));
+  rows.forEach((row, y) => {
+    raw[y * (row.length + 1)] = 0;
+    row.copy(raw, y * (row.length + 1) + 1);
+  });
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+/** Decode our own stripped output (unfiltered rows only) for assertions. */
+function decodeRows(png) {
+  let offset = 8;
+  const idat = [];
+  let width = 0;
+  let height = 0;
+  let colorType = 6;
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.toString("ascii", offset + 4, offset + 8);
+    const data = png.subarray(offset + 8, offset + 8 + length);
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      colorType = data[9];
+    }
+    if (type === "IDAT") idat.push(data);
+    offset += 12 + length;
+    if (type === "IEND") break;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const bpp = colorType === 6 ? 4 : 3;
+  const stride = width * bpp;
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    assert.equal(raw[y * (stride + 1)], 0, "strip writes filter type 0");
+    rows.push(Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1))));
+  }
+  return { width, height, colorType, rows };
+}
+
+test("stripNoDataPng clears the grey wash and the coverage ring", () => {
+  const wash = Buffer.from([126, 126, 126, 77]);
+  const ring = Buffer.from([251, 0, 255, 255]);
+  const rain = Buffer.from([51, 255, 255, 255]);
+  const empty = Buffer.from([255, 255, 255, 0]);
+  const png = encodePng(4, 1, [Buffer.concat([wash, ring, rain, empty])]);
+
+  const out = lib.stripNoDataPng(png);
+  assert.ok(out.length > 0);
+  const { rows } = decodeRows(out);
+  assert.deepEqual([...rows[0].subarray(0, 4)], [126, 126, 126, 0]);
+  assert.deepEqual([...rows[0].subarray(4, 8)], [251, 0, 255, 0]);
+  assert.deepEqual([...rows[0].subarray(8, 12)], [51, 255, 255, 255]);
+  assert.deepEqual([...rows[0].subarray(12, 16)], [255, 255, 255, 0]);
+});
+
+test("stripNoDataPng keeps radar classes untouched", () => {
+  const classes = [
+    [51, 255, 255],
+    [26, 204, 154],
+    [1, 153, 52],
+    [229, 0, 76],
+    [204, 0, 152],
+    [102, 0, 203],
+    [0, 0, 254],
+  ];
+  const pixels = classes.flatMap((c) => [...c, 255]);
+  const png = encodePng(classes.length, 1, [Buffer.from(pixels)]);
+  assert.equal(lib.stripNoDataPng(png), png, "untouched when nothing matches");
+});
+
+test("stripNoDataPng handles RGB without alpha", () => {
+  const png = encodePng(
+    2,
+    1,
+    [Buffer.from([126, 126, 126, 51, 255, 255])],
+    2,
+  );
+  const { rows, colorType } = decodeRows(lib.stripNoDataPng(png));
+  assert.equal(colorType, 2);
+  assert.deepEqual([...rows[0]], [0, 0, 0, 51, 255, 255]);
+});
+
+test("stripNoDataPng passes through unsupported formats", () => {
+  const notPng = Buffer.from("GIF89a-not-a-png");
+  assert.equal(lib.stripNoDataPng(notPng), notPng);
+
+  const palette = encodePng(1, 1, [Buffer.from([0, 0, 0, 0])]);
+  palette[25] = 3; // IHDR colour type: palette
+  assert.equal(lib.stripNoDataPng(palette), palette);
+
+  const interlaced = encodePng(1, 1, [Buffer.from([1, 2, 3, 4])]);
+  interlaced[28] = 1; // IHDR interlace flag
+  assert.equal(lib.stripNoDataPng(interlaced), interlaced);
+});
+
+test("no-data and ring classifiers do not eat palette colours", () => {
+  assert.equal(lib.isNoDataWash(126, 126, 126, 77), true);
+  assert.equal(lib.isNoDataWash(126, 126, 126, 255), false, "opaque grey is data");
+  assert.equal(lib.isNoDataWash(51, 255, 255, 255), false);
+  assert.equal(lib.isCoverageRing(251, 0, 255, 255), true);
+  assert.equal(lib.isCoverageRing(165, 85, 167, 99), true, "anti-aliased edge");
+  assert.equal(lib.isCoverageRing(204, 0, 152, 255), false, "#cc0098 class");
+  assert.equal(lib.isCoverageRing(102, 0, 203, 255), false, "#6600cb class");
+  assert.equal(lib.isCoverageRing(229, 0, 76, 255), false, "#e5004c class");
+});

@@ -48,8 +48,30 @@ deterministisch cachebar (~70 KB), und die native Auflösung ist ohnehin erreich
 Jenseits von z≈11 wird das Bild weichgezeichnet — das ist die Auflösungsgrenze
 der Quelle, nicht des Clients.
 
-**Auflösung:** 1000 × 975 px (≈ 70 KB). 1200 px bringt nur 30 % mehr Bytes bei
-1,0–4 s Renderzeit; 800 px kostet sichtbar Schärfe.
+**Auflösung:** 1000 × 974 px. 1200 px bringt nur 30 % mehr Bytes bei 1,0–4 s
+Renderzeit; 800 px kostet sichtbar Schärfe. Gemessen nach dem Strippen (siehe
+unten): 40 KB pro Frame.
+
+**Nachbearbeitung der PNGs (wichtige Design-Entscheidung):** Der DWD-Style malt
+zwei Dinge mit, die über einer Basemap nichts verloren haben:
+
+- eine neutrale Graufläche `#7E7E7E` bei 30 % Alpha über der gesamten
+  Radar-Abdeckung („kein Echo / keine Daten", 389 615 von 974 000 Pixeln),
+- eine magentafarbene Kontur (`#FB00FF`) um den Komposit-Rand.
+
+Über einer dunklen Karte wirkt die Graufläche als Schleier (das gesamte Land
+wird entsättigt), die Magenta-Kontur als Leuchtlinie. Der Gateway dekodiert
+deshalb jedes Frame (8-bit, non-interlaced, RGB/RGBA), setzt genau diese Pixel
+auf transparent und kodiert neu:
+
+- Grau: `max−min ≤ 12` und `100 < max < 160` und Alpha < 200,
+- Magenta: `g < 115`, `r > 150`, `b > 120`, `|r−b| < 45` — trifft die
+  DWD-Klassen nicht (`#cc0098`, `#6600cb`, `#e5004c` haben andere Kanäle).
+
+Ergebnis: 69 671 → 50 550 B (−27 %), 42 ms pro Frame, nur beim Cache-Miss.
+Jedes andere Format (Palette, 16-bit, interlaced) wird unverändert
+durchgereicht — ein Upstream-Formatwechsel degradiert also zum alten Verhalten
+statt die Ebene zu brechen.
 
 ### 2.2 Warnungen
 
@@ -159,6 +181,11 @@ shadow-spezifische Datei und keine Sonderlogik in der Registry.
 - `beforeId` wird einmal pro Durchlauf bestimmt: erster existierender Layer aus
   `poi-mini-dots` → `live-vehicles-halo` → erster Symbol-Layer des Styles.
   Damit liegt das Radar über Flächen/Linien, aber **unter** Beschriftungen und POIs.
+- Attributions-Hinweis: MapLibre akzeptiert `attribution` nur an `raster`- und
+  `geojson`-Sources — eine `image`-Source mit `attribution` lehnt der
+  Style-Validator komplett ab (Quelle wird nicht angelegt). Radarframes tragen
+  ihre Quellenangabe deshalb ausschließlich im Panel; die Warnungen zusätzlich
+  im MapLibre-Attributionscontrol.
 - Robustheit gegen Style-Wechsel: der Hook hört auf `style.load` **und** `idle`
   (ein `style.load` kann vor dem Effekt gefeuert haben) und reconciliert erneut.
 
@@ -211,6 +238,10 @@ im gleichen `HudPanel`-Muster wie die bestehenden:
 2. **Weather warnings** — Schalter, Zähler je Stufe, Liste der aktiven Warnungen
    (Stufe, Ereignis, Gebiet, Gültigkeit), Attribution.
 
+Zeitangaben laufen bewusst in `Europe/Berlin`: DWD-Zeitstempel und
+Warnfenster („bis 09:00") meinen deutsche Ortszeit, unabhängig davon, wo der
+Besucher sitzt.
+
 Kein Emoji, Graphite-Tokens (`--ink`, `--ink-dim`, `--warn`, `--danger`), Slider
 und Buttons mit ≥ 44 px Trefferfläche. Bestehende Karten bleiben unverändert.
 
@@ -255,9 +286,14 @@ Jeder Request: `AbortSignal.timeout(12000)`, Größenlimit 5 MB (Stream-Abbruch)
   / 200 MB.
 - Warnungen: 5 min frisch, danach `stale-while-revalidate`: bei Upstream-Fehler
   wird die letzte Fassung bis 30 min weiter ausgeliefert (`X-Cache: stale`).
-- **Warmer:** nach dem ersten `/frames`-Aufruf prüft ein 60-s-Tick, ob der neueste
-  Analyse-Slot im Cache liegt, und lädt ihn sonst nach. Ein DWD-Request pro
-  5 Minuten — der Grund, warum echte Nutzer selten kalt treffen.
+- **Warmer:** `/frames` stößt sofort einen Warm-Lauf an, danach prüft ein 60-s-Tick
+  den neuesten Analyse-Slot. Ein bis zwei DWD-Requests pro 5 Minuten — der
+  Grund, warum echte Nutzer selten kalt treffen. Gemessen: `/frames` 84 ms,
+  danach Frame-Abruf warm 114 ms, während der kalte GeoServer-Render 1,6–10 s
+  braucht.
+- **Client-Prefetch:** die erste Wiedergabe lädt alle Frame-URLs einmal in den
+  Browser-Cache (18 × ~40 KB), damit die Animation nicht ruckelt. Ohne Play
+  wird genau ein Frame geladen.
 
 ### 4.4 Fehler-Normalisierung
 

@@ -131,6 +131,11 @@ describe("reconcileOverlays", () => {
 
     reconcileOverlays(map, [entry]);
     expect(map.getSource("overlay:warnings")).toBeTruthy();
+    // Attribution is carried by the source so MapLibre's control credits it.
+    expect(
+      (map.getStyle().sources["overlay:warnings"] as { attribution?: string })
+        .attribution,
+    ).toBe("src");
     expect(map.getLayer("overlay:warnings:0")).toBeTruthy();
     expect(map.getLayer("overlay:warnings:1")).toBeTruthy();
 
@@ -206,6 +211,10 @@ describe("reconcileOverlays", () => {
       layers: [{ type: "raster", paint: { "raster-opacity": 0.7 } }],
     });
     reconcileOverlays(map, [{ definition: def, resolved: image("https://a/1.png") }]);
+    // Image sources must not carry `attribution`: MapLibre rejects the source.
+    expect(
+      "attribution" in (map.getStyle().sources["overlay:radar"] as object),
+    ).toBe(false);
     reconcileOverlays(map, [{ definition: def, resolved: image("https://a/2.png") }]);
     const source = map.getStyle().sources["overlay:radar"] as { url: string };
     expect(source.url).toBe("https://a/2.png");
