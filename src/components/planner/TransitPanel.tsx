@@ -179,6 +179,10 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     ?? visibleJourneys[0]
     ?? null;
   const detailRef = useRef<HTMLDivElement>(null);
+  // The form folds into a one-line summary once both ends are known, so the
+  // route sits directly under it instead of below a tall input block.
+  const [formOpen, setFormOpen] = useState(() => !(from && to));
+  const formRef = useRef<HTMLDivElement | null>(null);
   // Only an explicit tap may move the panel; an automatic result swap must
   // not yank the form out from under the fingers.
   const scrollToDetailRef = useRef(false);
@@ -208,6 +212,47 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     });
     return () => cancelAnimationFrame(frame);
   }, [journey?.id]);
+  // A missing end cannot be summarised, so the inputs stay open.
+  const showForm = formOpen || !from || !to;
+
+  // Any tap outside the form folds it back into the summary. The search
+  // dropdown renders in a portal, so it counts as part of the form.
+  useEffect(() => {
+    if (!showForm) return;
+    const onDown = (event: PointerEvent) => {
+      const el = formRef.current;
+      if (!el || el.contains(event.target as Node)) return;
+      if ((event.target as Element | null)?.closest?.(".ui-search-dropdown")) {
+        return;
+      }
+      const state = useTransit.getState();
+      if (!state.from || !state.to) return;
+      setFormOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [showForm]);
+
+  const summaryWhen = useMemo(() => {
+    const date = when ? new Date(when) : null;
+    if (!date || Number.isNaN(date.getTime())) return "Now";
+    const time = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const day = isToday
+      ? ""
+      : date.toDateString() === tomorrow.toDateString()
+        ? "Tomorrow "
+        : `${date.toLocaleDateString([], { day: "2-digit", month: "short" })} `;
+    return `${arriveBy ? "Arrive" : "Depart"} ${day}${time}`;
+  }, [arriveBy, when]);
+
   const selectedVia = useMemo(
     () => via.filter((place): place is TransitPlace => place !== null),
     [via],
@@ -632,113 +677,487 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <HudPanel>
-        <div className="ui-section">
-          <div className="flex items-center justify-between gap-2">
-            <span className="ui-kicker">Train &amp; local transit</span>
-            <button
-              type="button"
-              onClick={() => {
-                const hadBoth = Boolean(from && to);
-                swap();
-                if (hadBoth) setSwapTick((tick) => tick + 1);
-              }}
-              aria-label="Swap origin and destination"
-              title="Swap origin and destination"
-              className="ui-input-action"
-            >
-              <SwapIcon size={16} />
-            </button>
-          </div>
-          <div className="transit-place-row">
-            <div className="transit-place-fields">
-              <PlacePicker
-                missing={!from}
-                placeholder="From station or address"
-                kind="transit"
-                cityFilter={cityFilter}
-                selectedLabel={
-                  from ? `${from.name}${from.city ? ` · ${from.city}` : ""}` : undefined
-                }
-                selectedPlace={from}
-                quickPlaces={quickPlaces}
-                favorite={fromFavorite}
-                onToggleFavorite={from ? () => toggleFavorite(from) : undefined}
-                home={savedHome}
-                work={savedWork}
-                savedPlaces={savedList}
-                onAssignHome={setHome}
-                onAssignWork={setWork}
-                onToggleSaved={toggleSaved}
-                isSavedPlace={isSaved}
-                assigning={pickAssign.from}
-                onAssigningChange={(v) =>
-                  setPickAssign((state) => setFieldAssign(state, "from", v))
-                }
-                onPickOnMap={() => setMapPick("from")}
-                onPick={(p) => pick("from", p)}
-                onClear={() => setFrom(null)}
-                getNearby={() => {
-                  const m = mapRef.current;
-                  if (!m) return undefined;
-                  const c = m.getCenter();
-                  return [c.lng, c.lat];
-                }}
-              />
-              <PlacePicker
-                missing={!to}
-                placeholder="To station or address"
-                kind="transit"
-                cityFilter={cityFilter}
-                selectedLabel={
-                  to ? `${to.name}${to.city ? ` · ${to.city}` : ""}` : undefined
-                }
-                selectedPlace={to}
-                quickPlaces={quickPlaces}
-                favorite={toFavorite}
-                onToggleFavorite={to ? () => toggleFavorite(to) : undefined}
-                home={savedHome}
-                work={savedWork}
-                savedPlaces={savedList}
-                onAssignHome={setHome}
-                onAssignWork={setWork}
-                onToggleSaved={toggleSaved}
-                isSavedPlace={isSaved}
-                assigning={pickAssign.to}
-                onAssigningChange={(v) =>
-                  setPickAssign((state) => setFieldAssign(state, "to", v))
-                }
-                onPickOnMap={() => setMapPick("to")}
-                onPick={(p) => pick("to", p)}
-                onClear={() => setTo(null)}
-                getNearby={() => {
-                  const m = mapRef.current;
-                  if (!m) return undefined;
-                  const c = m.getCenter();
-                  return [c.lng, c.lat];
-                }}
-              />
-            </div>
-          </div>
-
-          {mapPick && (
-            <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--accent-soft)] px-2 py-2 text-[11.5px]">
-              <span>
-                {pickAssign[mapPick]
-                  ? `Click the map to save as ${pickAssign[mapPick]}.`
-                  : `Click the map to set ${mapPick === "from" ? "A" : "B"}.`}
-              </span>
+      {showForm ? (
+        <div ref={formRef} className="flex flex-col gap-3">
+        <HudPanel>
+          <div className="ui-section">
+            <div className="flex items-center justify-between gap-2">
+              <span className="ui-kicker">Train &amp; local transit</span>
               <button
                 type="button"
-                onClick={() => setMapPick(null)}
-                className="ui-badge"
+                onClick={() => {
+                  const hadBoth = Boolean(from && to);
+                  swap();
+                  if (hadBoth) setSwapTick((tick) => tick + 1);
+                }}
+                aria-label="Swap origin and destination"
+                title="Swap origin and destination"
+                className="ui-input-action"
               >
-                Cancel
+                <SwapIcon size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormOpen(false)}
+                disabled={!from || !to}
+                aria-label="Collapse the search form"
+                title="Collapse the search form"
+                className="ui-input-action"
+              >
+                <ChevronDownIcon size={16} />
               </button>
             </div>
-          )}
+            <div className="transit-place-row">
+              <div className="transit-place-fields">
+                <PlacePicker
+                  missing={!from}
+                  placeholder="From station or address"
+                  kind="transit"
+                  cityFilter={cityFilter}
+                  selectedLabel={
+                    from ? `${from.name}${from.city ? ` · ${from.city}` : ""}` : undefined
+                  }
+                  selectedPlace={from}
+                  quickPlaces={quickPlaces}
+                  favorite={fromFavorite}
+                  onToggleFavorite={from ? () => toggleFavorite(from) : undefined}
+                  home={savedHome}
+                  work={savedWork}
+                  savedPlaces={savedList}
+                  onAssignHome={setHome}
+                  onAssignWork={setWork}
+                  onToggleSaved={toggleSaved}
+                  isSavedPlace={isSaved}
+                  assigning={pickAssign.from}
+                  onAssigningChange={(v) =>
+                    setPickAssign((state) => setFieldAssign(state, "from", v))
+                  }
+                  onPickOnMap={() => setMapPick("from")}
+                  onPick={(p) => pick("from", p)}
+                  onClear={() => setFrom(null)}
+                  getNearby={() => {
+                    const m = mapRef.current;
+                    if (!m) return undefined;
+                    const c = m.getCenter();
+                    return [c.lng, c.lat];
+                  }}
+                />
+                <PlacePicker
+                  missing={!to}
+                  placeholder="To station or address"
+                  kind="transit"
+                  cityFilter={cityFilter}
+                  selectedLabel={
+                    to ? `${to.name}${to.city ? ` · ${to.city}` : ""}` : undefined
+                  }
+                  selectedPlace={to}
+                  quickPlaces={quickPlaces}
+                  favorite={toFavorite}
+                  onToggleFavorite={to ? () => toggleFavorite(to) : undefined}
+                  home={savedHome}
+                  work={savedWork}
+                  savedPlaces={savedList}
+                  onAssignHome={setHome}
+                  onAssignWork={setWork}
+                  onToggleSaved={toggleSaved}
+                  isSavedPlace={isSaved}
+                  assigning={pickAssign.to}
+                  onAssigningChange={(v) =>
+                    setPickAssign((state) => setFieldAssign(state, "to", v))
+                  }
+                  onPickOnMap={() => setMapPick("to")}
+                  onPick={(p) => pick("to", p)}
+                  onClear={() => setTo(null)}
+                  getNearby={() => {
+                    const m = mapRef.current;
+                    if (!m) return undefined;
+                    const c = m.getCenter();
+                    return [c.lng, c.lat];
+                  }}
+                />
+              </div>
+            </div>
+
+            {mapPick && (
+              <div className="flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--accent-soft)] px-2 py-2 text-[11.5px]">
+                <span>
+                  {pickAssign[mapPick]
+                    ? `Click the map to save as ${pickAssign[mapPick]}.`
+                    : `Click the map to set ${mapPick === "from" ? "A" : "B"}.`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMapPick(null)}
+                  className="ui-badge"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </HudPanel>
+
+        <HudPanel>
+          <div className="ui-section">
+            <span className="ui-kicker">When</span>
+            <div className="ui-segmented" role="group" aria-label="Depart or arrive">
+              <button
+                type="button"
+                className="ui-seg"
+                data-active={!arriveBy}
+                aria-pressed={!arriveBy}
+                onClick={() => setArriveBy(false)}
+              >
+                Depart at
+              </button>
+              <button
+                type="button"
+                className="ui-seg"
+                data-active={arriveBy}
+                aria-pressed={arriveBy}
+                onClick={() => setArriveBy(true)}
+              >
+                Arrive by
+              </button>
+            </div>
+            <input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              className="ui-input ui-input-date"
+              aria-label="Travel date and time"
+            />
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className="ui-badge hover:bg-[color:var(--surf-3)]"
+                onClick={() => setWhen(nowLocalInput())}
+              >
+                Now
+              </button>
+              <button
+                type="button"
+                className="ui-badge hover:bg-[color:var(--surf-3)]"
+                onClick={() => setWhen(shiftLocal(when, 0, 60))}
+              >
+                +1 h
+              </button>
+              <button
+                type="button"
+                className="ui-badge hover:bg-[color:var(--surf-3)]"
+                onClick={() => setWhen(shiftLocal(when, 1, 0))}
+              >
+                Tomorrow
+              </button>
+            </div>
+          </div>
+        </HudPanel>
+
+        <HudPanel>
+          <div className="ui-section">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((open) => !open)}
+              aria-expanded={filtersOpen}
+              className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
+            >
+              <span className="ui-row-title">Filters</span>
+              <span className="flex items-center gap-2">
+                {activeFilterCount > 0 && (
+                  <span className="ui-badge" data-tone="accent">
+                    {activeFilterCount} active
+                  </span>
+                )}
+                <ChevronDownIcon
+                  size={16}
+                  className={filtersOpen ? "rotate-180 transition-transform" : "transition-transform"}
+                />
+              </span>
+            </button>
+            {filtersOpen && (
+              <>
+                <div className="flex flex-col gap-2">
+                  <span className="ui-row-title">Max transfers</span>
+                  <div className="ui-segmented flex-wrap">
+                    {[0, 1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className="ui-seg !min-h-11"
+                        data-active={maxTransfers === n}
+                        aria-pressed={maxTransfers === n}
+                        onClick={() => setMaxTransfers(n)}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <OptionToggle
+                  label="Step-free"
+                  description="Only connections with accessible vehicles where operators publish it."
+                  checked={accessible}
+                  onChange={setAccessible}
+                />
+                <OptionToggle
+                  label="Bicycle"
+                  description="Only connections that carry a bike where operators publish it."
+                  checked={bike}
+                  onChange={setBike}
+                />
+                <label className="flex flex-col gap-1">
+                  <span className="flex items-center justify-between">
+                    <span className="ui-row-title">Max walk</span>
+                    <span className="text-[12px] text-[color:var(--ink-dim)]">
+                      {maxWalkMin} min
+                    </span>
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={30}
+                    step={5}
+                    value={Math.min(maxWalkMin, 30)}
+                    onChange={(e) => setMaxWalkMin(Number(e.target.value))}
+                    aria-label="Maximum walking time in minutes"
+                    className="hud-slider"
+                  />
+                </label>
+                <div className="flex flex-col gap-2">
+                  <span className="ui-row-title">Modes</span>
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className="ui-badge !min-h-10 !px-3"
+                      data-tone={modes.length === 0 ? "accent" : undefined}
+                      aria-pressed={modes.length === 0}
+                      onClick={() => setModes([])}
+                    >
+                      All
+                    </button>
+                    {MODE_FILTERS.map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        className="ui-badge !min-h-10 !px-3"
+                        data-tone={modes.includes(mode.key) ? "accent" : undefined}
+                        aria-pressed={modes.includes(mode.key)}
+                        onClick={() =>
+                          setModes(
+                            modes.includes(mode.key)
+                              ? modes.filter((m) => m !== mode.key)
+                              : [...modes, mode.key],
+                          )
+                        }
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex flex-col gap-1">
+                  <span className="ui-row-title">Sort connections</span>
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as JourneySort)}
+                    className="ui-input"
+                    aria-label="Sort connections"
+                  >
+                    <option value="best">Best</option>
+                    <option value="departure">Earliest departure</option>
+                    <option value="arrival">Earliest arrival</option>
+                    <option value="duration">Shortest</option>
+                    <option value="transfers">Fewest changes</option>
+                  </select>
+                </label>
+                <OptionToggle
+                  label="Auto-refresh"
+                  description="Update live results every 60 seconds while visible."
+                  checked={autoRefresh}
+                  onChange={setAutoRefresh}
+                />
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setRouteOptionsOpen((open) => !open)}
+              aria-expanded={routeOptionsOpen}
+              className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
+            >
+              <span className="ui-row-title">Route options</span>
+              <ChevronDownIcon
+                size={16}
+                className={routeOptionsOpen ? "rotate-180 transition-transform" : "transition-transform"}
+              />
+            </button>
+            {routeOptionsOpen && (
+              <>
+                <label className="flex flex-col gap-1">
+                  <span className="ui-row-title">City filter</span>
+                  <input
+                    type="text"
+                    value={cityFilter}
+                    onChange={(e) => setCityFilter(e.target.value)}
+                    placeholder="Only stops and results in this city"
+                    aria-label="Filter stops and results by city"
+                    className="ui-input"
+                    spellCheck={false}
+                  />
+                </label>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>
+                      <span className="ui-row-title">Via stations</span>
+                      <span className="ui-row-sub block">
+                        Route through up to two stations.
+                      </span>
+                    </span>
+                    {selectedVia.length === 0 && (
+                      <button
+                        type="button"
+                        className="ui-badge !min-h-10 !px-3 shrink-0"
+                        onClick={() => {
+                          if (viaOpen || via.length > 0) {
+                            setViaOpen(false);
+                            if (via.length > 0) removeVia(0);
+                            return;
+                          }
+                          setViaOpen(true);
+                        }}
+                        aria-expanded={viaOpen || via.length > 0}
+                      >
+                        {viaOpen || via.length > 0 ? "Hide" : "Add via"}
+                      </button>
+                    )}
+                  </div>
+                  {viaSlots.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {viaSlots.map((place, index) => (
+                        <PlacePicker
+                          key={`via-${index}`}
+                          placeholder={`Via station ${index + 1}`}
+                          kind="stop"
+                          cityFilter={cityFilter}
+                          selectedLabel={
+                            place
+                              ? `${place.name}${place.city ? ` · ${place.city}` : ""}`
+                              : undefined
+                          }
+                          selectedPlace={place}
+                          onPick={(picked) => setViaAt(index, toTransitPlace(picked))}
+                          onClear={() => setViaAt(index, null)}
+                        />
+                      ))}
+                      {viaSlots.length < 2 && viaSlots[viaSlots.length - 1] !== null && (
+                        <PlacePicker
+                          key="via-extra"
+                          placeholder="Add a second via station"
+                          kind="stop"
+                          cityFilter={cityFilter}
+                          onPick={(picked) => addVia(toTransitPlace(picked))}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <OptionToggle
+                  label="Live vehicles"
+                  description="Show real-time vehicles in the current map view."
+                  checked={liveVehicles}
+                  onChange={setLiveVehicles}
+                />
+                {liveVehicles && (
+                  <p className="text-[11px] text-[color:var(--ink-dim)]" aria-live="polite">
+                    {liveVehiclesError
+                      ? liveVehiclesError
+                      : liveVehicleCount > 0
+                        ? `${liveVehicleCount} vehicle${liveVehicleCount === 1 ? "" : "s"} in view`
+                        : "No vehicles in view; pan or zoom in."}
+                    {liveVehiclesUpdatedAt && !liveVehiclesError
+                      ? ` · updated ${new Date(liveVehiclesUpdatedAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`
+                      : ""}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </HudPanel>
         </div>
-      </HudPanel>
+      ) : (
+        <HudPanel>
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            className="transit-summary"
+            aria-expanded={false}
+            aria-label={`Edit search: ${from?.name ?? "from"} to ${
+              to?.name ?? "destination"
+            }, ${summaryWhen}`}
+          >
+            <span className="transit-summary-main">
+              <span className="transit-summary-route">
+                <span className="transit-summary-point">
+                  {from?.name ?? "From"}
+                </span>
+                <span className="transit-summary-arrow" aria-hidden>
+                  →
+                </span>
+                <span className="transit-summary-point">
+                  {to?.name ?? "To"}
+                </span>
+              </span>
+              <span className="transit-summary-meta">
+                {activeFilterCount > 0 && (
+                  <span className="ui-badge" data-tone="accent">
+                    {activeFilterCount}
+                  </span>
+                )}
+                {summaryWhen}
+              </span>
+            </span>
+            <ChevronDownIcon size={14} className="shrink-0 opacity-70" />
+          </button>
+        </HudPanel>
+      )}
+
+      {phase.kind === "routing" && journeys.length === 0 && (
+        <p className="px-1 text-[12px] text-[color:var(--ink-dim)]">
+          Searching connections…
+        </p>
+      )}
+      {phase.kind === "error" && (
+        <div className="flex items-start gap-2 px-1">
+          <p className="flex-1 text-[12px] text-[color:var(--danger)]">
+            {phase.message}
+          </p>
+          <button
+            type="button"
+            onClick={() => void search()}
+            disabled={!from || !to}
+            className="ui-badge shrink-0"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+      {notice && phase.kind !== "error" && (
+        <p className="px-1 text-[12px] text-[color:var(--warn)]">{notice}</p>
+      )}
+      {shareNotice && (
+        <p className="px-1 text-[12px] text-[color:var(--ink-dim)]">{shareNotice}</p>
+      )}
+      <p className="sr-only" aria-live="polite">
+        {phase.kind === "routing"
+          ? "Searching connections"
+          : notice ??
+            (journeys.length > 0
+              ? `${visibleJourneys.length} connections shown`
+              : "")}
+      </p>
 
       {journey && (
         <div ref={detailRef} className="scroll-mt-3">
@@ -789,296 +1208,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           </HudPanel>
         </div>
       )}
-
-      <HudPanel>
-        <div className="ui-section">
-          <span className="ui-kicker">When</span>
-          <div className="ui-segmented" role="group" aria-label="Depart or arrive">
-            <button
-              type="button"
-              className="ui-seg"
-              data-active={!arriveBy}
-              aria-pressed={!arriveBy}
-              onClick={() => setArriveBy(false)}
-            >
-              Depart at
-            </button>
-            <button
-              type="button"
-              className="ui-seg"
-              data-active={arriveBy}
-              aria-pressed={arriveBy}
-              onClick={() => setArriveBy(true)}
-            >
-              Arrive by
-            </button>
-          </div>
-          <input
-            type="datetime-local"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-            className="ui-input ui-input-date"
-            aria-label="Travel date and time"
-          />
-          <div className="flex flex-wrap gap-1">
-            <button
-              type="button"
-              className="ui-badge hover:bg-[color:var(--surf-3)]"
-              onClick={() => setWhen(nowLocalInput())}
-            >
-              Now
-            </button>
-            <button
-              type="button"
-              className="ui-badge hover:bg-[color:var(--surf-3)]"
-              onClick={() => setWhen(shiftLocal(when, 0, 60))}
-            >
-              +1 h
-            </button>
-            <button
-              type="button"
-              className="ui-badge hover:bg-[color:var(--surf-3)]"
-              onClick={() => setWhen(shiftLocal(when, 1, 0))}
-            >
-              Tomorrow
-            </button>
-          </div>
-        </div>
-      </HudPanel>
-
-      <HudPanel>
-        <div className="ui-section">
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-expanded={filtersOpen}
-            className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
-          >
-            <span className="ui-row-title">Filters</span>
-            <span className="flex items-center gap-2">
-              {activeFilterCount > 0 && (
-                <span className="ui-badge" data-tone="accent">
-                  {activeFilterCount} active
-                </span>
-              )}
-              <ChevronDownIcon
-                size={16}
-                className={filtersOpen ? "rotate-180 transition-transform" : "transition-transform"}
-              />
-            </span>
-          </button>
-          {filtersOpen && (
-            <>
-              <div className="flex flex-col gap-2">
-                <span className="ui-row-title">Max transfers</span>
-                <div className="ui-segmented flex-wrap">
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className="ui-seg !min-h-11"
-                      data-active={maxTransfers === n}
-                      aria-pressed={maxTransfers === n}
-                      onClick={() => setMaxTransfers(n)}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <OptionToggle
-                label="Step-free"
-                description="Only connections with accessible vehicles where operators publish it."
-                checked={accessible}
-                onChange={setAccessible}
-              />
-              <OptionToggle
-                label="Bicycle"
-                description="Only connections that carry a bike where operators publish it."
-                checked={bike}
-                onChange={setBike}
-              />
-              <label className="flex flex-col gap-1">
-                <span className="flex items-center justify-between">
-                  <span className="ui-row-title">Max walk</span>
-                  <span className="text-[12px] text-[color:var(--ink-dim)]">
-                    {maxWalkMin} min
-                  </span>
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={30}
-                  step={5}
-                  value={Math.min(maxWalkMin, 30)}
-                  onChange={(e) => setMaxWalkMin(Number(e.target.value))}
-                  aria-label="Maximum walking time in minutes"
-                  className="hud-slider"
-                />
-              </label>
-              <div className="flex flex-col gap-2">
-                <span className="ui-row-title">Modes</span>
-                <div className="flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    className="ui-badge !min-h-10 !px-3"
-                    data-tone={modes.length === 0 ? "accent" : undefined}
-                    aria-pressed={modes.length === 0}
-                    onClick={() => setModes([])}
-                  >
-                    All
-                  </button>
-                  {MODE_FILTERS.map((mode) => (
-                    <button
-                      key={mode.key}
-                      type="button"
-                      className="ui-badge !min-h-10 !px-3"
-                      data-tone={modes.includes(mode.key) ? "accent" : undefined}
-                      aria-pressed={modes.includes(mode.key)}
-                      onClick={() =>
-                        setModes(
-                          modes.includes(mode.key)
-                            ? modes.filter((m) => m !== mode.key)
-                            : [...modes, mode.key],
-                        )
-                      }
-                    >
-                      {mode.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <label className="flex flex-col gap-1">
-                <span className="ui-row-title">Sort connections</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as JourneySort)}
-                  className="ui-input"
-                  aria-label="Sort connections"
-                >
-                  <option value="best">Best</option>
-                  <option value="departure">Earliest departure</option>
-                  <option value="arrival">Earliest arrival</option>
-                  <option value="duration">Shortest</option>
-                  <option value="transfers">Fewest changes</option>
-                </select>
-              </label>
-              <OptionToggle
-                label="Auto-refresh"
-                description="Update live results every 60 seconds while visible."
-                checked={autoRefresh}
-                onChange={setAutoRefresh}
-              />
-            </>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setRouteOptionsOpen((open) => !open)}
-            aria-expanded={routeOptionsOpen}
-            className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
-          >
-            <span className="ui-row-title">Route options</span>
-            <ChevronDownIcon
-              size={16}
-              className={routeOptionsOpen ? "rotate-180 transition-transform" : "transition-transform"}
-            />
-          </button>
-          {routeOptionsOpen && (
-            <>
-              <label className="flex flex-col gap-1">
-                <span className="ui-row-title">City filter</span>
-                <input
-                  type="text"
-                  value={cityFilter}
-                  onChange={(e) => setCityFilter(e.target.value)}
-                  placeholder="Only stops and results in this city"
-                  aria-label="Filter stops and results by city"
-                  className="ui-input"
-                  spellCheck={false}
-                />
-              </label>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span>
-                    <span className="ui-row-title">Via stations</span>
-                    <span className="ui-row-sub block">
-                      Route through up to two stations.
-                    </span>
-                  </span>
-                  {selectedVia.length === 0 && (
-                    <button
-                      type="button"
-                      className="ui-badge !min-h-10 !px-3 shrink-0"
-                      onClick={() => {
-                        if (viaOpen || via.length > 0) {
-                          setViaOpen(false);
-                          if (via.length > 0) removeVia(0);
-                          return;
-                        }
-                        setViaOpen(true);
-                      }}
-                      aria-expanded={viaOpen || via.length > 0}
-                    >
-                      {viaOpen || via.length > 0 ? "Hide" : "Add via"}
-                    </button>
-                  )}
-                </div>
-                {viaSlots.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    {viaSlots.map((place, index) => (
-                      <PlacePicker
-                        key={`via-${index}`}
-                        placeholder={`Via station ${index + 1}`}
-                        kind="stop"
-                        cityFilter={cityFilter}
-                        selectedLabel={
-                          place
-                            ? `${place.name}${place.city ? ` · ${place.city}` : ""}`
-                            : undefined
-                        }
-                        selectedPlace={place}
-                        onPick={(picked) => setViaAt(index, toTransitPlace(picked))}
-                        onClear={() => setViaAt(index, null)}
-                      />
-                    ))}
-                    {viaSlots.length < 2 && viaSlots[viaSlots.length - 1] !== null && (
-                      <PlacePicker
-                        key="via-extra"
-                        placeholder="Add a second via station"
-                        kind="stop"
-                        cityFilter={cityFilter}
-                        onPick={(picked) => addVia(toTransitPlace(picked))}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-              <OptionToggle
-                label="Live vehicles"
-                description="Show real-time vehicles in the current map view."
-                checked={liveVehicles}
-                onChange={setLiveVehicles}
-              />
-              {liveVehicles && (
-                <p className="text-[11px] text-[color:var(--ink-dim)]" aria-live="polite">
-                  {liveVehiclesError
-                    ? liveVehiclesError
-                    : liveVehicleCount > 0
-                      ? `${liveVehicleCount} vehicle${liveVehicleCount === 1 ? "" : "s"} in view`
-                      : "No vehicles in view; pan or zoom in."}
-                  {liveVehiclesUpdatedAt && !liveVehiclesError
-                    ? ` · updated ${new Date(liveVehiclesUpdatedAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}`
-                    : ""}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      </HudPanel>
 
       {journeys.length > 0 && (
         <HudPanel>
@@ -1194,41 +1323,6 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
           </div>
         </HudPanel>
       )}
-
-      {phase.kind === "routing" && journeys.length === 0 && (
-        <p className="px-1 text-[12px] text-[color:var(--ink-dim)]">
-          Searching connections…
-        </p>
-      )}
-      {phase.kind === "error" && (
-        <div className="flex items-start gap-2 px-1">
-          <p className="flex-1 text-[12px] text-[color:var(--danger)]">
-            {phase.message}
-          </p>
-          <button
-            type="button"
-            onClick={() => void search()}
-            disabled={!from || !to}
-            className="ui-badge shrink-0"
-          >
-            Try again
-          </button>
-        </div>
-      )}
-      {notice && phase.kind !== "error" && (
-        <p className="px-1 text-[12px] text-[color:var(--warn)]">{notice}</p>
-      )}
-      {shareNotice && (
-        <p className="px-1 text-[12px] text-[color:var(--ink-dim)]">{shareNotice}</p>
-      )}
-      <p className="sr-only" aria-live="polite">
-        {phase.kind === "routing"
-          ? "Searching connections"
-          : notice ??
-            (journeys.length > 0
-              ? `${visibleJourneys.length} connections shown`
-              : "")}
-      </p>
 
       <p className="px-1 text-[10.5px] leading-relaxed text-[color:var(--ink-mute)]">
         Routing by Transitous (MOTIS) · schedules and real-time data from

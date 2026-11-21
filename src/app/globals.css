@@ -1860,6 +1860,55 @@ input[type="range"].hud-slider::-moz-range-thumb {
 .ui-input-action[data-set="false"] { color: var(--ink-mute); }
 .ui-input-action:disabled { opacity: .4; cursor: not-allowed; }
 
+/* Folded search form: one line that still describes the question and the
+   time, so the route sits directly under it. */
+.transit-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: var(--r-btn);
+  background: var(--surf-2);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease),
+    transform var(--dur-press) var(--ease);
+}
+.transit-summary:hover { background: var(--surf-3); }
+.transit-summary:active { transform: scale(0.995); }
+.transit-summary-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+.transit-summary-route {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 550;
+}
+.transit-summary-point {
+  min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transit-summary-arrow { flex-shrink: 0; color: var(--ink-mute); }
+.transit-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-dim);
+  font-size: 11.5px;
+}
+
 /* Transit origin and destination stack: the form searches on its own, so the
    two fields own the full width. */
 .transit-place-row {

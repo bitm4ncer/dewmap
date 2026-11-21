@@ -4,8 +4,13 @@ import { describe, expect, it } from "vitest";
 const src = readFileSync(new URL("./TransitPanel.tsx", import.meta.url), "utf8");
 
 describe("transit panel layout", () => {
-  it("shows the selected journey detail above the connection list", () => {
-    expect(src.indexOf("<JourneyDetail")).toBeLessThan(src.indexOf(">When<"));
+  it("folds the form into a summary so the route sits at the top", () => {
+    // Collapsed: summary line, then the journey. Expanded: the same summary
+    // slot holds the inputs, so the route never sits under a tall form.
+    expect(src).toContain("transit-summary");
+    expect(src).toContain("const showForm = formOpen || !from || !to");
+    const summary = src.indexOf("transit-summary");
+    expect(summary).toBeLessThan(src.indexOf("<JourneyDetail"));
     expect(src.indexOf("<JourneyDetail")).toBeLessThan(
       src.indexOf("Connections ·"),
     );
