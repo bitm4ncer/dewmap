@@ -33,6 +33,7 @@ import {
   type JourneySort,
 } from "@/lib/planner/transitFormat";
 import { prefersReducedMotion } from "@/lib/motion";
+import { freeViewportPadding, readFitContext, routeBounds } from "@/lib/map/fitRoute";
 import { transitSearchKey } from "@/lib/planner/autoSearchKey";
 
 interface Props {
@@ -455,43 +456,22 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     window.history.replaceState({}, "", url);
   }, [setAccessible, setArriveBy, setFrom, setMaxTransfers, setTo, setVia, setWhen]);
 
+  // Show the whole connection in the map area the sheet leaves free.
+  const journeyBounds = useMemo(
+    () => (journey ? routeBounds(journey.coordinates) : null),
+    [journey],
+  );
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !journey || lastFitRef.current === journey.id) return;
-    if (journey.coordinates.length < 2) return;
-    let south = Infinity;
-    let west = Infinity;
-    let north = -Infinity;
-    let east = -Infinity;
-    for (const [lon, lat] of journey.coordinates) {
-      west = Math.min(west, lon);
-      east = Math.max(east, lon);
-      south = Math.min(south, lat);
-      north = Math.max(north, lat);
-    }
-    if (!Number.isFinite(south)) return;
+    if (!map || !journey || !journeyBounds) return;
+    if (lastFitRef.current === journey.id) return;
     const fit = () => {
-      const sheet =
-        typeof document === "undefined"
-          ? null
-          : document.querySelector<HTMLElement>("[data-sheet-state]");
-      const mobile = typeof window !== "undefined" && window.innerWidth < 768;
-      const sheetHeight = sheet?.getBoundingClientRect().height ?? 280;
-      const bottom = mobile
-        ? Math.min(Math.max(sheetHeight, 160), window.innerHeight * 0.55)
-        : 80;
       lastFitRef.current = journey.id;
-      map.fitBounds(
-        [
-          [west, south],
-          [east, north],
-        ],
-        {
-          padding: { top: 90, bottom, left: 48, right: 48 },
-          duration: prefersReducedMotion() ? 0 : 650,
-          maxZoom: 14,
-        },
-      );
+      map.fitBounds(journeyBounds, {
+        padding: freeViewportPadding(readFitContext(map)),
+        duration: prefersReducedMotion() ? 0 : 650,
+        maxZoom: 15,
+      });
     };
     if (map.isMoving()) {
       map.once("moveend", fit);
@@ -501,7 +481,7 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
     }
     fit();
     return undefined;
-  }, [journey, mapRef]);
+  }, [journey, journeyBounds, mapRef]);
 
   // Auto-refresh is opt-in: Transitous documents a 720 requests/day/IP budget.
   const searchRef = useRef(search);

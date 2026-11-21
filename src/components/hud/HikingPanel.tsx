@@ -26,6 +26,7 @@ import { useNavigation } from "@/lib/navigation/store";
 import { haptic } from "@/lib/haptics";
 import { deriveBrouterManeuvers, formatDuration, type RoutePlan } from "@/lib/routing";
 import { prefersReducedMotion } from "@/lib/motion";
+import { freeViewportPadding, readFitContext, routeBounds } from "@/lib/map/fitRoute";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -149,34 +150,35 @@ export function HikingPanel({ mapRef, hideModeSwitch = false }: Props) {
   // Fly to the selected route once per explicit selection. Scoring and
   // streaming update `candidates` repeatedly; refitting on every update
   // would yank the camera three or four times per plan.
+  const fittedCandidate = useMemo(
+    () => candidates.find((c) => c.id === selectedCandidateId) ?? null,
+    [candidates, selectedCandidateId],
+  );
+  const fittedBounds = useMemo(
+    () => (fittedCandidate ? routeBounds(fittedCandidate.coordinates) : null),
+    [fittedCandidate],
+  );
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selectedCandidateId) return;
-    if (lastFittedIdRef.current === selectedCandidateId) return;
-    if (map.isMoving()) return;
-    const cand = candidates.find((c) => c.id === selectedCandidateId);
-    if (!cand || cand.coordinates.length < 2) return;
-    lastFittedIdRef.current = selectedCandidateId;
-    let south = Infinity;
-    let west = Infinity;
-    let north = -Infinity;
-    let east = -Infinity;
-    for (const [lon, lat] of cand.coordinates) {
-      if (lat < south) south = lat;
-      if (lat > north) north = lat;
-      if (lon < west) west = lon;
-      if (lon > east) east = lon;
+    if (!map || !fittedCandidate || !fittedBounds) return;
+    if (lastFittedIdRef.current === fittedCandidate.id) return;
+    const fit = () => {
+      lastFittedIdRef.current = fittedCandidate.id;
+      map.fitBounds(fittedBounds, {
+        padding: freeViewportPadding(readFitContext(map)),
+        duration: prefersReducedMotion() ? 0 : 700,
+        maxZoom: 15,
+      });
+    };
+    if (map.isMoving()) {
+      map.once("moveend", fit);
+      return () => {
+        map.off("moveend", fit);
+      };
     }
-    if (Number.isFinite(south)) {
-      map.fitBounds(
-        [
-          [west, south],
-          [east, north],
-        ],
-        { padding: 70, duration: prefersReducedMotion() ? 0 : 700, maxZoom: 14 },
-      );
-    }
-  }, [selectedCandidateId, candidates, mapRef]);
+    fit();
+    return undefined;
+  }, [fittedBounds, fittedCandidate, mapRef]);
 
   const handleAddGps = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {

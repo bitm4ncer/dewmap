@@ -14,6 +14,7 @@ import type { RoutePlan } from "@/lib/routing";
 import { useNavigation } from "@/lib/navigation/store";
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon } from "@/components/ui/icons";
 import { prefersReducedMotion } from "@/lib/motion";
+import { freeViewportPadding, readFitContext, routeBounds } from "@/lib/map/fitRoute";
 
 interface Props {
   mapRef: React.MutableRefObject<MLMap | null>;
@@ -99,30 +100,32 @@ export function CarPanel({ mapRef }: Props) {
     };
   }, [waypoints, profile, setRoutes, setPhase, setNotice]);
 
+  // Frame the whole drive in the area the sheet or drawer leaves free.
+  const selectedBounds = useMemo(
+    () => (selected ? routeBounds(selected.coordinates) : null),
+    [selected],
+  );
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selected || lastFitRef.current === selected.id) return;
-    if (map.isMoving()) return;
-    let south = Infinity;
-    let west = Infinity;
-    let north = -Infinity;
-    let east = -Infinity;
-    for (const [lon, lat] of selected.coordinates) {
-      west = Math.min(west, lon);
-      east = Math.max(east, lon);
-      south = Math.min(south, lat);
-      north = Math.max(north, lat);
+    if (!map || !selected || !selectedBounds) return;
+    if (lastFitRef.current === selected.id) return;
+    const fit = () => {
+      lastFitRef.current = selected.id;
+      map.fitBounds(selectedBounds, {
+        padding: freeViewportPadding(readFitContext(map)),
+        duration: prefersReducedMotion() ? 0 : 650,
+        maxZoom: 15,
+      });
+    };
+    if (map.isMoving()) {
+      map.once("moveend", fit);
+      return () => {
+        map.off("moveend", fit);
+      };
     }
-    if (!Number.isFinite(south)) return;
-    lastFitRef.current = selected.id;
-    map.fitBounds(
-      [
-        [west, south],
-        [east, north],
-      ],
-      { padding: { top: 90, bottom: typeof window !== "undefined" && window.innerWidth < 768 ? 280 : 80, left: 60, right: 60 }, duration: prefersReducedMotion() ? 0 : 650, maxZoom: 14 },
-    );
-  }, [mapRef, selected]);
+    fit();
+    return undefined;
+  }, [mapRef, selected, selectedBounds]);
 
   const addPlace = useCallback(
     (p: PickedPlace) => {
