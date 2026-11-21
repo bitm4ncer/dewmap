@@ -35,7 +35,6 @@ export function overlayBeforeId(map: MLMap): string | undefined {
   const layers = map.getStyle()?.layers ?? [];
   for (const layer of layers) {
     if (layer.type === "symbol") return layer.id;
-    if (layer.id.startsWith(OVERLAY_PREFIX)) return layer.id;
   }
   return undefined;
 }
@@ -91,6 +90,11 @@ function sourceUrl(map: MLMap, sourceId: string): string | null {
   return typeof source?.url === "string" ? source.url : null;
 }
 
+function existingSourceType(map: MLMap, sourceId: string): string | null {
+  const type = (map.getSource(sourceId) as { type?: string } | undefined)?.type;
+  return typeof type === "string" ? type : null;
+}
+
 function sourceTiles(map: MLMap, sourceId: string): string | null {
   const source = map.getSource(sourceId) as { tiles?: string[] } | undefined;
   return Array.isArray(source?.tiles) ? (source.tiles[0] ?? null) : null;
@@ -124,8 +128,17 @@ function upsert(
   attribution?: string,
 ): void {
   const sourceId = overlaySourceId(id);
-  const existing = map.getSource(sourceId);
   const spec = () => sourceSpec(resolved.source, attribution);
+  let existing = map.getSource(sourceId);
+
+  // A definition can change its source type (geojson -> image -> raster). The
+  // source object cannot be retyped, and `setData` on an image source is a
+  // silent no-op, so rebuild the whole overlay in that case.
+  const currentType = existing ? existingSourceType(map, sourceId) : null;
+  if (existing && currentType !== null && currentType !== resolved.source.type) {
+    removeSourceLayers(map, id);
+    existing = undefined;
+  }
 
   if (resolved.source.type === "geojson") {
     if (existing) {

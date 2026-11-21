@@ -5,6 +5,7 @@
  * frame reads in the UI (clock, relative label) and what the intensity
  * legend looks like. Kept free of React so it can be unit-tested.
  */
+import { dataApiUrl } from "./api";
 import type { LngLatCorners, RadarFrame } from "./types";
 
 /**
@@ -52,6 +53,15 @@ export function radarCoordinates(
     [east, south],
     [west, south],
   ];
+}
+
+/**
+ * Absolute frame URLs. The gateway hands out relative paths; every consumer
+ * (image source, prefetch) must resolve them against the data API origin, not
+ * against the app origin.
+ */
+export function radarFrameUrls(frames: readonly RadarFrame[]): string[] {
+  return frames.map((frame) => dataApiUrl(frame.url));
 }
 
 /** Whole minutes between a frame and the newest analysis slot. */

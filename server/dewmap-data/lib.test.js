@@ -230,15 +230,23 @@ test("warningsRequest builds a WFS query without leaking parameters", () => {
   assert.equal(new URLSearchParams(lib.warningsRequest(null)).has("CQL_FILTER"), false);
 });
 
-test("isPng trusts the magic bytes over a wrong content type", () => {
+test("isPng requires the magic bytes, the content type alone is not enough", () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
-  assert.equal(lib.isPng("image/png", Buffer.alloc(0)), true);
+  assert.equal(lib.isPng("image/png", png), true);
   assert.equal(lib.isPng("", png), true);
+  assert.equal(lib.isPng("image/png", Buffer.alloc(0)), false, "no bytes, no png");
+  assert.equal(
+    lib.isPng("image/png", Buffer.from("<xml/>")),
+    false,
+    "a mislabelled body is not a png",
+  );
   assert.equal(lib.isPng("text/xml", Buffer.from("<xml/>")), false);
   assert.equal(
-    lib.isPng("text/xml", Buffer.from('<?xml version="1.0"?><e/>')),
+    lib.isPng("text/xml", png),
     false,
+    "png bytes behind a wrong type are rejected too",
   );
+  assert.equal(lib.isPng("image/png;charset=binary", png), true);
 });
 
 test("cache keys and etags are stable per slot", () => {
@@ -390,4 +398,73 @@ test("no-data and ring classifiers do not eat palette colours", () => {
   assert.equal(lib.isCoverageRing(204, 0, 152, 255), false, "#cc0098 class");
   assert.equal(lib.isCoverageRing(102, 0, 203, 255), false, "#6600cb class");
   assert.equal(lib.isCoverageRing(229, 0, 76, 255), false, "#e5004c class");
+});
+
+/* --------------------------------------------------------------- routing */
+
+test("matchRoute maps every public path to its handler", () => {
+  assert.equal(lib.matchRoute("GET", "/health").kind, "health");
+  assert.equal(lib.matchRoute("HEAD", "/health").kind, "health");
+  assert.equal(lib.matchRoute("GET", "/api/status").kind, "status");
+  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames").kind, "frames");
+  assert.equal(lib.matchRoute("GET", "/api/weather/warnings").kind, "warnings");
+  const frame = lib.matchRoute(
+    "GET",
+    "/api/weather/radar/frames/20261121T1410.png",
+  );
+  assert.equal(frame.kind, "frame");
+  assert.equal(frame.slot, "20261121T1410");
+});
+
+test("matchRoute rejects everything else without touching an upstream", () => {
+  assert.equal(lib.matchRoute("POST", "/api/weather/warnings").kind, "method_not_allowed");
+  assert.equal(lib.matchRoute("DELETE", "/health").kind, "method_not_allowed");
+  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/").kind, "not_found");
+  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/20261121T141.png").kind, "not_found");
+  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/20261121T1410").kind, "not_found");
+  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/..%2F..%2Fhealth.png").kind, "not_found");
+  assert.equal(lib.matchRoute("GET", "/api/weather/nope").kind, "not_found");
+  assert.equal(lib.matchRoute("GET", "/").kind, "not_found");
+});
+
+/* ------------------------------------------------------- warncell geometry */
+
+test("missingWarncells lists warned cells the geometry layers do not cover", () => {
+  const warnings = [{ cellId: "1" }, { cellId: "2" }, { cellId: "3" }];
+  const collection = {
+    type: "FeatureCollection",
+    features: [{ properties: { WARNCELLID: 1 } }],
+  };
+  assert.deepEqual(lib.missingWarncells(warnings, collection).sort(), ["2", "3"]);
+  assert.deepEqual(lib.missingWarncells(warnings, { features: [] }).sort(), [
+    "1",
+    "2",
+    "3",
+  ]);
+  assert.deepEqual(
+    lib.missingWarncells(warnings, {
+      features: [{ properties: { WARNCELLID: 1 } }, { properties: { WARNCELLID: 2 } }, { properties: { WARNCELLID: 3 } }],
+    }),
+    [],
+  );
+});
+
+/* ------------------------------------------------------------ png limits */
+
+test("stripNoDataPng refuses images above the decode budget", () => {
+  // 2400 x 1800 RGB = 4.32 Mpx: above MAX_PNG_PIXELS (4 Mpx) but still below
+  // the raw byte cap, so this exercises the pixel guard specifically.
+  const rows = Array.from({ length: 1800 }, () => Buffer.alloc(2400 * 3));
+  const png = encodePng(2400, 1800, rows, 2);
+  assert.ok(2400 * 1800 > lib.MAX_PNG_PIXELS);
+  assert.equal(lib.stripNoDataPng(png), png, "returned untouched, not decoded");
+  assert.ok(lib.MAX_PNG_PIXELS <= 4_000_000);
+  assert.ok(lib.MAX_PNG_RAW_BYTES <= 20 * 1024 * 1024);
+});
+
+test("stripNoDataPng survives a truncated IDAT", () => {
+  const png = encodePng(4, 1, [Buffer.from([1, 2, 3, 4, 5, 6, 7, 8])]);
+  const broken = Buffer.from(png);
+  broken[broken.length - 20] = 0x00; // corrupt the compressed stream
+  assert.doesNotThrow(() => lib.stripNoDataPng(broken));
 });

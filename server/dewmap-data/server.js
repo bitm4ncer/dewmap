@@ -142,22 +142,30 @@ async function fetchBuffer(url, { method = "GET", body, timeoutMs } = {}) {
         code: "upstream_status",
       });
     }
-    const declared = Number(res.headers.get("content-length") ?? "0");
-    if (declared > UPSTREAM_MAX_BYTES) {
-      throw new UpstreamError("upstream response too large", {
+    // Count the decompressed bytes while streaming instead of trusting the
+    // header: a chunked response has no content-length at all, and a gzipped
+    // one reports the compressed size (a 5 MB body can expand to gigabytes).
+    if (!res.body) {
+      throw new UpstreamError("upstream returned no body", {
         status: 502,
-        code: "upstream_too_large",
+        code: "upstream_empty",
       });
     }
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.byteLength > UPSTREAM_MAX_BYTES) {
-      throw new UpstreamError("upstream response too large", {
-        status: 502,
-        code: "upstream_too_large",
-      });
+    const chunks = [];
+    let total = 0;
+    for await (const chunk of res.body) {
+      total += chunk.byteLength;
+      if (total > UPSTREAM_MAX_BYTES) {
+        controller.abort();
+        throw new UpstreamError("upstream response too large", {
+          status: 502,
+          code: "upstream_too_large",
+        });
+      }
+      chunks.push(Buffer.from(chunk));
     }
     return {
-      buffer,
+      buffer: Buffer.concat(chunks, total),
       contentType: res.headers.get("content-type") ?? "",
       status: res.status,
     };
@@ -196,8 +204,35 @@ function json(res, status, body, headers = {}) {
   send(res, status, body, headers);
 }
 
+/** Fixed, non-leaking copy per error code. */
+const ERROR_MESSAGES = {
+  busy: "too many radar frames are rendering right now",
+  frame_unavailable: "radar frame is not published yet",
+  upstream_timeout: "upstream did not answer in time",
+  upstream_too_large: "upstream response exceeded the size limit",
+  upstream_unreachable: "upstream is unreachable",
+  upstream_status: "upstream returned an error",
+  upstream_empty: "upstream returned no body",
+  warnings_unavailable: "warnings are unavailable right now",
+  warnings_unparseable: "warnings payload was not usable",
+  invalid_slot: "slot must be a 5-minute radar timestamp within now-6h..now+3h",
+  not_found: "no such endpoint",
+  method_not_allowed: "GET only",
+  bad_request: "malformed request",
+  internal_error: "unexpected gateway error",
+};
+
+function errorMessage(code) {
+  return ERROR_MESSAGES[code] ?? "request failed";
+}
+
 function fail(res, status, code, message, extra = {}) {
-  json(res, status, { ok: false, error: code, message, ...extra });
+  const headers = extra["Retry-After"]
+    ? { "Retry-After": String(extra["Retry-After"]) }
+    : {};
+  const rest = { ...extra };
+  delete rest["Retry-After"];
+  json(res, status, { ok: false, error: code, message, ...rest }, headers);
 }
 
 const gzipCache = new WeakMap();
@@ -337,6 +372,47 @@ async function pruneRadarCache(nowMs) {
 
 /* ------------------------------------------------------------------- radar */
 
+const UPSTREAM_CONCURRENCY = 3;
+const UPSTREAM_QUEUE_LIMIT = 12;
+
+/** slot -> Promise<Buffer> for renders that are already running. */
+const radarInflight = new Map();
+
+let activeRenders = 0;
+const renderQueue = [];
+
+/** Resolves with a ticket once a render slot is free; null when the queue is full. */
+function acquireRenderSlot() {
+  if (activeRenders < UPSTREAM_CONCURRENCY) {
+    activeRenders += 1;
+    return Promise.resolve(true);
+  }
+  if (renderQueue.length >= UPSTREAM_QUEUE_LIMIT) return null;
+  return new Promise((resolve) => {
+    renderQueue.push(resolve);
+  });
+}
+
+function releaseRenderSlot() {
+  const next = renderQueue.shift();
+  if (next) {
+    // Hand the slot straight to the next waiter; the count stays the same.
+    next(true);
+  } else {
+    activeRenders = Math.max(0, activeRenders - 1);
+  }
+}
+
+/**
+ * Radar frames: cache, then de-duplicated inflight, then a bounded render.
+ *
+ * Three identical cold requests used to start three GeoServer renders. Each
+ * render costs 1–10 s upstream plus ~7 MB RSS and ~90 ms of event loop in the
+ * PNG post-processor, so an unbounded fan-out on cold slots could exhaust the
+ * 128 MB container. Identical slots now share one promise, and at most
+ * `UPSTREAM_CONCURRENCY` renders run at a time; beyond a short queue the
+ * gateway answers 503 with Retry-After instead of piling up.
+ */
 async function radarFrame(slot) {
   const cached = radarMemory.get(slot);
   if (cached) return { buffer: cached, cache: "hit" };
@@ -347,28 +423,53 @@ async function radarFrame(slot) {
     return { buffer: fromDisk, cache: "hit" };
   }
 
-  const started = Date.now();
-  let result;
-  try {
-    result = await fetchBuffer(lib.radarFrameUrl(slot, { baseUrl: WMS_ENDPOINT }));
-  } catch (error) {
-    noteUpstream("radar", started, error);
-    throw error;
-  }
-  if (!lib.isPng(result.contentType, result.buffer)) {
-    noteUpstream("radar", started, "no png for slot");
-    throw new UpstreamError("frame not published yet", {
-      status: 502,
-      code: "frame_unavailable",
+  const inflight = radarInflight.get(slot);
+  if (inflight) return { buffer: await inflight, cache: "coalesced" };
+
+  const ticket = acquireRenderSlot();
+  if (!ticket) {
+    throw new UpstreamError("too many radar renders in flight", {
+      status: 503,
+      code: "busy",
     });
   }
-  noteUpstream("radar", started, null);
-  // Drop DWD's translucent "no data" wash and the magenta coverage ring; the
-  // overlay should paint precipitation only.
-  const stripped = lib.stripNoDataPng(result.buffer);
-  radarMemory.set(slot, stripped);
-  await safeWrite(RADAR_DIR, lib.radarCacheName(slot), stripped);
-  return { buffer: stripped, cache: "miss", upstreamMs: Date.now() - started };
+
+  const started = Date.now();
+  const task = (async () => {
+    await ticket;
+    try {
+      const result = await fetchBuffer(
+        lib.radarFrameUrl(slot, { baseUrl: WMS_ENDPOINT }),
+      );
+      if (!lib.isPng(result.contentType, result.buffer)) {
+        noteUpstream("radar", started, "no png for slot");
+        throw new UpstreamError("frame not published yet", {
+          status: 502,
+          code: "frame_unavailable",
+        });
+      }
+      noteUpstream("radar", started, null);
+      // Drop DWD's translucent "no data" wash and the magenta coverage ring;
+      // the overlay should paint precipitation only.
+      const stripped = lib.stripNoDataPng(result.buffer);
+      radarMemory.set(slot, stripped);
+      await safeWrite(RADAR_DIR, lib.radarCacheName(slot), stripped);
+      return stripped;
+    } catch (error) {
+      noteUpstream("radar", started, error);
+      throw error;
+    } finally {
+      releaseRenderSlot();
+    }
+  })();
+
+  radarInflight.set(slot, task);
+  try {
+    const buffer = await task;
+    return { buffer, cache: "miss", upstreamMs: Date.now() - started };
+  } finally {
+    radarInflight.delete(slot);
+  }
 }
 
 let framesCache = { at: 0, payload: null };
@@ -401,34 +502,23 @@ async function warmRadar() {
     await pruneRadarCache(nowMs);
     return;
   }
+  let warmed = true;
   for (const slot of [newest, lib.slotId(anchorMs - lib.SLOT_MS)]) {
-    const onDisk = await readCacheFile(RADAR_DIR, lib.radarCacheName(slot));
-    if (onDisk) {
-      radarMemory.set(slot, onDisk);
-      continue;
-    }
-    const started = Date.now();
     try {
-      const result = await fetchBuffer(lib.radarFrameUrl(slot, { baseUrl: WMS_ENDPOINT }));
-      if (lib.isPng(result.contentType, result.buffer)) {
-        const stripped = lib.stripNoDataPng(result.buffer);
-        radarMemory.set(slot, stripped);
-        await safeWrite(RADAR_DIR, lib.radarCacheName(slot), stripped);
-        noteUpstream("radar", started, null);
-        log("warmed radar", slot, `${Date.now() - started}ms`);
-      } else {
-        noteUpstream("radar", started, "warm: no png");
-      }
+      const had = radarMemory.get(slot);
+      await radarFrame(slot);
+      if (!had) log("warmed radar", slot);
     } catch (error) {
-      noteUpstream("radar", started, error);
       log("warm radar failed", slot, String(error?.message ?? error));
+      warmed = false;
       break;
     }
   }
-  lastWarmSlot = newest;
+  // Only claim the slot when it is actually cached, otherwise the next tick
+  // retries instead of leaving the newest slot cold for five minutes.
+  if (warmed) lastWarmSlot = newest;
   await pruneRadarCache(nowMs);
 }
-
 
 /* ---------------------------------------------------------------- warnings */
 
@@ -494,6 +584,7 @@ async function buildWarnings(nowMs) {
     warnings: normalized.warnings,
     areas: lib.joinWarningAreas(normalized.warnings, collection),
     areasComplete: !areasError,
+    areasMissing: lib.missingWarncells(normalized.warnings, collection).length,
     source: {
       warnings: "DWD warnapp warnings.json",
       areas: "DWD WFS Warngebiete (Kreise + Gemeinden)",
@@ -591,24 +682,19 @@ async function handleRadarFrames(req, res, nowMs) {
 
 async function handleRadarFrame(req, res, slot, nowMs) {
   if (!lib.isSlotInWindow(slot, nowMs)) {
-    return fail(
-      res,
-      400,
-      "invalid_slot",
-      "slot must be a 5-minute radar timestamp within now-6h..now+3h",
-    );
+    return fail(res, 400, "invalid_slot", errorMessage("invalid_slot"));
   }
   let frame;
   try {
     frame = await radarFrame(slot);
   } catch (error) {
-    return fail(
-      res,
-      error.status ?? 502,
-      error.code ?? "upstream_error",
-      String(error.message ?? error),
-      { upstream: "dwd-radar" },
-    );
+    const status = error.status ?? 502;
+    const code = error.code ?? "upstream_error";
+    return fail(res, status, code, errorMessage(code), {
+      upstream: "dwd-radar",
+      ...(status === 503 ? { retryAfterSeconds: 3 } : {}),
+      ...(status === 503 ? { "Retry-After": "3" } : {}),
+    });
   }
   const headers = {
     "Content-Type": "image/png",
@@ -633,15 +719,17 @@ async function handleWarnings(req, res, nowMs) {
   try {
     result = await warningsPayload(nowMs);
   } catch (error) {
-    return fail(
-      res,
-      error.status ?? 502,
-      error.code ?? "warnings_unavailable",
-      String(error.message ?? error),
-      { upstream: "dwd-warnings" },
-    );
+    const code = error.code ?? "warnings_unavailable";
+    return fail(res, error.status ?? 502, code, errorMessage(code), {
+      upstream: "dwd-warnings",
+    });
   }
-  const age = Date.now() - warningsState.fetchedAt;
+  // Age is measured from the payload itself so a restart that restores the
+  // disk copy reports the real age instead of zero.
+  const issued = Date.parse(result.payload?.generated ?? "");
+  const age = Number.isFinite(issued)
+    ? Math.max(0, Date.now() - issued)
+    : Date.now() - warningsState.fetchedAt;
   const stale = age > WARNINGS_STALE_MS;
   sendJsonCompressed(req, res, result.payload, {
     cacheControl: "public, max-age=300",
@@ -662,18 +750,20 @@ const server = http.createServer(async (req, res) => {
     res.end();
     return;
   }
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    return fail(res, 405, "method_not_allowed", "GET only");
-  }
-
   const url = parseRequestUrl(req);
-  if (!url) return fail(res, 400, "bad_request", "malformed URL");
+  if (!url) return fail(res, 400, "bad_request", errorMessage("bad_request"));
 
   const nowMs = Date.now();
   const pathname = url.pathname.replace(/\/+$/, "") || "/";
 
   try {
-    if (pathname === "/health" || pathname === "/api/status") {
+    const route = lib.matchRoute(req.method, pathname);
+
+    if (route.kind === "method_not_allowed") {
+      return fail(res, 405, "method_not_allowed", errorMessage("method_not_allowed"));
+    }
+
+    if (route.kind === "health" || route.kind === "status") {
       const base = {
         ok: true,
         service: SERVICE,
@@ -681,32 +771,39 @@ const server = http.createServer(async (req, res) => {
         uptime: Math.round(process.uptime()),
         now: new Date(nowMs).toISOString(),
       };
+      // Operational state only: no filesystem paths, no raw upstream text.
       const detail = {
-        cache: { dir: CACHE_DIR, writable: cacheWritable, ...cacheStats },
-        upstreams,
+        cache: {
+          writable: cacheWritable,
+          files: cacheStats.files,
+          bytes: cacheStats.bytes,
+        },
+        upstreams: Object.fromEntries(
+          Object.entries(upstreams).map(([name, state]) => [
+            name,
+            { ok: state.lastError === null, lastMs: state.lastMs },
+          ]),
+        ),
       };
-      return json(res, 200, pathname === "/health" ? { ...base, ...detail } : { ...base, ...detail });
+      return json(res, 200, { ...base, ...detail });
     }
 
-    if (pathname === "/api/weather/radar/frames") {
+    if (route.kind === "frames") {
       return await handleRadarFrames(req, res, nowMs);
     }
 
-    const frameMatch = pathname.match(
-      /^\/api\/weather\/radar\/frames\/(\d{8}T\d{4})\.png$/,
-    );
-    if (frameMatch) {
-      return await handleRadarFrame(req, res, frameMatch[1], nowMs);
+    if (route.kind === "frame") {
+      return await handleRadarFrame(req, res, route.slot, nowMs);
     }
 
-    if (pathname === "/api/weather/warnings") {
+    if (route.kind === "warnings") {
       return await handleWarnings(req, res, nowMs);
     }
 
-    return fail(res, 404, "not_found", `no route for ${pathname}`);
+    return fail(res, 404, "not_found", errorMessage("not_found"));
   } catch (error) {
     log("unhandled", pathname, String(error?.stack ?? error));
-    return fail(res, 500, "internal_error", "unexpected gateway error");
+    return fail(res, 500, "internal_error", errorMessage("internal_error"));
   }
 });
 

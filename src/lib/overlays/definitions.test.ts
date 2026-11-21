@@ -55,7 +55,14 @@ describe("radar overlay", () => {
     expect(radarOverlay.timeAware).toBe(true);
     expect(radarOverlay.group).toBe("weather");
     expect(radarOverlay.attribution.label).toContain("Deutscher Wetterdienst");
-    expect(radarOverlay.maxzoom).toBeUndefined();
+    expect(radarOverlay.maxzoom).toBe(12);
+    const resolved = radarOverlay.resolve({
+      opacity: 1,
+      radar: { frames: [frame], index: 0, image },
+      warnings: null,
+    });
+    // The 1.3 km composite stops at z12 instead of blowing up into blobs.
+    expect(resolved?.layers[0].maxzoom).toBe(12);
   });
 });
 

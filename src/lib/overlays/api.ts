@@ -184,6 +184,8 @@ export interface WarningsPayload {
   warnings: WarningItem[];
   areas: GeoJSON.FeatureCollection;
   areasComplete: boolean;
+  /** Warned cells the DWD geometry layers do not cover. */
+  areasMissing?: number;
   source: { warnings: string; areas: string };
   attribution: { label: string; url?: string };
 }

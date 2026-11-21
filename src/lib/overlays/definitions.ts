@@ -28,6 +28,9 @@ export const radarOverlay: OverlayDefinition = {
     "Radar composite RV · 1 km · 5 min · analysis plus 90 min nowcast · Germany",
   attribution: DWD,
   opacity: 0.72,
+  // The composite is ~1.3 km per source pixel; past z12 the blobs get larger
+  // than any useful detail, so the layer stops there.
+  maxzoom: 12,
   timeAware: true,
   order: 100,
   resolve: ({ opacity, radar }) => {
@@ -43,6 +46,7 @@ export const radarOverlay: OverlayDefinition = {
       layers: [
         {
           type: "raster",
+          maxzoom: 12,
           paint: {
             "raster-opacity": opacity,
             "raster-fade-duration": 0,

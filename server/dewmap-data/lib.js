@@ -9,6 +9,14 @@
 
 const SLOT_MS = 5 * 60_000;
 
+/**
+ * Decoding budget for the radar post-processor. Two full-size pixel buffers
+ * (inflated + re-encoded) plus the compression window have to fit next to the
+ * ~20 MB base RSS in a 128 MB container.
+ */
+const MAX_PNG_PIXELS = 4_000_000;
+const MAX_PNG_RAW_BYTES = 20 * 1024 * 1024;
+
 /** DWD radar composite RV over Germany, in web mercator metres. */
 const RADAR_BBOX = "162894,5729950,2085194,7602217";
 /** Same extent as lon/lat, used by the client as image coordinates. */
@@ -339,6 +347,24 @@ function joinWarningAreas(warnings, collection) {
   return { type: "FeatureCollection", features };
 }
 
+/**
+ * Warned cells that the DWD geometry layers do not cover (combined city cells,
+ * sea areas). They are legitimate warnings without a polygon, so the panel
+ * reports the count instead of pretending the map is complete.
+ */
+function missingWarncells(warnings, collection) {
+  const covered = new Set(
+    (Array.isArray(collection?.features) ? collection.features : [])
+      .map((feature) => String(feature?.properties?.WARNCELLID ?? ""))
+      .filter(Boolean),
+  );
+  const missing = new Set();
+  for (const warning of warnings) {
+    if (!covered.has(String(warning.cellId))) missing.add(String(warning.cellId));
+  }
+  return [...missing];
+}
+
 /** CQL for the WFS call: only the warncells that actually have a warning. */
 function warncellCql(cellIds) {
   const ids = [...new Set(cellIds.map((id) => String(id)))].filter((id) =>
@@ -353,12 +379,34 @@ function warningsRequest(cql) {
     service: "WFS",
     version: "2.0.0",
     request: "GetFeature",
-    typeName: "dwd:Warngebiete_Kreise,dwd:Warngebiete_Gemeinden",
+    typeName:
+      "dwd:Warngebiete_Kreise,dwd:Warngebiete_Gemeinden,dwd:Warngebiete_Binnenseen",
     outputFormat: "application/json",
     srsName: "EPSG:4326",
   });
   if (cql) params.set("CQL_FILTER", cql);
   return params.toString();
+}
+
+/* ---------------------------------------------------------------- routing */
+
+const FRAME_PATH = /^\/api\/weather\/radar\/frames\/(\d{8}T\d{4})\.png$/;
+
+/**
+ * Pure request routing, so the paths that decide "what does this request do"
+ * can be tested without an HTTP server. `server.js` only executes the verdict.
+ */
+function matchRoute(method, pathname) {
+  if (method !== "GET" && method !== "HEAD") {
+    return { kind: "method_not_allowed" };
+  }
+  if (pathname === "/health") return { kind: "health" };
+  if (pathname === "/api/status") return { kind: "status" };
+  if (pathname === "/api/weather/radar/frames") return { kind: "frames" };
+  const frame = pathname.match(FRAME_PATH);
+  if (frame) return { kind: "frame", slot: frame[1] };
+  if (pathname === "/api/weather/warnings") return { kind: "warnings" };
+  return { kind: "not_found" };
 }
 
 /* ------------------------------------------------------------------ misc */
@@ -368,18 +416,28 @@ function radarCacheName(slot) {
   return `${slot}.png`;
 }
 
+/**
+ * A frame is a PNG only if the bytes say so. The content type alone is not
+ * enough: a mislabelled body would otherwise be cached as `image/png` for a
+ * year and served forever. When a type is given it must also be a PNG type,
+ * so `text/xml` with PNG bytes is still rejected.
+ */
 function isPng(contentType, buffer) {
-  if (typeof contentType === "string" && /image\/png/i.test(contentType)) {
-    return true;
-  }
-  return (
-    buffer instanceof Uint8Array &&
-    buffer.length > 8 &&
+  if (!(buffer instanceof Uint8Array) || buffer.length < 8) return false;
+  const magic =
     buffer[0] === 0x89 &&
     buffer[1] === 0x50 &&
     buffer[2] === 0x4e &&
-    buffer[3] === 0x47
-  );
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a;
+  if (!magic) return false;
+  if (typeof contentType === "string" && contentType.length > 0) {
+    return /image\/(png|x-png)/i.test(contentType);
+  }
+  return true;
 }
 
 /** ETag for an immutable radar frame. */
@@ -496,21 +554,31 @@ function stripNoDataPng(buffer) {
   const interlace = ihdr.data[12];
   if (bitDepth !== 8 || interlace !== 0) return buffer;
   if (colorType !== 6 && colorType !== 2) return buffer;
-  if (width === 0 || height === 0 || width * height > 40_000_000) return buffer;
+  // 1000x974 (the DWD frame) is 0.97 Mpx; four times that is plenty of head
+  // room and keeps decoded + re-encoded buffers well inside 128 MB.
+  if (width === 0 || height === 0 || width * height > MAX_PNG_PIXELS) {
+    return buffer;
+  }
 
   const bpp = colorType === 6 ? 4 : 3;
   const stride = width * bpp;
+  const rawLength = height * (stride + 1);
+  // `inflateSync` without a bound is the one place where a broken upstream
+  // could hand us a gigabyte. Bound the output to exactly what the header
+  // promises, and refuse anything that would not fit the container budget.
+  if (rawLength > MAX_PNG_RAW_BYTES) return buffer;
   let inflated;
   try {
     inflated = zlib.inflateSync(
       Buffer.concat(chunks.filter((c) => c.type === "IDAT").map((c) => c.data)),
+      { maxOutputLength: rawLength + 1024 },
     );
   } catch {
     return buffer;
   }
-  if (inflated.length < height * (stride + 1)) return buffer;
+  if (inflated.length < rawLength) return buffer;
 
-  const out = Buffer.alloc(height * (stride + 1));
+  const out = Buffer.alloc(rawLength);
   let previous = Buffer.alloc(stride);
   let changed = false;
   for (let y = 0; y < height; y += 1) {
@@ -609,6 +677,10 @@ module.exports = {
   radarCacheName,
   isPng,
   frameEtag,
+  matchRoute,
+  missingWarncells,
+  MAX_PNG_PIXELS,
+  MAX_PNG_RAW_BYTES,
   stripNoDataPng,
   isCoverageRing,
   isNoDataWash,

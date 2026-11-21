@@ -9,7 +9,7 @@
  * swap never leaves a layer behind. Tap handling for overlays that define a
  * `popup` goes through the shared feature-tap pipeline.
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Popup, type Map as MLMap, type MapGeoJSONFeature } from "maplibre-gl";
 import { registerFeatureTaps } from "@/lib/map/featureTaps";
 import { listOverlays } from "@/lib/overlays";
@@ -84,9 +84,21 @@ export function useOverlayLayers(map: MLMap | null): void {
     [activeEntries],
   );
 
+  // `interactive` gets a new identity on every radar frame, but the tap groups
+  // only depend on which overlays are on and how many layers they occupy.
+  // Without this key the groups would be un- and re-registered every 650 ms
+  // during playback.
+  const tapKey = interactive
+    .map((entry) => `${entry.definition.id}:${entry.resolved?.layers.length ?? 0}`)
+    .join("|");
+  const interactiveRef = useRef(interactive);
+  useEffect(() => {
+    interactiveRef.current = interactive;
+  }, [interactive]);
+
   useEffect(() => {
     if (!map) return;
-    const cleanups = interactive.map(({ definition, resolved }) => {
+    const cleanups = interactiveRef.current.map(({ definition, resolved }) => {
       const layers = overlayLayerIds(definition.id, resolved?.layers.length ?? 0);
       return registerFeatureTaps(map, {
         id: `overlay-${definition.id}`,
@@ -106,5 +118,5 @@ export function useOverlayLayers(map: MLMap | null): void {
     return () => {
       for (const cleanup of cleanups) cleanup();
     };
-  }, [map, interactive]);
+  }, [map, tapKey]);
 }

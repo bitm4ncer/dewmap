@@ -27,6 +27,7 @@ function fakeMap(layers: { id: string; type: string }[] = []) {
     getSource: (id: string) =>
       style.sources[id]
         ? {
+            type: (style.sources[id] as { type?: string }).type,
             url: (style.sources[id] as { url?: string }).url,
             tiles: (style.sources[id] as { tiles?: string[] }).tiles,
             setData: (data: unknown) => {
@@ -192,6 +193,35 @@ describe("reconcileOverlays", () => {
     ]);
     expect(map.getLayer("overlay:a:0")?.type).toBe("line");
     expect(map.getLayer("overlay:a:1")).toBeUndefined();
+  });
+
+  it("rebuilds the overlay when a definition changes its source type", () => {
+    const map = fakeMap();
+    const def = definition("mixed");
+    reconcileOverlays(map, [{ definition: def, resolved: geojson(empty) }]);
+    expect(
+      (map.getStyle().sources["overlay:mixed"] as { type: string }).type,
+    ).toBe("geojson");
+
+    const asImage: ResolvedOverlay = {
+      source: {
+        type: "image",
+        url: "https://a/1.png",
+        coordinates: [
+          [1, 56],
+          [19, 56],
+          [19, 45],
+          [1, 45],
+        ],
+      },
+      layers: [{ type: "raster", paint: { "raster-opacity": 0.7 } }],
+    };
+    reconcileOverlays(map, [{ definition: def, resolved: asImage }]);
+    expect(
+      (map.getStyle().sources["overlay:mixed"] as { type: string }).type,
+    ).toBe("image");
+    expect(map.getLayer("overlay:mixed:0")?.type).toBe("raster");
+    expect(map.getLayer("overlay:mixed:1")).toBeUndefined();
   });
 
   it("updates an image source in place instead of rebuilding it", () => {

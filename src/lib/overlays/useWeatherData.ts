@@ -16,6 +16,7 @@ import {
   overlayErrorMessage,
 } from "./api";
 import { RADAR_OVERLAY_ID, WARNINGS_OVERLAY_ID } from "./definitions";
+import { radarFrameUrls } from "./radar";
 import { useOverlays } from "./store";
 
 const REFRESH_MS = 5 * 60_000;
@@ -78,6 +79,10 @@ export function useWeatherWarnings(): void {
 
     const load = async () => {
       if (!alive) return;
+      if (!visible()) {
+        timer = window.setTimeout(() => void load(), REFRESH_MS);
+        return;
+      }
       controller = new AbortController();
       const { warnings, setWarningsStatus, setWarnings } = useOverlays.getState();
       if (!warnings) setWarningsStatus("loading");
@@ -129,7 +134,9 @@ export function useRadarPlayback(): void {
 
   useEffect(() => {
     if (!playing || !enabled || !frames) return;
-    prefetchFrames(frames.frames.map((frame) => frame.url));
+    // Frame URLs in the payload are gateway-relative; radarFrameUrls resolves
+    // them against the data API origin, exactly like the image source does.
+    prefetchFrames(radarFrameUrls(frames.frames));
   }, [playing, enabled, frames]);
 
   useEffect(() => {

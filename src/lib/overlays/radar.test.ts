@@ -6,6 +6,8 @@ import {
   frameHint,
   frameOffsetMinutes,
   radarCoordinates,
+  radarFrameUrls,
+  weatherDayKey,
 } from "./radar";
 
 const anchor = "2026-11-21T04:50:00.000Z";
@@ -70,5 +72,54 @@ describe("legend", () => {
   it("turns the palette into a CSS gradient", () => {
     expect(RADAR_GRADIENT.startsWith("linear-gradient(to right, #33ffff")).toBe(true);
     expect(RADAR_GRADIENT).toContain("#fe0000");
+  });
+});
+
+describe("frame urls", () => {
+  it("resolves gateway-relative paths against the data API origin", () => {
+    // Regression: the prefetch used the raw relative url and hit the app
+    // origin (18 x 404) instead of the gateway.
+    expect(
+      radarFrameUrls([
+        {
+          slot: "20261121T1410",
+          time: "2026-11-21T14:10:00.000Z",
+          kind: "analysis",
+          url: "/api/weather/radar/frames/20261121T1410.png",
+        },
+      ]),
+    ).toEqual([
+      "https://data.dewmap.app/api/weather/radar/frames/20261121T1410.png",
+    ]);
+  });
+
+  it("keeps absolute urls untouched", () => {
+    expect(
+      radarFrameUrls([
+        {
+          slot: "x",
+          time: "2026-11-21T14:10:00.000Z",
+          kind: "forecast",
+          url: "https://cdn.example/f.png",
+        },
+      ]),
+    ).toEqual(["https://cdn.example/f.png"]);
+  });
+});
+
+describe("daylight saving", () => {
+  it("formats both sides of the spring change in Berlin time", () => {
+    // The clock jumps 02:00 CET -> 03:00 CEST at 01:00 UTC on 2026-03-29.
+    expect(formatClock("2026-03-29T00:30:00.000Z")).toBe("01:30");
+    expect(formatClock("2026-03-29T01:00:00.000Z")).toBe("03:00");
+    expect(formatClock("2026-03-29T02:00:00.000Z")).toBe("04:00");
+    expect(weatherDayKey(new Date("2026-03-28T23:30:00.000Z"))).toBe("2026-03-29");
+  });
+
+  it("formats both sides of the autumn change in Berlin time", () => {
+    // 2026-10-25 00:30 UTC is 02:30 CEST, 01:30 UTC is 02:30 CET.
+    expect(formatClock("2026-10-25T00:30:00.000Z")).toBe("02:30");
+    expect(formatClock("2026-10-25T01:30:00.000Z")).toBe("02:30");
+    expect(formatClock("2026-10-25T02:30:00.000Z")).toBe("03:30");
   });
 });

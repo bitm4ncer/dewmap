@@ -7,7 +7,12 @@
  */
 import { LayerCard } from "./LayerCard";
 import { PauseIcon, PlayIcon, RainIcon, WarningIcon } from "../ui/icons";
-import { RADAR_GRADIENT, formatClock, frameHint } from "@/lib/overlays/radar";
+import {
+  RADAR_GRADIENT,
+  RADAR_LEGEND_LABELS,
+  formatClock,
+  frameHint,
+} from "@/lib/overlays/radar";
 import { RADAR_OVERLAY_ID, WARNINGS_OVERLAY_ID } from "@/lib/overlays/definitions";
 import { latestAnalysisIndex, useOverlays } from "@/lib/overlays/store";
 import {
@@ -55,12 +60,35 @@ function RadarControls() {
 
   if (!frames) return null;
   const list = frames.frames;
-  const frame = list[Math.min(index, list.length - 1)];
+  const clamped = Math.min(index, list.length - 1);
+  const frame = list[clamped];
   if (!frame) return null;
-  const last = list.length - 1;
-  const nowPct = last
-    ? (latestAnalysisIndex(frames) / last) * 100
-    : 0;
+
+  // The frame list is not evenly spaced (5-minute analysis, 15-minute nowcast),
+  // so the slider runs on real minutes, not on frame indices. Without this the
+  // "Jetzt" marker would sit at 65 % while the actual now is at 38 % of the
+  // time range.
+  const startMs = Date.parse(list[0].time);
+  const offsets = list.map((f) => Math.round((Date.parse(f.time) - startMs) / 60_000));
+  const maxOffset = offsets[offsets.length - 1] || 0;
+  const currentOffset = offsets[clamped] ?? 0;
+  const anchorOffset = offsets[latestAnalysisIndex(frames)] ?? 0;
+  const nowPct = maxOffset ? (anchorOffset / maxOffset) * 100 : 0;
+  const fillPct = maxOffset ? (currentOffset / maxOffset) * 100 : 0;
+
+  /** Snap a minute value onto the frame that is closest in time. */
+  const selectByOffset = (value: number) => {
+    let best = 0;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    offsets.forEach((offset, i) => {
+      const delta = Math.abs(offset - value);
+      if (delta < bestDelta) {
+        best = i;
+        bestDelta = delta;
+      }
+    });
+    setIndex(best);
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -87,29 +115,33 @@ function RadarControls() {
           <input
             type="range"
             min={0}
-            max={last}
+            max={maxOffset}
             step={1}
-            value={index}
+            value={currentOffset}
             onChange={(e) => {
               setPlaying(false);
-              setIndex(Number(e.target.value));
+              selectByOffset(Number(e.target.value));
             }}
             className="hud-slider w-full"
-            style={{ ["--hud-fill" as string]: `${last ? (index / last) * 100 : 0}%` }}
+            style={{ ["--hud-fill" as string]: `${fillPct}%` }}
             aria-label="Radar-Zeitpunkt"
             aria-valuetext={`${formatClock(frame.time)}, ${frameHint(frame, frames.anchor)}`}
           />
         </div>
       </div>
       <div className="relative h-3 text-[10.5px] text-[color:var(--ink-mute)]">
-        <span className="absolute left-0">-60 Min</span>
+        <span className="absolute left-0">
+          {frameHint(list[0], frames.anchor)}
+        </span>
         <span
           className="absolute -translate-x-1/2"
           style={{ left: `${nowPct}%` }}
         >
           Jetzt
         </span>
-        <span className="absolute right-0">+90 Min</span>
+        <span className="absolute right-0">
+          {frameHint(list[list.length - 1], frames.anchor)}
+        </span>
       </div>
     </div>
   );
@@ -131,9 +163,9 @@ function RadarCard() {
       : status === "error"
         ? error ?? "Radar nicht erreichbar."
         : frames
-          ? `${frames.frames.filter((f) => f.kind === "analysis").length} analysis · ${
+          ? `${frames.frames.filter((f) => f.kind === "analysis").length} Analyse- und ${
               frames.frames.filter((f) => f.kind === "forecast").length
-            } nowcast frames · ${formatClock(frames.generated)} geladen`
+            } Nowcast-Frames · ${formatClock(frames.generated)} geladen`
           : null;
 
   return (
@@ -144,14 +176,14 @@ function RadarCard() {
       opacity={opacity}
       onToggle={(next) => setEnabled(RADAR_OVERLAY_ID, next)}
       onOpacityChange={(next) => setOpacity(RADAR_OVERLAY_ID, next)}
-      caption="Radar composite RV · 1 km · 5 min · analysis plus 90 min nowcast · Germany"
+      caption="Radar composite RV · 1 km · 5 min · analysis plus 90 min nowcast · Germany · visible to zoom 12"
       status={statusLine}
       extras={on ? <RadarControls /> : null}
       legend={{
         gradient: RADAR_GRADIENT,
-        minLabel: "0.1",
-        midLabel: "5",
-        maxLabel: "150+",
+        minLabel: RADAR_LEGEND_LABELS[0],
+        midLabel: RADAR_LEGEND_LABELS[2],
+        maxLabel: RADAR_LEGEND_LABELS[RADAR_LEGEND_LABELS.length - 1],
         unit: "mm/h · DWD radar scale",
       }}
       footer={
@@ -225,6 +257,11 @@ function WarningList() {
       {hidden > 0 && (
         <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
           +{hidden} weitere Warnungen
+        </p>
+      )}
+      {(payload.areasMissing ?? 0) > 0 && (
+        <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
+          {payload.areasMissing} Warnzellen ohne Gebietsfläche (Kombi- oder Seezellen)
         </p>
       )}
     </div>
