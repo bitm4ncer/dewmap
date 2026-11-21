@@ -11,13 +11,19 @@ import {
   LIVE_MIN_ZOOM,
   LIVE_POLL_MS,
   MAX_LIVE_VEHICLES,
+  alertGateAction,
   alertStopCandidates,
+  commitAlertGate,
   fetchAreaAlerts,
-  fetchLiveVehicles,
+  fetchLiveVehiclesChunked,
   filterLiveVehicles,
   formatClock,
   isAbortError,
   isProviderError,
+  lineKey,
+  pollDelayForPayload,
+  resetAlertGate,
+  type AlertGate,
   type LiveVehicle,
   type TransitAlert,
 } from "@/lib/routing";
@@ -35,8 +41,6 @@ const ALERT_SRC = "live-alerts";
 const ALERT_HALO = "live-alerts-halo";
 const ALERT_LABEL = "live-alerts-label";
 
-/** Alerts refresh much slower than positions; they change rarely. */
-const ALERTS_POLL_MS = 5 * 60_000;
 const MAX_ALERT_MARKERS = 24;
 
 interface StatusState {
@@ -69,8 +73,9 @@ class LiveStatusControl implements IControl {
 
   onAdd(): HTMLElement {
     const container = document.createElement("div");
-    container.setAttribute("role", "status");
-    container.setAttribute("aria-live", "polite");
+    // Readable on demand via aria-label/title; not a live region, otherwise
+    // every 45 s poll would announce "updated HH:MM" to screen readers.
+    container.setAttribute("role", "img");
     container.style.cssText = [
       "display:none",
       "align-items:center",
@@ -199,7 +204,7 @@ function features(
   vehicles: LiveVehicle[],
   alertLines: readonly string[],
 ): GeoJSON.FeatureCollection {
-  const alerts = new Set(alertLines.map((line) => line.toLowerCase()));
+  const alerts = new Set(alertLines.map((line) => lineKey(line)));
   return {
     type: "FeatureCollection",
     features: vehicles.map((vehicle) => ({
@@ -220,7 +225,7 @@ function features(
         realTime: vehicle.realTime,
         source: vehicle.source,
         phase: vehicle.phase,
-        alert: alerts.has(vehicle.line.toLowerCase()),
+        alert: alerts.has(lineKey(vehicle.line)),
         from: vehicle.fromName,
         to: vehicle.toName,
         fromTz: vehicle.fromTz ?? "",
@@ -531,8 +536,8 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
     let timer: number | undefined;
     let moveTimer: number | undefined;
     let lastFetchAt = 0;
-    let lastAlertsAt = 0;
-    let lastAlertCenter: { lat: number; lon: number } | null = null;
+    let lastPayloadBytes = 0;
+    let alertGate: AlertGate = resetAlertGate();
     let alertsInFlight = false;
     let controller: AbortController | null = null;
     let alertController: AbortController | null = null;
@@ -584,7 +589,23 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
         north: bounds.getNorth(),
         east: bounds.getEast(),
       });
-      if (stops.length === 0) return;
+      const action = alertGateAction(alertGate, {
+        stopCount: stops.length,
+        center: { lat: center.lat, lon: center.lng },
+        now: Date.now(),
+      });
+      if (action === "skip") return;
+      // F2: leaving the sampled area must remove its markers, not keep the
+      // previous city's alerts on a now-empty view.
+      if (action === "clear") {
+        alertGate = resetAlertGate();
+        const state = useTransit.getState();
+        if (state.liveAlerts.length > 0 || state.liveAlertsUpdatedAt !== null) {
+          state.setLiveAlerts([], null);
+          apply();
+        }
+        return;
+      }
       alertsInFlight = true;
       alertController = new AbortController();
       try {
@@ -601,8 +622,10 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
       } finally {
         alertsInFlight = false;
         alertController = null;
-        lastAlertsAt = Date.now();
-        lastAlertCenter = { lat: center.lat, lon: center.lng };
+        alertGate = commitAlertGate(
+          { lat: center.lat, lon: center.lng },
+          Date.now(),
+        );
       }
     };
 
@@ -621,6 +644,9 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
         useTransit.getState().setLiveVehiclesError(null);
         useTransit.getState().setLiveVehiclesData([]);
         useTransit.getState().setLiveAlerts([], null);
+        // F3: a quick zoom-out/in must load alerts again immediately instead
+        // of waiting out the 5-minute gate.
+        alertGate = resetAlertGate();
         apply();
         return jitter(LIVE_POLL_MS);
       }
@@ -630,7 +656,7 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
       inFlight = true;
       controller = new AbortController();
       try {
-        const vehicles = await fetchLiveVehicles({
+        const { vehicles, bytes } = await fetchLiveVehiclesChunked({
           south: bounds.getSouth(),
           west: bounds.getWest(),
           north: bounds.getNorth(),
@@ -639,28 +665,22 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
           signal: controller.signal,
         });
         if (!alive) return jitter(LIVE_POLL_MS);
-        current = vehicles.slice(0, MAX_LIVE_VEHICLES);
+        lastPayloadBytes = bytes;
+        // F6: keep the most relevant vehicles when the cap bites, but report
+        // the true total instead of pretending the cut list is everything.
+        const center = map.getCenter();
+        const distance = (vehicle: LiveVehicle) =>
+          (vehicle.lon - center.lng) ** 2
+          + (vehicle.lat - center.lat) ** 2;
+        current = [...vehicles]
+          .sort((a, b) => distance(a) - distance(b))
+          .slice(0, MAX_LIVE_VEHICLES);
         useTransit.getState().setLiveVehiclesData(current);
-        setStatus(current.length, Date.now());
+        setStatus(vehicles.length, Date.now());
         useTransit.getState().setLiveVehiclesError(null);
         apply();
-        // Refresh on the slow interval, but also when the view moved to a
-        // different city; cached stops make the repeat mostly free.
-        const center = map.getCenter();
-        const movedKm = lastAlertCenter
-          ? Math.hypot(
-              center.lat - lastAlertCenter.lat,
-              (center.lng - lastAlertCenter.lon)
-                * Math.cos((center.lat * Math.PI) / 180),
-            ) * 111.32
-          : Number.POSITIVE_INFINITY;
-        if (
-          movedKm >= 4
-          || Date.now() - lastAlertsAt >= ALERTS_POLL_MS
-        ) {
-          void loadAlerts(current);
-        }
-        return jitter(LIVE_POLL_MS);
+        void loadAlerts(current);
+        return jitter(pollDelayForPayload(lastPayloadBytes));
       } catch (err) {
         if (!alive || isAbortError(err)) return jitter(LIVE_POLL_MS);
         current = [];

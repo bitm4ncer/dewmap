@@ -45,11 +45,33 @@ So the ferry mode gets a real filter and colour, but the UI must not promise
 
 ### Polling and cost
 
-| Call | Observed size | Interval | Cost |
-| --- | --- | --- | --- |
-| `map/trips` | ~117 KB gzip for a Düsseldorf z12 window (500 KB raw) | 30 s while visible + on `moveend` (5 s throttle), jittered ±4 s | ~14 MB/h while watching |
-| `stoptimes` (area alerts) | ~28 KB gzip for `n=10`, 1 h window | at most 3 stops every 5 min, plus an immediate refresh after the view moves 4 km | ~1.5 MB/h while watching |
-| `/plan` | only on user search | unchanged | unchanged |
+Measured after the review fix (2026-11-21 14:22–14:28 UTC, busy afternoon):
+
+| Query (Düsseldorf z12) | Segments | Active trips | gzip | raw JSON |
+| --- | --- | --- | --- | --- |
+| Old `-2 min/+10 min`, precision 5, exact app bbox | 2,227 | 331 | **300.8 KB** | 2.19 MB |
+| New `-2 min/+3 min`, precision 4, exact app bbox | 1,132 | 331 | **115.9 KB** | 1.06 MB |
+| Old, review-sized 33×35 km box | 4,598 | 667 | 578.0 KB | 4.31 MB |
+| New, review-sized 33×35 km box | 2,285 | 667 | 221.1 KB | 2.04 MB |
+
+Same vehicle count, ~61 % less wire data, ~50 % fewer segments. The
+lookahead is what shrank: the old window returned every future segment of
+every trip. `precision=4` is ~11 m, sub-pixel at z12+, and halves the polyline
+bytes. A 2 min lookback keeps the dwell grace; a 3 min lookahead keeps
+vehicles whose next stop is just outside a tighter window (verified: 0
+missing trips).
+
+| Call | Interval | Cost |
+| --- | --- | --- |
+| `map/trips` | 45 s base, jitter ±10 %; 60 s above ~250 KB, 90 s above ~400 KB (estimated from the decoded body length, observed raw/gzip ratio 9.2) | ~9 MB/h at the app's z12 window (~116 KB/poll), ~18 MB/h for a 33×35 km window |
+| `stoptimes` (area alerts) | at most 3 stops every 5 min, plus an immediate refresh after the view moves 4 km | ~1.5 MB/h while watching; `n` applies per platform, so a parent station can return ~190 stop times (~36 KB gzip) |
+| `/plan` | only on user search | unchanged |
+
+Decoding runs in chunks with a ~6 ms budget and a yield between them.
+Measured parse + polyline decode for the 33×35 km box: **33.4 ms → 12.9 ms**
+(median of 5, Node/V8; 163,749 → 55,790 points). In the browser at the app's
+z12 window a poll transfers 111 KB and produces **0 long tasks > 50 ms**
+(PerformanceObserver over 52 s).
 
 Transitous returned no `RateLimit-*` or `Retry-After` headers. The client
 keeps the existing 429 → `retryAfter` backoff, backs off to 60 s on other
@@ -115,9 +137,10 @@ alerts. `TransitLeg.alerts` carries alerts parsed from `/plan`.
   to the vehicle layer to draw a warning ring on matching vehicles.
 - Area alerts are sampled from at most three stops that appear in the current
   vehicle feed **and lie inside the current view** (rail first, then the
-  busiest stop), `n=10`, 1 h window, every 5 minutes and immediately after the
-  view moves 4 km; the resulting alerts carry the affected stops, which are
-  marked on the map.
+  busiest stop), `n=10` per platform (a parent station can return ~190 stop
+  times), 1 h window, every 5 minutes and immediately after the view moves
+  4 km; the resulting alerts carry the affected stops, which are marked on the
+  map. Empty samples clear the old markers and reset the gate.
   A tap opens the full text.
 - `descriptionText` arrives as HTML (`<b>`, `<ul>`, `<br>`). It is converted
   to plain text; no `dangerouslySetInnerHTML`.

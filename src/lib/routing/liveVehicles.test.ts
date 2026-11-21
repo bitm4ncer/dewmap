@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   alertStopCandidates,
+  estimateGzipKb,
   fetchLiveVehicles,
   filterLiveVehicles,
+  lineKey,
   liveModeGroup,
   mergeVehiclePositions,
   normalizeLiveVehicles,
+  normalizeLiveVehiclesChunked,
+  pollDelayForPayload,
   type LiveVehicleQuery,
 } from "./liveVehicles";
 
@@ -58,10 +62,13 @@ const SEGMENT = {
   scheduledDeparture: "2026-11-18T10:00:00Z",
   scheduledArrival: "2026-11-18T10:10:00Z",
   realTime: true,
-  polyline: encodePolyline([
-    [49, 8],
-    [49.1, 8.1],
-  ]),
+  polyline: encodePolyline(
+    [
+      [49, 8],
+      [49.1, 8.1],
+    ],
+    4,
+  ),
   routeColor: "00aa00",
 };
 
@@ -153,12 +160,12 @@ describe("fetchLiveVehicles", () => {
     expect(url.searchParams.get("min")).toBe("48.9,7.9");
     expect(url.searchParams.get("max")).toBe("49.2,8.2");
     expect(url.searchParams.get("zoom")).toBe("12");
-    expect(url.searchParams.get("precision")).toBe("5");
+    expect(url.searchParams.get("precision")).toBe("4");
     expect(url.searchParams.get("startTime")).toBe(
       "2026-11-18T10:09:00.000Z",
     );
     expect(url.searchParams.get("endTime")).toBe(
-      "2026-11-18T10:21:00.000Z",
+      "2026-11-18T10:14:00.000Z",
     );
   });
 });
@@ -319,5 +326,61 @@ describe("alert stop candidates", () => {
     const candidates = alertStopCandidates([one, two], bounds, 2);
     expect(candidates).toHaveLength(2);
     expect(candidates[0].stopId).toBe("hbf");
+  });
+});
+
+describe("chunked normalization", () => {
+  const now = Date.parse("2026-11-18T10:11:00Z");
+
+  it("produces the same result as the synchronous normalizer", async () => {
+    const data = [
+      SEGMENT,
+      {
+        ...SEGMENT,
+        departure: "2026-11-18T10:16:00Z",
+        arrival: "2026-11-18T10:26:00Z",
+        scheduledDeparture: "2026-11-18T10:10:00Z",
+        scheduledArrival: "2026-11-18T10:20:00Z",
+        trips: [{ tripId: "trip-2", displayName: "S2" }],
+      },
+    ];
+    const sync = normalizeLiveVehicles(data, now);
+    const chunked = await normalizeLiveVehiclesChunked(data, now, {
+      segmentsPerChunk: 1,
+      yieldTo: async () => {},
+    });
+    expect(chunked).toEqual(sync);
+  });
+
+  it("yields between chunks instead of one long task", async () => {
+    let yields = 0;
+    const data = Array.from({ length: 5 }, (_, index) => ({
+      ...SEGMENT,
+      trips: [{ tripId: `trip-${index}`, displayName: `S${index}` }],
+    }));
+    await normalizeLiveVehiclesChunked(data, now, {
+      segmentsPerChunk: 1,
+      yieldTo: async () => {
+        yields += 1;
+      },
+    });
+    expect(yields).toBe(5);
+  });
+});
+
+describe("line keys and payload budget", () => {
+  it("matches line labels regardless of spacing and case", () => {
+    expect(lineKey("RE 6")).toBe("re6");
+    expect(lineKey(" RE6 ")).toBe("re6");
+    expect(lineKey("U 79")).toBe("u79");
+    expect(lineKey(undefined)).toBe("");
+  });
+
+  it("keeps 45 s for a normal payload and backs off for large ones", () => {
+    expect(pollDelayForPayload(0)).toBe(45_000);
+    expect(pollDelayForPayload(2_040_000)).toBe(45_000);
+    expect(estimateGzipKb(2_040_000)).toBe(222);
+    expect(pollDelayForPayload(2_600_000)).toBe(60_000);
+    expect(pollDelayForPayload(4_500_000)).toBe(90_000);
   });
 });

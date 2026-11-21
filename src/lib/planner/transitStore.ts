@@ -403,11 +403,7 @@ export const useTransit = create<TransitState>()(
         }),
       setLiveVehiclesError: (liveVehiclesError) =>
         set({ liveVehiclesError }),
-      setLiveVehiclesData: (vehicles) =>
-        set({
-          liveVehicleData: vehicles,
-          liveVehicleCount: vehicles.length,
-        }),
+      setLiveVehiclesData: (vehicles) => set({ liveVehicleData: vehicles }),
       setLiveAlerts: (alerts, updatedAt) =>
         set({
           liveAlerts: alerts,

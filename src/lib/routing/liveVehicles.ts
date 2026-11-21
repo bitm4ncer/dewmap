@@ -24,13 +24,41 @@ const MOTIS_V6_BASE = "https://api.transitous.org/api/v6";
 const LIVE_TIMEOUT_MS = 12_000;
 /** Show a vehicle slightly before departure / after arrival (dwell). */
 const ACTIVE_GRACE_MS = 2 * 60_000;
+/**
+ * Only segments that overlap "now" are needed. The old -2/+10 min window made
+ * the API return every future segment of every trip: ~4.6k segments / 578 KB
+ * gzip at z12 instead of ~2.3k / 221 KB for the same 667 active trips.
+ * 2 min lookback keeps the dwell grace, 3 min lookahead keeps vehicles whose
+ * next stop is just outside a tighter window (verified: 0 missing trips).
+ */
 const LOOKBACK_MS = 2 * 60_000;
-const LOOKAHEAD_MS = 10 * 60_000;
+const LOOKAHEAD_MS = 3 * 60_000;
+/** Requested polyline precision. 4 = ~11 m, sub-pixel at z12+, half the bytes. */
+const LIVE_PRECISION = 4;
 
 /** Below this zoom the map window is too large for a useful vehicle feed. */
 export const LIVE_MIN_ZOOM = 8;
-/** Freshness beats battery: positions are interpolated, 30 s keeps them live. */
-export const LIVE_POLL_MS = 30_000;
+/** Base interval; the layer backs off to 60/90 s for large payloads. */
+export const LIVE_POLL_MS = 45_000;
+/** Observed raw-JSON / gzip ratio for `map/trips` (2.04 MB -> 221 KB). */
+const PAYLOAD_RATIO = 9.2;
+
+/** Rough wire size from the decoded body length the browser exposes. */
+export function estimateGzipKb(bytes: number): number {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 0;
+  return Math.round(bytes / PAYLOAD_RATIO / 1000);
+}
+
+/**
+ * Keep a busy afternoon's ~220 KB payload at 45 s, but slow down when the
+ * response grows beyond ~250/400 KB instead of paying the bytes every poll.
+ */
+export function pollDelayForPayload(bytes: number): number {
+  const kb = estimateGzipKb(bytes);
+  if (kb > 400) return 90_000;
+  if (kb > 250) return 60_000;
+  return LIVE_POLL_MS;
+}
 /** Upper bound per frame; circle layers stay cheap well above this. */
 export const MAX_LIVE_VEHICLES = 1_200;
 
@@ -260,8 +288,98 @@ interface Candidate {
   score: number;
 }
 
+/** Decoded polyline precision must match the requested precision. */
+function processSegment(
+  value: unknown,
+  nowMs: number,
+  byTrip: Map<string, Candidate>,
+): void {
+  if (!isRecord(value)) return;
+  const polyline = readString(value, "polyline");
+  if (!polyline) return;
+  const departure = readString(value, "departure");
+  const arrival = readString(value, "arrival");
+  if (!departure || !arrival) return;
+  const dep = Date.parse(departure);
+  const arr = Date.parse(arrival);
+  if (!Number.isFinite(dep) || !Number.isFinite(arr) || arr <= dep) return;
+  if (nowMs < dep - ACTIVE_GRACE_MS || nowMs > arr + ACTIVE_GRACE_MS) return;
+
+  const trips = readArray(value, "trips").filter(isRecord);
+  const trip = trips[0];
+  const tripId =
+    readString(trip, "tripId") ?? `${readString(value, "mode") ?? "trip"}:${departure}`;
+  const from = isRecord(value.from) ? value.from : undefined;
+  const to = isRecord(value.to) ? value.to : undefined;
+  const coordinates = toLonLat(decodePolyline(polyline, LIVE_PRECISION));
+  const fraction = (nowMs - dep) / (arr - dep);
+  const point = pointAtFraction(coordinates, fraction);
+  if (!point) return;
+
+  const mode = readString(value, "mode") ?? readString(trip, "mode") ?? "TRANSIT";
+  const scheduledDeparture = readString(value, "scheduledDeparture");
+  const scheduledArrival = readString(value, "scheduledArrival");
+  const fromName = readString(from, "name") ?? "Unknown stop";
+  const toName = readString(to, "name") ?? "Unknown stop";
+  const departureDelay = delayMinutes(departure, scheduledDeparture);
+  const arrivalDelay = delayMinutes(arrival, scheduledArrival);
+  const line =
+    readString(trip, "displayName")
+    ?? readString(trip, "tripShortName")
+    ?? tripId;
+  const routeColor = readString(value, "routeColor");
+  const routeTextColor = readString(value, "routeTextColor");
+  const fromStop = liveStop(from, point);
+  const toStop = liveStop(to, point);
+
+  const vehicle: LiveVehicle = {
+    id: `${tripId}:${departure}`,
+    tripId,
+    line,
+    mode,
+    modeLabel: liveModeLabel(mode),
+    modeGroup: liveModeGroup(mode),
+    color: vehicleColor(mode, routeColor),
+    textColor: textColorFor(mode, routeTextColor),
+    lat: point.lat,
+    lon: point.lon,
+    bearing: point.bearing,
+    delayMin: Math.max(departureDelay, arrivalDelay),
+    realTime: readBoolean(value, "realTime") ?? false,
+    source: "interpolated",
+    phase: nowMs < dep || nowMs > arr ? "dwell" : "moving",
+    stops: { from: fromStop, to: toStop },
+    fromName,
+    toName,
+    ...(readString(from, "tz") ? { fromTz: readString(from, "tz") } : {}),
+    ...(readString(to, "tz") ? { toTz: readString(to, "tz") } : {}),
+    departure,
+    arrival,
+    ...(scheduledDeparture ? { scheduledDeparture } : {}),
+    ...(scheduledArrival ? { scheduledArrival } : {}),
+    distanceM: readNumber(value, "distance") ?? 0,
+  };
+  const candidate: Candidate = {
+    vehicle,
+    score: Math.abs(nowMs - (dep + arr) / 2),
+  };
+  const existing = byTrip.get(tripId);
+  if (!existing || candidate.score < existing.score) {
+    byTrip.set(tripId, candidate);
+  }
+}
+
+function vehicleRoot(data: unknown): unknown[] | null {
+  const root = isRecord(data) ? readArray(data, "trips") : data;
+  return Array.isArray(root) ? root : null;
+}
+
+function finalize(byTrip: Map<string, Candidate>): LiveVehicle[] {
+  return [...byTrip.values()].map((candidate) => candidate.vehicle);
+}
+
 /**
- * Normalize and interpolate `/api/v6/map/trips` segments.
+ * Normalize and interpolate `/api/v6/map/trips` segments synchronously.
  *
  * Each trip can appear as several consecutive segments. Keep exactly one
  * active segment per trip so a vehicle is never drawn twice at a transfer.
@@ -270,88 +388,60 @@ export function normalizeLiveVehicles(
   data: unknown,
   nowMs = Date.now(),
 ): LiveVehicle[] {
-  const root = isRecord(data) ? readArray(data, "trips") : data;
-  if (!Array.isArray(root) || !Number.isFinite(nowMs)) return [];
-
+  const root = vehicleRoot(data);
+  if (!root || !Number.isFinite(nowMs)) return [];
   const byTrip = new Map<string, Candidate>();
+  for (const value of root) processSegment(value, nowMs, byTrip);
+  return finalize(byTrip);
+}
 
+export interface ChunkedNormalizeOptions {
+  /** Max time to spend in one task before yielding to the browser. */
+  budgetMs?: number;
+  /** Test seam: raise the batch size so tests do not need thousands of rows. */
+  segmentsPerChunk?: number;
+  /** Test seam: replace the scheduler yield. */
+  yieldTo?: () => Promise<void>;
+}
+
+function browserYield(): Promise<void> {
+  const scheduler = (globalThis as {
+    scheduler?: { yield?: () => Promise<void> };
+  }).scheduler;
+  if (scheduler?.yield) return scheduler.yield();
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Same result as `normalizeLiveVehicles`, but decodes polylines in chunks and
+ * yields between them. This keeps a busy z12 window (~2k segments) off the
+ * long-task list instead of blocking the main thread for one big decode.
+ */
+export async function normalizeLiveVehiclesChunked(
+  data: unknown,
+  nowMs = Date.now(),
+  options: ChunkedNormalizeOptions = {},
+): Promise<LiveVehicle[]> {
+  const root = vehicleRoot(data);
+  if (!root || !Number.isFinite(nowMs)) return [];
+  const byTrip = new Map<string, Candidate>();
+  const budgetMs = options.budgetMs ?? 6;
+  const batch = options.segmentsPerChunk ?? Number.POSITIVE_INFINITY;
+  const yieldTo = options.yieldTo ?? browserYield;
+  const clock = () =>
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  let processed = 0;
+  let windowStart = clock();
   for (const value of root) {
-    if (!isRecord(value)) continue;
-    const polyline = readString(value, "polyline");
-    if (!polyline) continue;
-    const departure = readString(value, "departure");
-    const arrival = readString(value, "arrival");
-    if (!departure || !arrival) continue;
-    const dep = Date.parse(departure);
-    const arr = Date.parse(arrival);
-    if (!Number.isFinite(dep) || !Number.isFinite(arr) || arr <= dep) continue;
-    if (nowMs < dep - ACTIVE_GRACE_MS || nowMs > arr + ACTIVE_GRACE_MS) continue;
-
-    const trips = readArray(value, "trips").filter(isRecord);
-    const trip = trips[0];
-    const tripId =
-      readString(trip, "tripId") ?? `${readString(value, "mode") ?? "trip"}:${departure}`;
-    const from = isRecord(value.from) ? value.from : undefined;
-    const to = isRecord(value.to) ? value.to : undefined;
-    const coordinates = toLonLat(decodePolyline(polyline, 5));
-    const fraction = (nowMs - dep) / (arr - dep);
-    const point = pointAtFraction(coordinates, fraction);
-    if (!point) continue;
-
-    const mode = readString(value, "mode") ?? readString(trip, "mode") ?? "TRANSIT";
-    const scheduledDeparture = readString(value, "scheduledDeparture");
-    const scheduledArrival = readString(value, "scheduledArrival");
-    const fromName = readString(from, "name") ?? "Unknown stop";
-    const toName = readString(to, "name") ?? "Unknown stop";
-    const departureDelay = delayMinutes(departure, scheduledDeparture);
-    const arrivalDelay = delayMinutes(arrival, scheduledArrival);
-    const line =
-      readString(trip, "displayName")
-      ?? readString(trip, "tripShortName")
-      ?? tripId;
-    const routeColor = readString(value, "routeColor");
-    const routeTextColor = readString(value, "routeTextColor");
-    const fromStop = liveStop(from, point);
-    const toStop = liveStop(to, point);
-
-    const vehicle: LiveVehicle = {
-      id: `${tripId}:${departure}`,
-      tripId,
-      line,
-      mode,
-      modeLabel: liveModeLabel(mode),
-      modeGroup: liveModeGroup(mode),
-      color: vehicleColor(mode, routeColor),
-      textColor: textColorFor(mode, routeTextColor),
-      lat: point.lat,
-      lon: point.lon,
-      bearing: point.bearing,
-      delayMin: Math.max(departureDelay, arrivalDelay),
-      realTime: readBoolean(value, "realTime") ?? false,
-      source: "interpolated",
-      phase: nowMs < dep || nowMs > arr ? "dwell" : "moving",
-      stops: { from: fromStop, to: toStop },
-      fromName,
-      toName,
-      ...(readString(from, "tz") ? { fromTz: readString(from, "tz") } : {}),
-      ...(readString(to, "tz") ? { toTz: readString(to, "tz") } : {}),
-      departure,
-      arrival,
-      ...(scheduledDeparture ? { scheduledDeparture } : {}),
-      ...(scheduledArrival ? { scheduledArrival } : {}),
-      distanceM: readNumber(value, "distance") ?? 0,
-    };
-    const candidate: Candidate = {
-      vehicle,
-      score: Math.abs(nowMs - (dep + arr) / 2),
-    };
-    const existing = byTrip.get(tripId);
-    if (!existing || candidate.score < existing.score) {
-      byTrip.set(tripId, candidate);
+    processSegment(value, nowMs, byTrip);
+    processed += 1;
+    if (processed >= batch || clock() - windowStart >= budgetMs) {
+      processed = 0;
+      await yieldTo();
+      windowStart = clock();
     }
   }
-
-  return [...byTrip.values()].map((candidate) => candidate.vehicle);
+  return finalize(byTrip);
 }
 
 /** Stops worth asking for alerts, ordered rail-first. */
@@ -383,6 +473,14 @@ const MODE_PRIORITY: Record<LiveModeGroup, number> = {
 
 export function liveModePriority(group: LiveModeGroup): number {
   return MODE_PRIORITY[group] ?? 0;
+}
+
+/**
+ * Compare line labels regardless of spacing: `RE 6`, `RE6` and `re 6` are the
+ * same line. `/plan` and `map/trips` do not always use the same spelling.
+ */
+export function lineKey(line: string | undefined): string {
+  return (line ?? "").replace(/\s+/g, "").toLowerCase();
 }
 
 /**
@@ -441,19 +539,24 @@ export function alertStopCandidates(
     .map((entry) => entry.candidate);
 }
 
-/** Fetch and interpolate active vehicles for a map window. */
-export async function fetchLiveVehicles(
+interface LiveVehicleRequest {
+  data: unknown;
+  bytes: number;
+  nowMs: number;
+}
+
+async function requestLiveVehicles(
   query: LiveVehicleQuery,
-): Promise<LiveVehicle[]> {
+): Promise<LiveVehicleRequest | null> {
   const now = query.now ?? new Date();
   const nowMs = now.getTime();
-  if (!Number.isFinite(nowMs)) return [];
+  if (!Number.isFinite(nowMs)) return null;
   if (
     ![query.south, query.west, query.north, query.east, query.zoom].every(
       Number.isFinite,
     )
   ) {
-    return [];
+    return null;
   }
 
   const params = new URLSearchParams({
@@ -462,16 +565,51 @@ export async function fetchLiveVehicles(
     zoom: String(Math.max(0, Math.round(query.zoom))),
     startTime: new Date(nowMs - LOOKBACK_MS).toISOString(),
     endTime: new Date(nowMs + LOOKAHEAD_MS).toISOString(),
-    precision: "5",
+    precision: String(LIVE_PRECISION),
   });
 
+  let bytes = 0;
   const data = await fetchJson<unknown>(
     `${MOTIS_V6_BASE}/map/trips?${params.toString()}`,
     {
       signal: query.signal,
       timeoutMs: LIVE_TIMEOUT_MS,
       provider: "motis",
+      onResponseSize: (size) => {
+        bytes = size;
+      },
     },
   );
-  return normalizeLiveVehicles(data, nowMs);
+  return { data, bytes, nowMs };
+}
+
+/** Fetch and interpolate active vehicles for a map window. */
+export async function fetchLiveVehicles(
+  query: LiveVehicleQuery,
+): Promise<LiveVehicle[]> {
+  const request = await requestLiveVehicles(query);
+  if (!request) return [];
+  return normalizeLiveVehicles(request.data, request.nowMs);
+}
+
+export interface LiveVehiclesResult {
+  vehicles: LiveVehicle[];
+  /** Raw JSON body length (UTF-16 code units, ASCII-dominated JSON). */
+  bytes: number;
+}
+
+/**
+ * Map-specific variant: decodes in chunks and reports the body size so the
+ * layer can adapt its polling interval to the payload.
+ */
+export async function fetchLiveVehiclesChunked(
+  query: LiveVehicleQuery,
+): Promise<LiveVehiclesResult> {
+  const request = await requestLiveVehicles(query);
+  if (!request) return { vehicles: [], bytes: 0 };
+  const vehicles = await normalizeLiveVehiclesChunked(
+    request.data,
+    request.nowMs,
+  );
+  return { vehicles, bytes: request.bytes };
 }

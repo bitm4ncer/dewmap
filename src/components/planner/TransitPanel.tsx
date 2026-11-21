@@ -186,6 +186,9 @@ export function TransitPanel({ mapRef, onSearchComplete }: Props) {
   // mark their stops instead.
   useEffect(() => {
     useTransit.getState().setLiveAlertLines(alertLines(routeAlerts));
+    // The panel unmounts when the Routes pane switches to walk/bike; without
+    // this the last alert ring would survive into a mode that cannot explain it.
+    return () => useTransit.getState().setLiveAlertLines([]);
   }, [routeAlerts]);
   const detailRef = useRef<HTMLDivElement>(null);
   // The form folds into a one-line summary once both ends are known, so the

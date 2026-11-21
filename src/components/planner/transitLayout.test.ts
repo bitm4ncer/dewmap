@@ -32,6 +32,24 @@ describe("transit panel layout", () => {
     expect(detail).toContain("Transfer colours: amber under 5 min");
   });
 
+  it("clears alert-line highlights when the transit panel unmounts", () => {
+    expect(src).toContain(
+      "return () => useTransit.getState().setLiveAlertLines([]);",
+    );
+  });
+
+  it("keeps every filter chip reachable and explains empty filters", () => {
+    const bar = readFileSync(
+      new URL("./LiveTransitBar.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(bar).not.toContain("aria-live");
+    expect(bar).not.toContain("disabled={!available");
+    expect(bar).toContain("No ${group.label.toLowerCase()} vehicles in this view.");
+    expect(bar).toContain("Show all");
+    expect(bar).toContain("The filter hides all");
+  });
+
   it("offers departure chips above the journey detail", () => {
     expect(src).toContain("journey-switcher");
     expect(src).toContain("Next departures");

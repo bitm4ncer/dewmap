@@ -188,7 +188,7 @@ describe("transitStore", () => {
     ]);
   });
 
-  it("stores the latest vehicle data and count together", () => {
+  it("stores the latest vehicle data separately from the total count", () => {
     const vehicle = {
       id: "trip-1:2026-11-18T10:00:00Z",
       tripId: "trip-1",
@@ -217,7 +217,11 @@ describe("transitStore", () => {
     };
     store.useTransit.getState().setLiveVehiclesData([vehicle]);
     expect(store.useTransit.getState().liveVehicleData).toHaveLength(1);
-    expect(store.useTransit.getState().liveVehicleCount).toBe(1);
+    // The count comes from setLiveVehicleStatus (total feed), not the capped
+    // array, so "n of N" stays honest.
+    expect(store.useTransit.getState().liveVehicleCount).toBe(0);
+    store.useTransit.getState().setLiveVehicleStatus(1500, 999);
+    expect(store.useTransit.getState().liveVehicleCount).toBe(1500);
   });
 
   it("stores area alerts and highlighted lines", () => {

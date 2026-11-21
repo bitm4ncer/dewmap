@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LIVE_MIN_ZOOM, filterLiveVehicles, type LiveModeGroup } from "@/lib/routing";
 import {
   alertSeverityLabel,
@@ -59,6 +59,14 @@ export function LiveTransitBar() {
 
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [vehiclesOpen, setVehiclesOpen] = useState(false);
+  const [filterNotice, setFilterNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+    };
+  }, []);
 
   const shown = useMemo(
     () => filterLiveVehicles(vehicles, groups),
@@ -91,11 +99,23 @@ export function LiveTransitBar() {
               ferries > 0 ? ` · ${ferries} ${ferries === 1 ? "ferry" : "ferries"}` : ""
             }`;
 
-  const toggleGroup = (group: LiveModeGroup) => {
+  const toggleGroup = (group: { key: LiveModeGroup; label: string }) => {
+    // F9: keep every chip focusable. An unavailable mode explains itself
+    // instead of silently disabling the button.
+    const available = vehicles.some(
+      (vehicle) => vehicle.modeGroup === group.key,
+    );
+    if (!available && !groups.includes(group.key)) {
+      setFilterNotice(`No ${group.label.toLowerCase()} vehicles in this view.`);
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+      noticeTimer.current = window.setTimeout(() => setFilterNotice(null), 4000);
+      return;
+    }
+    setFilterNotice(null);
     setGroups(
-      groups.includes(group)
-        ? groups.filter((entry) => entry !== group)
-        : [...groups, group],
+      groups.includes(group.key)
+        ? groups.filter((entry) => entry !== group.key)
+        : [...groups, group.key],
     );
   };
 
@@ -127,12 +147,33 @@ export function LiveTransitBar() {
           </span>
         </button>
 
-        <p
-          className="mt-1 text-[11px] leading-relaxed text-[color:var(--ink-dim)]"
-          aria-live="polite"
-        >
+        {/* Not a live region: the time changes every poll. State changes are
+            announced by the switch, the chips and one-shot notices instead. */}
+        <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--ink-dim)]">
           {status}
         </p>
+
+        {filterNotice && (
+          <p className="mt-1 text-[11px] text-[color:var(--warn)]" role="status">
+            {filterNotice}
+          </p>
+        )}
+
+        {liveVehicles && count > 0 && shown.length === 0 && groups.length > 0 && (
+          <div className="mt-1 flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--surf-2)] p-2">
+            <span className="text-[11px] text-[color:var(--ink-dim)]">
+              The filter hides all {count} vehicles in this view.
+            </span>
+            <button
+              type="button"
+              className="ui-badge !min-h-9 !px-2 shrink-0"
+              data-tone="accent"
+              onClick={() => setGroups([])}
+            >
+              Show all
+            </button>
+          </div>
+        )}
 
         {liveVehicles && (
           <div
@@ -151,9 +192,6 @@ export function LiveTransitBar() {
             </button>
             {GROUP_FILTERS.map((group) => {
               const active = groups.includes(group.key);
-              const available = vehicles.some(
-                (vehicle) => vehicle.modeGroup === group.key,
-              );
               return (
                 <button
                   key={group.key}
@@ -161,13 +199,7 @@ export function LiveTransitBar() {
                   className="ui-badge !min-h-9 !px-2"
                   data-tone={active ? "accent" : undefined}
                   aria-pressed={active}
-                  disabled={!available && !active}
-                  title={
-                    available || active
-                      ? undefined
-                      : `No ${group.label.toLowerCase()} vehicles in view`
-                  }
-                  onClick={() => toggleGroup(group.key)}
+                  onClick={() => toggleGroup(group)}
                 >
                   {group.label}
                 </button>
@@ -208,7 +240,7 @@ export function LiveTransitBar() {
         )}
 
         {liveVehicles && alertsOpen && (
-          <div className="mt-2 flex flex-col gap-2" aria-live="polite">
+          <div className="mt-2 flex flex-col gap-2">
             {alertsError && (
               <p className="text-[11.5px] text-[color:var(--warn)]">{alertsError}</p>
             )}
@@ -268,7 +300,7 @@ export function LiveTransitBar() {
         )}
 
         {liveVehicles && vehiclesOpen && (
-          <div className="mt-2 flex flex-col gap-1" aria-live="polite">
+          <div className="mt-2 flex flex-col gap-1">
             {delayed.length === 0 ? (
               <p className="text-[11.5px] text-[color:var(--ink-mute)]">
                 All vehicles in view are on time.

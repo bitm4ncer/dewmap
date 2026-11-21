@@ -26,7 +26,7 @@ const ALERT_TIMEOUT_MS = 10_000;
 const DEFAULT_CACHE_TTL_MS = 4 * 60_000;
 const MAX_ALERT_STOPS = 3;
 /** Ask for few departures: we only want the attached alerts, not a board. */
-const ALERT_STOP_TIMES = 10;
+const ALERT_STOP_TIMES_PER_PLATFORM = 10;
 const ALERT_WINDOW_S = 60 * 60;
 const CACHE_LIMIT = 64;
 
@@ -292,7 +292,7 @@ async function fetchStopAlerts(
 
   const params = new URLSearchParams({
     stopId: candidate.stopId,
-    n: String(ALERT_STOP_TIMES),
+    n: String(ALERT_STOP_TIMES_PER_PLATFORM),
     window: String(ALERT_WINDOW_S),
     withAlerts: "true",
   });
