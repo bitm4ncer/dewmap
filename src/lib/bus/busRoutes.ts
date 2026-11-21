@@ -29,8 +29,8 @@ export const BUS_STOP_SOURCE_ID = "bus-stops-src";
 export const BUS_STOP_LAYER_ID = "bus-stops";
 export const BUS_STOP_HIT_LAYER_ID = "bus-stops-hit";
 
-/** Slightly warmer than the rail blue (THEME.info) — same family, distinct. */
-export const BUS_LINE_COLOR = THEME.warn;
+/** Same lilac as the planner's bus line kind (`LINE_KIND_COLORS.bus`). */
+export const BUS_LINE_COLOR = "#C3A9F0";
 export const BUS_MIN_ZOOM = 12;
 
 const CACHE_TTL_MS = 30 * 60_000;
