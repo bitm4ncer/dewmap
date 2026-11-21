@@ -43,7 +43,9 @@ describe("transit panel layout", () => {
       new URL("./LiveTransitBar.tsx", import.meta.url),
       "utf8",
     );
-    expect(bar).not.toContain("aria-live");
+    expect(bar).toContain('className="sr-only" aria-live="polite"');
+    expect(bar).toContain("Live vehicles visible in this view.");
+    expect(bar.match(/aria-live="/g)?.length ?? 0).toBe(1);
     expect(bar).not.toContain("disabled={!available");
     expect(bar).toContain("No ${group.label.toLowerCase()} vehicles in this view.");
     expect(bar).toContain("Show all");

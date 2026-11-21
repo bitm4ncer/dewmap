@@ -486,9 +486,10 @@ function jitter(ms: number): number {
 /**
  * Keep a live-vehicle layer in sync with the current map window.
  *
- * Positions run every 30 s while the tab is visible, on every settled pan and
- * immediately after a style swap. Area alerts piggyback on the vehicle feed
- * and refresh at most every 5 minutes from three rail-first stops.
+ * Positions poll every 45 s (jittered) while the tab is visible, back off to
+ * 60/90 s for large payloads, and refresh after a settled pan or a style
+ * swap. Area alerts piggyback on the vehicle feed and refresh at most every
+ * 5 minutes from three rail-first stops.
  */
 export function useLiveVehiclesLayer(map: MLMap | null) {
   const enabled = useTransit((s) => s.liveVehicles);
@@ -549,7 +550,9 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
       return {
         visible: true,
         count: shown.length,
-        total: current.length,
+        // F6/N2: the cap only limits rendering; the pill must report the
+        // same unfiltered total as the panel.
+        total: state.liveVehicleCount,
         ferries: shown.filter((vehicle) => vehicle.modeGroup === "FERRY").length,
         updatedAt: state.liveVehiclesUpdatedAt,
         error: state.liveVehiclesError,
@@ -600,7 +603,13 @@ export function useLiveVehiclesLayer(map: MLMap | null) {
       if (action === "clear") {
         alertGate = resetAlertGate();
         const state = useTransit.getState();
-        if (state.liveAlerts.length > 0 || state.liveAlertsUpdatedAt !== null) {
+        if (
+          state.liveAlerts.length > 0
+          || state.liveAlertsUpdatedAt !== null
+          || state.liveAlertsError !== null
+        ) {
+          // setLiveAlerts also clears liveAlertsError, so a stale error does
+          // not survive on an empty view (N4).
           state.setLiveAlerts([], null);
           apply();
         }

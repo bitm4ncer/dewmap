@@ -87,6 +87,18 @@ export function LiveTransitBar() {
     [shown],
   );
 
+  // N3: one concise live region for state changes only. The time/count text
+  // below updates every poll and stays out of aria-live.
+  const announcement = !liveVehicles
+    ? "Live vehicles off."
+    : error
+      ? `Live vehicles error. ${error}`
+      : zoomLow
+        ? `Zoom in to level ${LIVE_MIN_ZOOM} to load live vehicles.`
+        : count === 0
+          ? "No live vehicles in this view."
+          : "Live vehicles visible in this view.";
+
   const status = !liveVehicles
     ? "Off. Vehicles will not load."
     : error
@@ -151,6 +163,9 @@ export function LiveTransitBar() {
             announced by the switch, the chips and one-shot notices instead. */}
         <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--ink-dim)]">
           {status}
+        </p>
+        <p className="sr-only" aria-live="polite">
+          {announcement}
         </p>
 
         {filterNotice && (
