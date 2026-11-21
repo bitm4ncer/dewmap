@@ -2470,19 +2470,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       setGeoNotice("This device cannot report its location. The route starts at the map centre.");
       return null;
     }
-    try {
-      const perm = await navigator.permissions?.query?.({
-        name: "geolocation" as PermissionName,
-      });
-      if (perm?.state === "denied") {
-        setGeoNotice(
-          "Location is blocked for this site. Allow it in the browser settings and tap Route again.",
-        );
-        return null;
-      }
-    } catch {
-      /* Permissions API missing (older iOS): fall through to the prompt. */
-    }
+    // The Permissions API is advisory and lies in some embedded browsers
+    // (Firefox on iOS reports "denied" after the user allowed location), so
+    // never let it block the attempt: the position callback decides.
+
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (pos) =>
@@ -2491,9 +2482,11 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
             lat: pos.coords.latitude,
             lon: pos.coords.longitude,
           }),
-        () => {
+        (error) => {
           setGeoNotice(
-            "Location is off. Allow it and tap Route again to start from where you are.",
+            error.code === error.PERMISSION_DENIED
+              ? "Location is blocked for this site. Allow it in the browser settings and tap Route again."
+              : "Location is off. Allow it and tap Route again to start from where you are.",
           );
           resolve(null);
         },
@@ -2669,6 +2662,20 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
     });
     map.addControl(geolocate, "bottom-left");
     geolocateRef.current = geolocate;
+    // MapLibre disables the button when its own support probe answers
+    // "denied". Firefox on iOS answers that even after the user allowed
+    // location, which leaves a dead crosshair; the click handler itself
+    // still works, so hand the button back and let the real prompt decide.
+    window.setTimeout(() => {
+      const button = map
+        .getContainer()
+        .querySelector<HTMLButtonElement>(".maplibregl-ctrl-geolocate");
+      if (button?.disabled) {
+        button.disabled = false;
+        button.title = "Find my location";
+        button.setAttribute("aria-label", "Find my location");
+      }
+    }, 900);
     const orientation = new OrientationControl({
       initial: useSettings.getState().orientationMode,
       onChange: (mode) => {
@@ -2748,16 +2755,10 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
         /* ignore */
       }
       if (stored !== "1") return;
-      // Best-effort permission probe; fail-open if Permissions API is
-      // missing (older iOS) so we still attempt the silent trigger.
-      try {
-        const perm = await navigator.permissions?.query?.({
-          name: "geolocation" as PermissionName,
-        });
-        if (perm?.state === "denied") return;
-      } catch {
-        /* ignore */
-      }
+      // No permission probe here: some embedded browsers report "denied"
+      // although the user allowed location, and a wrong "denied" would keep
+      // the map from ever starting to track. A real denial fires `error`
+      // below, which clears the flag again.
       autoStarted = true;
       // GeolocateControl needs the map fully loaded before trigger() can
       // hand off to watchPosition; wait one tick after style load.
