@@ -124,6 +124,13 @@ import {
   type Bbox as BusBbox,
   type BusNetwork,
 } from "@/lib/bus/busRoutes";
+import {
+  ensureTransitTileLayers,
+  removeTransitTileLayers,
+  TRANSIT_BUS_STOP,
+  TRANSIT_BUS_STOP_HIT,
+  TRANSIT_TILES_ENABLED,
+} from "@/lib/transit/tiles";
 import { edgeIndicator } from "@/lib/map/edgeIndicator";
 import { applyDarkMatterTint } from "@/lib/map/darkMatterTint";
 import { formatCoordinates } from "@/lib/map/coordinates";
@@ -3456,6 +3463,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   useEffect(() => {
     const map = mapInstance;
     if (!map) return;
+    if (TRANSIT_TILES_ENABLED) return;
     if (!busOn) {
       try {
         removeBusLayers(map);
@@ -3766,6 +3774,61 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
       }
     };
   }, [busOn, active, mapInstance]);
+
+  // Bus and rail route geometry now come from the VPS-hosted PMTiles.
+  // The OpenFreeMap rail tracks/stations stay as the detailed base layer;
+  // this adds the route relations and replaces the Overpass bus overlay.
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || !active) return;
+    let cancelled = false;
+
+    const apply = () => {
+      if (cancelled) return;
+      try {
+        ensureTransitTileLayers(map, { bus: busOn, rail: railOn });
+      } catch (error) {
+        console.warn("[transit-tiles] layers could not be added", error);
+      }
+    };
+
+    try {
+      if (map.getStyle()?.layers?.length) apply();
+    } catch {
+      /* style still settling */
+    }
+    map.on("style.load", apply);
+
+    return () => {
+      cancelled = true;
+      map.off("style.load", apply);
+      try {
+        removeTransitTileLayers(map);
+      } catch {
+        /* style already swapped */
+      }
+    };
+  }, [active, busOn, railOn, mapInstance]);
+
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map || !active || !busOn || !TRANSIT_TILES_ENABLED) return;
+    return registerFeatureTaps(map, {
+      id: "transit-bus-stops",
+      layers: [TRANSIT_BUS_STOP_HIT, TRANSIT_BUS_STOP],
+      tolerancePx: 20,
+      hapticKind: "select",
+      onFeature: (feature) => {
+        const coords = (feature.geometry as GeoJSON.Point).coordinates as [
+          number,
+          number,
+        ];
+        openPoiRef.current(
+          busStopPoiSelection(coords, feature.properties),
+        );
+      },
+    });
+  }, [active, busOn, mapInstance]);
 
   // Kind chips change filters only — the cluster builder reads them
   // through a ref so the tap pipeline is not torn down on every chip tap.
@@ -6245,7 +6308,7 @@ function ViewPanel({
           <div className="flex min-w-0 flex-col">
             <span className="ui-row-title">Rails</span>
             <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-              Railways &amp; stations · coloured by service
+              Railways &amp; stations · routes from zoom 8
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -6319,7 +6382,7 @@ function ViewPanel({
           <div className="flex min-w-0 flex-col">
             <span className="ui-row-title">Bus lines</span>
             <span className="text-[10.5px] text-[color:var(--ink-mute)]">
-              OSM bus routes &amp; stops · Overpass · from zoom 12
+              OSM bus routes &amp; stops · VPS tiles · from zoom 9
             </span>
           </div>
           <div className="flex items-center gap-2">

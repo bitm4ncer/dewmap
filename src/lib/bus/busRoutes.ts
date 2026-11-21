@@ -77,9 +77,9 @@ export interface BusNetwork {
  */
 export function busStopPoiSelection(
   coordinates: readonly [number, number],
-  properties: { id?: unknown; name?: unknown } | null | undefined,
+  properties: { id?: unknown; osmId?: unknown; name?: unknown } | null | undefined,
 ): PoiSelection {
-  const id = Number(properties?.id);
+  const id = Number(properties?.osmId ?? properties?.id);
   const name =
     typeof properties?.name === "string" ? properties.name.trim() : "";
   return {

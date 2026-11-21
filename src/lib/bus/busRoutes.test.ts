@@ -193,6 +193,20 @@ describe("busStopPoiSelection", () => {
     });
   });
 
+  it("reads the osmId property used by the tile archive", () => {
+    expect(
+      busStopPoiSelection([6.79, 51.22], {
+        osmId: 901,
+        name: "Welz Kirche",
+      }),
+    ).toMatchObject({
+      osmType: "N",
+      osmId: 901,
+      name: "Welz Kirche",
+      category: "Bus stop",
+    });
+  });
+
   it("keeps unnamed stops readable", () => {
     expect(busStopPoiSelection([6.79, 51.22], null)).toMatchObject({
       name: "Bus stop",
