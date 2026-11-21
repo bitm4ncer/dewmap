@@ -24,6 +24,8 @@ import {
   bboxSpanM,
   isBuildingUsable,
   localFrame,
+  lonFraction,
+  normalizeBbox,
   projectFootprint,
   type LocalFrame,
 } from "./geometry";
@@ -49,8 +51,12 @@ export {
 export {
   localFrame,
   bboxSpanM,
+  normalizeBbox,
   normalizeLon,
   lonDelta,
+  lonSpanDeg,
+  lonFraction,
+  MAX_FRAME_LAT,
   shadowOffset,
   convexHull,
   projectFootprint,
@@ -115,7 +121,8 @@ export function computeShadowLayer(
   options: ComputeShadowOptions = {},
 ): ShadowResult {
   const started = performance.now();
-  const { bbox, mode } = request;
+  const { mode } = request;
+  const bbox = normalizeBbox(request.bbox);
   const frame = localFrame(bbox);
   const centerLon = frame.lon0;
   const centerLat = frame.lat0;
@@ -248,19 +255,24 @@ function resampleTerrain(
   const out = new Float32Array(width * height);
   const [west, south] = bbox;
   const origin = frame.project([west, south]);
-  const [fieldWest, fieldSouth, fieldEast, fieldNorth] = field.bbox;
+  const [, fieldSouth, , fieldNorth] = field.bbox;
   for (let row = 0; row < height; row++) {
     const y = origin[1] + (row + 0.5) * resolutionM;
     for (let col = 0; col < width; col++) {
       const x = origin[0] + (col + 0.5) * resolutionM;
       const [lon, lat]: LngLat = frame.unproject([x, y]);
-      if (lon < fieldWest || lon > fieldEast || lat < fieldSouth || lat > fieldNorth) {
+      const fx = lonFraction(field.bbox, lon);
+      if (fx === null || lat < fieldSouth || lat > fieldNorth) {
         out[row * width + col] = Number.NaN;
         continue;
       }
-      const fx = ((lon - fieldWest) / (fieldEast - fieldWest)) * (field.width - 1);
-      const fy = ((lat - fieldSouth) / (fieldNorth - fieldSouth)) * (field.height - 1);
-      out[row * width + col] = sampleBilinear(field.data, field.width, field.height, fx, fy);
+      out[row * width + col] = sampleBilinear(
+        field.data,
+        field.width,
+        field.height,
+        fx * (field.width - 1),
+        ((lat - fieldSouth) / (fieldNorth - fieldSouth)) * (field.height - 1),
+      );
     }
   }
   return out;

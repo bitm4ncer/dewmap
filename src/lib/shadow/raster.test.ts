@@ -192,4 +192,17 @@ describe("height field sampling", () => {
     const value = sampleHeightFieldBilinear(field, 6.5, 50.5);
     expect(value).toBeCloseTo(15, 6);
   });
+
+  it("samples across a crossing bbox instead of returning all NaN", () => {
+    const crossing: HeightField = {
+      bbox: [179.9, -1, -179.9, 1],
+      width: 4,
+      height: 2,
+      data: Float32Array.from([0, 10, 20, 30, 40, 50, 60, 70]),
+    };
+    expect(sampleHeightField(crossing, 179.95, -0.5)).toBe(10);
+    expect(sampleHeightField(crossing, 180, -0.5)).toBe(20);
+    expect(sampleHeightField(crossing, -179.95, -0.5)).toBe(30);
+    expect(Number.isNaN(sampleHeightField(crossing, 0, -0.5))).toBe(true);
+  });
 });

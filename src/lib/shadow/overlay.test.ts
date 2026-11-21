@@ -5,6 +5,7 @@ import {
   resetShadowOverlayStore,
   setShadowOverlayData,
   setShadowOverlayOpacity,
+  setShadowOverlaySources,
   setShadowOverlayTiles,
   shadowOverlayDefinition,
   subscribeShadowData,
@@ -80,10 +81,22 @@ describe("shadow overlay store", () => {
     expect(vector?.layers[0].type).toBe("fill");
   });
 
-  it("reports the active source kind", () => {
-    expect(shadowOverlayDefinition().kind).toBe("geojson");
+  it("reports the active source kind on the registered object", () => {
+    const definition = shadowOverlayDefinition();
+    expect(definition.kind).toBe("geojson");
     setShadowOverlayTiles(["https://tiles.example/{z}/{x}/{y}.png"]);
-    expect(shadowOverlayDefinition().kind).toBe("raster");
+    // The registry stores this object once; the getter must follow the store.
+    expect(definition.kind).toBe("raster");
+    setShadowOverlayData(collection("a"));
+    expect(definition.kind).toBe("geojson");
+  });
+
+  it("derives the attribution from the configured sources", () => {
+    const definition = shadowOverlayDefinition();
+    expect(definition.attribution.label).toContain("Geobasis NRW");
+    setShadowOverlaySources(["bwDgm1"]);
+    expect(definition.attribution.label).toContain("LGL");
+    expect(definition.attribution.url).toContain("lgl-bw");
   });
 
   it("clamps opacity", () => {

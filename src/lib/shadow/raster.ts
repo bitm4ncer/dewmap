@@ -15,7 +15,7 @@
  * why the layer picks resolution by zoom instead of always using 1 m.
  */
 import type { Bbox, BuildingFootprint, HeightField, ShadowMask, SolarPosition } from "./types";
-import { localFrame, type LocalFrame } from "./geometry";
+import { localFrame, lonFraction, type LocalFrame } from "./geometry";
 
 export interface RasterizeOptions {
   bbox: Bbox;
@@ -180,12 +180,13 @@ export function shadowFraction(mask: Uint8Array): number {
 
 /** Sample a height field at a lon/lat, nearest neighbour. NaN outside. */
 export function sampleHeightField(field: HeightField, lon: number, lat: number): number {
-  const [west, south, east, north] = field.bbox;
-  if (lon < west || lon > east || lat < south || lat > north) return Number.NaN;
-  const col = Math.min(
-    field.width - 1,
-    Math.floor(((lon - west) / (east - west)) * field.width),
-  );
+  const [, south, , north] = field.bbox;
+  if (lat < south || lat > north) return Number.NaN;
+  const fx = lonFraction(field.bbox, lon);
+  if (fx === null) return Number.NaN;
+  // The epsilon keeps a fraction that is mathematically on a cell boundary
+  // (0.25 * 4) from falling into the previous cell through floating point.
+  const col = Math.min(field.width - 1, Math.floor(fx * field.width + 1e-9));
   const row = Math.min(
     field.height - 1,
     Math.floor(((lat - south) / (north - south)) * field.height),
@@ -199,21 +200,23 @@ export function sampleHeightFieldBilinear(
   lon: number,
   lat: number,
 ): number {
-  const [west, south, east, north] = field.bbox;
-  if (lon < west || lon > east || lat < south || lat > north) return Number.NaN;
-  const x = ((lon - west) / (east - west)) * (field.width - 1);
+  const [, south, , north] = field.bbox;
+  if (lat < south || lat > north) return Number.NaN;
+  const fx = lonFraction(field.bbox, lon);
+  if (fx === null) return Number.NaN;
+  const x = fx * (field.width - 1);
   const y = ((lat - south) / (north - south)) * (field.height - 1);
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
   const x1 = Math.min(field.width - 1, x0 + 1);
   const y1 = Math.min(field.height - 1, y0 + 1);
-  const fx = x - x0;
-  const fy = y - y0;
+  const tx = x - x0;
+  const ty = y - y0;
   const v00 = field.data[y0 * field.width + x0];
   const v10 = field.data[y0 * field.width + x1];
   const v01 = field.data[y1 * field.width + x0];
   const v11 = field.data[y1 * field.width + x1];
-  const top = v00 * (1 - fx) + v10 * fx;
-  const bottom = v01 * (1 - fx) + v11 * fx;
-  return top * (1 - fy) + bottom * fy;
+  const top = v00 * (1 - tx) + v10 * tx;
+  const bottom = v01 * (1 - tx) + v11 * tx;
+  return top * (1 - ty) + bottom * ty;
 }

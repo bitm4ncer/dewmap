@@ -6,7 +6,7 @@ import {
   convexHull,
   expandBboxM,
   localFrame,
-  MAX_FRAME_LAT,
+  lonFraction,
   polygonAreaM2,
   projectFootprint,
   ringBbox,
@@ -195,15 +195,32 @@ describe("global bounds", () => {
     expect(span.x).toBeLessThan(25_000);
   });
 
-  it("clamps the frame latitude to the Web Mercator limit", () => {
-    const polar = localFrame([0, 89, 1, 90]);
-    expect(polar.lat0).toBe(MAX_FRAME_LAT);
-    expect(Number.isFinite(polar.mPerDegLon)).toBe(true);
+  it("wraps unverpacked longitudes east of 180", () => {
+    const frame = localFrame([179.5, 50, 180.4, 51]);
+    const back = frame.unproject(frame.project([179.9, 50.5]));
+    expect(back[0]).toBeCloseTo(179.9, 6);
+    expect(back[1]).toBeCloseTo(50.5, 6);
   });
 
-  it("refuses a bbox wider than 180 degrees", () => {
+  it("rejects latitudes outside the Web Mercator range", () => {
+    expect(() => localFrame([0, 89, 1, 90])).toThrow(RangeError);
+  });
+
+  it("rejects a bbox wider than 180 degrees", () => {
     const world: Bbox = [-180, -85, 180, 85];
-    expect(() => bboxSpanM(world, localFrame(world))).toThrow(RangeError);
+    expect(() => bboxSpanM(world, localFrame([0, 0, 1, 1]))).toThrow(RangeError);
+  });
+
+  it("rejects an inverted bbox instead of returning the whole world", () => {
+    expect(() => localFrame([10, 0, -10, 1])).toThrow(RangeError);
+  });
+
+  it("places a longitude across the seam", () => {
+    const bbox: Bbox = [179.9, -1, -179.9, 1];
+    expect(lonFraction(bbox, 179.95)).toBeCloseTo(0.25, 6);
+    expect(lonFraction(bbox, -179.95)).toBeCloseTo(0.75, 6);
+    expect(lonFraction(bbox, 180)).toBeCloseTo(0.5, 6);
+    expect(lonFraction(bbox, 0)).toBeNull();
   });
 
   it("keeps a crossing bbox crossing when expanded", () => {

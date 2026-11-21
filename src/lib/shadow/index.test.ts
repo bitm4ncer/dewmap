@@ -105,6 +105,16 @@ describe("computeShadowLayer", () => {
     expect(withTerrain.stats.shadowFraction).toBeGreaterThan(0.05);
   });
 
+  it("rejects a bbox outside the supported range", () => {
+    expect(() =>
+      computeShadowLayer({
+        bbox: [0, 89, 1, 90],
+        time: TIME,
+        mode: "vector",
+      }),
+    ).toThrow(RangeError);
+  });
+
   it("handles a bbox that crosses the antimeridian", () => {
     const result = computeShadowLayer({
       bbox: [179.9, -0.001, -179.9, 0.001],

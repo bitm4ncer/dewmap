@@ -5,7 +5,14 @@
  * thread, a Web Worker or on a build machine. No MapLibre, no DOM.
  */
 
-/** `[west, south, east, north]` in WGS84 degrees. */
+/**
+ * `[west, south, east, north]` in WGS84 degrees.
+ *
+ * Convention: `west > east` means the bbox crosses the antimeridian and is
+ * read as the short way round (from west eastwards across 180). Longitudes may
+ * arrive outside [-180, 180); `normalizeBbox` wraps them. Bboxes wider than
+ * 180 degrees and latitudes outside the Web Mercator range are rejected.
+ */
 export type Bbox = [west: number, south: number, east: number, north: number];
 
 /** `[longitude, latitude]` in WGS84 degrees. */
@@ -52,6 +59,7 @@ export interface HeightField {
 }
 
 export interface ShadowMask {
+  /** Same convention as `Bbox`; columns run from `west` eastwards across the seam. */
   bbox: Bbox;
   width: number;
   height: number;

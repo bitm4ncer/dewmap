@@ -41,6 +41,16 @@ export const SHADOW_SOURCES: Record<string, ShadowSource> = {
     resolutionM: 1,
     note: "Surface model: buildings, bridges and vegetation are already inside. Best single input for raster shadows.",
   },
+  nrwLod1: {
+    id: "nrw-lod1",
+    label: "Geobasis NRW LoD1",
+    url: "https://www.opengeodata.nrw.de/produkte/geobasis/3dg/lod1_gml/lod1_gml/",
+    license: "Datenlizenz Deutschland – Zero – Version 2.0",
+    licenseUrl: "https://www.govdata.de/dl-de/zero-2-0",
+    coverage: "Nordrhein-Westfalen",
+    resolutionM: 0,
+    note: "CityGML block models, 1 km tiles, 91.78 GB; the Phase 1 height source.",
+  },
   nrwLod2: {
     id: "nrw-lod2",
     label: "Geobasis NRW LoD2",

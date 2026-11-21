@@ -29,8 +29,8 @@ Erfolgskriterien für den POC:
 - **Gelände** kommt als grobes Horizont-Raster (25–30 m, 32 Richtungen) dazu.
   Ein Horizont-Raster kostet 51 ms pro 2 × 2 km und macht den Zeit-Slider
   danach praktisch kostenlos (0,04 ms Lookup).
-- **Daten** kommen als **Vektor-Kacheln mit Höhe** (LoD2/LoD1, OSM als
-  Fallback) plus **Terrain-Kacheln 25 m**. Es gibt **kein** vorproduziertes
+- **Daten** kommen als **Vektor-Kacheln mit Höhe** (LoD1, LoD2 optional;
+  OSM als Fallback) plus **Terrain-Kacheln 25 m**. Es gibt **kein** vorproduziertes
   DSM: der Worker rastert die Vektoren bei Bedarf selbst. Der VPS baut und
   liefert nur statische Kacheln; er rechnet nicht pro Anfrage.
 - **Auflösung nach Zoom**: 8 m bei z14, 4 m bei z15, 2 m bei z16, 1 m ab z17.
@@ -225,8 +225,10 @@ Abruf gerendert und danach statisch ausgeliefert (CDN davor).
 
 - Rechnung aus den eigenen Messwerten: 0,12–0,42 s pro 2 × 2 km bei 4 m auf
   **einem** Kern (mit 1-m-Schritten gerechnet, also konservativ; mit
-  4-m-Schritten wäre es 3–4× schneller). Eine 2,5-km-Kachel hat ~0,4 Mio.
-  Zellen, also **0,2–0,7 s** Rechenzeit plus Netz.
+  4-m-Schritten wäre es 3–4× schneller, kostet aber diagonal ~7 % der
+  Schattenzellen — für eine Variante, die man wegen Qualität erwägt, der
+  falsche Trade). Die „2,5-km-Kachel" ist eine **Kosteneinheit** (~0,4 Mio.
+  Zellen), kein Zoom-Raster: z14 ist bei 51° ~1,5 km breit, z15 ~0,8 km.
 - Vorteil: funktioniert auf **jedem** Endgerät, ohne Vektor-/Terrain-Download,
   ohne Worker, ohne 4 GB RAM. Das ist der einzige Ansatz, der auch bei
   Low-End-Hardware und ohne JavaScript trägt.
@@ -234,10 +236,11 @@ Abruf gerendert und danach statisch ausgeliefert (CDN davor).
   bei 15-Minuten-Quantisierung sind es 60 Slots pro Tag und Kachel. Die
   Trefferquote ist nur in populären Gebieten hoch, der Long Tail ist kalt.
 - Nachteil 2 — Kapazität. 2 vCPU × 1/0,4 s ≈ **2,9–10 Kacheln/s** kalt. Ein
-  Viewport braucht 6–12 Kacheln, also **1–3 s** für einen kalten Viewport;
+  Viewport braucht 6–12 Kacheln, also **1,2–4,1 s** für einen kalten Viewport;
   zwei bis drei gleichzeitige Nutzer sättigen den Server.
 - Nachteil 3 — kein Offline, kein sofortiges Pan, jeder Zeitschritt ist eine
-  Netzrunde.
+  Netzrunde. Und der Server braucht dieselben Vektoren und dasselbe Terrain
+  wie der Client — „keine Daten pro Fenster" gilt nur für den Client.
 - **Wann sie erste Wahl wäre:** wenn das Produkt auf Geräten ohne Worker/ohne
   GPU laufen muss, wenn serverseitig gerendert wird (Screenshot, Print, SSR)
   oder wenn ein CDN mit Request-Collapsing und vorerwärmten populären Kacheln
@@ -275,7 +278,7 @@ Schatten — eine reine Schattenmaske mit flacher Farbe und Alpha ist kleiner):
 | Innenhöfe/Selbstschatten | nein | ja | ja | ja | ja |
 | Zeitwechsel | 60 ms | 36–109 ms (4 m) | 0 ms (Cache) | 36–109 ms | 0,2–0,7 s + Netz |
 | Handy (6× gedrosselt) | 60 ms | 0,23–0,86 s | 0 ms | 0,23–0,86 s | 0 ms Client |
-| Daten pro Fenster | 11,5 MB GeoJSON | Vektor + Terrain | Schattenkacheln | Vektor + Terrain | keine |
+| Daten pro Fenster | 11,5 MB GeoJSON | Vektor + Terrain | Schattenkacheln | Vektor + Terrain | keine (Client) |
 | Server-Compute | nein | nein | ja, täglich | nein | ja, pro kalter Kachel |
 | Speicher | klein | klein | 2,6 GB/Tag (10 m) | klein | Cache, wächst mit Nutzung |
 | Genauigkeit | 0,74–0,91 IoU | Referenz | Referenz | ≈ Referenz | Referenz |
@@ -292,8 +295,8 @@ jeder Zeitwechsel neu gerechnet; D macht den Gelände-Teil gratis.
 
 ```
                        ┌──────────────────────────────┐
-  LoD2 / LoD1 / OSM ──▶│ Build-Pipeline (offline)     │
-  DGM1 / DOM1      ──▶│  → Vektor-Kacheln mit Höhe   │──▶ Object Storage / CDN
+  LoD1 / LoD2 (opt.) ─▶│ Build-Pipeline (offline)     │
+  DGM1 (DOM1 opt.)  ──▶│  → Vektor-Kacheln mit Höhe   │──▶ Object Storage / CDN
                        │  → Terrain-Kacheln (raster)  │
                        └──────────────────────────────┘
                                      │ statisch, cachebar
@@ -326,14 +329,16 @@ getrennt gebaut und nur für Gebiete mit DOM1 ausgeliefert.
   **1,29 MB gzip** → 64 KB gzip/km², 4,63 Byte pro Stützpunkt.
 - MVT ist binär (Varint-Deltas, keine wiederholten Keys) und liegt unter dem
   gzip-GeJSON-Wert; wir nehmen gzip-GeJSON als **Obergrenze**.
-- NRW bei Düsseldorfer Dichte (Obergrenze): 34.112 km² × 64 KB ≈ **2,2 GB pro
-  Zoomstufe**; mit z15/z16-Wiederholung Faktor 1,5–2,5 → **3–5 GB Obergrenze**.
+- NRW bei Düsseldorfer Dichte (Obergrenze): 34.112 km² × 64 KB ≈ **2,18 GB pro
+  Zoomstufe**; mit z15/z16-Wiederholung Faktor 1,5–2,5 → **3,3–5,5 GB**.
   Die Landesdurchschnittsdichte liegt deutlich darunter.
 - Terrain 25 m NRW: 34.112 km² × 1.600 Zellen/km² × 2 B = **109 MB roh**,
   komprimiert 50–80 MB.
-- Deutschland bei Düsseldorfer Dichte: Faktor 10,5 → 23–52 GB Obergrenze. Real
-  weniger, aber **nicht auf 9,9 GB**. Deshalb Object Storage oder eine
-  bundesweite Verdichtung (nur Gebäude ab einer Grundfläche, z14–z16).
+- Deutschland bei Düsseldorfer Dichte: Faktor 10,48 → **35–58 GB**
+  (2,18 GB × 1,5–2,5 × 10,48). Real weniger, aber **nicht auf 9,9 GB**.
+  Deshalb Object Storage oder eine bundesweite Verdichtung (nur Gebäude ab
+  einer Grundfläche, z14–z16). Der Wiederholungsfaktor ist die einzige
+  ungemessene Größe; Phase 1 misst ihn und ersetzt die Spanne durch einen Wert.
 - Global: OSM + Copernicus/Terrain Tiles, Vektor-Kacheln nur für Gebiete mit
   brauchbaren Höhen; alles andere wird als „geschätzt" gekennzeichnet.
 
@@ -359,6 +364,12 @@ Gelände, OSM-Fußabdrücke mit Höhen-Fallback, Ray-March im DSM.
 | Hauptthread 6× gedrosselt, 4 m | 234 / 613 / 858 ms |
 | Gelände-Horizont 25 m, 32 Richtungen | 51 ms Build, 0,04 ms Lookup |
 | Gelände-Horizont 4 m, 16 Richtungen | 9,0–12,0 s (gedrosselt 78 s) — verworfen |
+
+Gebäudezahl: 31.133 Gebäude liegen im Overpass-Fenster (20,1 km²), davon
+29.798 im 5 × 4 km Mosaik. Der POC rendert die 29.798; die Storage-Rechnung
+nutzt die 31.133 auf der größeren Fläche. Die Node-Zeile „4 m Ausgabe" ist mit
+1-m-Schritten gerechnet, die Browser-Zeile mit `stepM = resolutionM` (4 m) —
+deshalb sind 0,12–0,42 s und 36–109 ms nicht direkt vergleichbar.
 
 Belege: `docs/spikes/shadow-map-duesseldorf.jpg`,
 `docs/spikes/shadow-map-siebengebirge.jpg`,
@@ -386,7 +397,11 @@ registerOverlay(shadowOverlayDefinition());
 `shadowOverlayDefinition()` ist strukturell kompatibel zu `OverlayDefinition`
 (`id`, `label`, `group: "nature"`, `kind`, `attribution`, `opacity`, `minzoom`,
 `timeAware`, `order`, `resolve`). Daten kommen aus
-`setShadowOverlayData(geojson)` bzw. `setShadowOverlayTiles(urls)`.
+`setShadowOverlayData(geojson)` bzw. `setShadowOverlayTiles(urls)`. `kind`,
+`attribution` und `opacity` sind **Getter** auf dem registrierten Objekt:
+`registerOverlay` speichert die Definition einmal, ein eingefrorener Wert
+würde danach nicht mehr folgen. `attribution` kommt aus
+`setShadowOverlaySources([...])` und den Metadaten in `attribution.ts`.
 
 **Der Re-Render-Trigger.** `useOverlayLayers` memoisiert auf
 `[enabled, opacity, radarFrames, radarIndex, warnings]`. Ein Worker-Ergebnis
@@ -404,6 +419,15 @@ const shadowVersion = useShadowOverlayVersion();   // neu, aus @/lib/shadow/useS
 
 Für Nicht-React-Code gibt es den imperativen Weg:
 `applyShadowLayer(map, result)` in `layer.ts` setzt die Quelle sofort.
+
+**Bekannter Nebeneffekt (B2s Integrationsthema, hier nur dokumentiert):** die
+eine `useMemo` in `useOverlayLayers` löst bei jedem Schatten-Update **alle**
+Overlays neu auf, und `upsert` ruft `setData` ohne Identitätsprüfung. Ein
+Slider-Schritt schiebt also auch das Warnungs-GeoJSON neu in den MapLibre-
+Worker. Kein Korrektheitsproblem, aber Churn. Mitigationen für B2: den
+Schatten-Eintrag in einen separaten Effekt nehmen, `activeEntries` pro
+Definition memoisieren, oder in `upsert` nur bei geänderter Datenidentität
+`setData` rufen. Nichts davon liegt in diesem Paket.
 
 API:
 
@@ -435,7 +459,8 @@ Reine Rechenfunktionen ohne DOM und ohne Netz. `stats.computeMs` kommt aus
 2. **Streaming, nicht Sammeln.** Die Quellen sind 78,8 GB DGM1 + 91,8 GB LoD1
    = 170,6 GB, die Zielplatte hat 9,9 GB frei. Verarbeitet wird immer genau
    ein Kachelpaar:
-   - Kachelpaar laden (2 × ~2,2–2,6 MB), im Speicher halten, verarbeiten,
+   - Kachelpaar laden (DGM1 ~2,2 MB + LoD1 ~0,7 MB ≈ 2,9 MB), im Speicher
+     halten, verarbeiten,
    - Quelldatei sofort löschen,
    - Fortschritt in einer `progress.json` (Kachel-ID, Zeitstempel, Prüfsumme)
      markieren, damit ein Abbruch wiederaufsetzbar ist.
@@ -492,8 +517,9 @@ Reine Rechenfunktionen ohne DOM und ohne Netz. `stats.computeMs` kommt aus
 - Caddy liefert die Kacheln statisch aus; `Cache-Control: public, max-age=
   31536000, immutable` für Jahres-Kacheln, kurze TTL für Zeit-Slots.
 - Build läuft als nächtlicher Job (systemd timer), nicht im Webserver.
-- RAM: eine 1-km-Kachel DGM1 + DOM1 sind ~4 MB float32; mit 4 parallelen
-  Workern < 200 MB. Der 4-GB-VPS reicht für den Build, wenn kachelweise
+- RAM: eine 1-km-Kachel DGM1 (1 m, float32) sind 4 MB; LoD1 kommt als
+  CityGML-Stream dazu. Mit 4 parallelen Workern bleibt die Spitze < 50 MB
+  (eine Kachelpaar-Einheit), nicht 200 MB. Der 4-GB-VPS reicht für den Build, wenn kachelweise
   gearbeitet wird und nicht die ganze Stadt gleichzeitig im Speicher liegt.
 - Monitoring: Kachelgröße, Decode-Fehler, 404-Rate.
 
@@ -511,8 +537,8 @@ Reine Rechenfunktionen ohne DOM und ohne Netz. `stats.computeMs` kommt aus
 5. **Handy-Thermik.** 2 m ist gedrosselt 1,4–4,4 s; 4 m ist der Default, 1 m
    nur auf ausdrücklichen Zoom und nach Leerlauf.
 6. **Speicher.** Deutschland als Vektor-Kacheln liegt bei Düsseldorfer Dichte
-   in der Obergrenze bei 23–52 GB, nicht auf den 9,9 GB. NRW passt
-   (3–5 GB Obergrenze + 0,1 GB Terrain). Für Deutschland Object Storage oder
+   in der Obergrenze bei 35–58 GB, nicht auf den 9,9 GB. NRW passt
+   (3,3–5,5 GB + 0,1 GB Terrain). Für Deutschland Object Storage oder
    eine Verdichtung einplanen; die tatsächliche Kachelgröße in Phase 1 messen.
 7. **Lizenz-Share-Alike.** ODbL verlangt Share-Alike für abgeleitete
    *Datenbanken*. Ein gerendertes Schattenbild ist ein Produced Work; wer
@@ -588,13 +614,14 @@ fordert 33–36 m (Soll 34,6 m). Die Option ist jetzt dokumentiert als
 genau zwei Zeilen (Hook + Dependency, §7). Test: Datenwechsel erhöht die
 Version, benachrichtigt Abonnenten und liefert ein neues `source.data`-Objekt.
 
-**I-5 — Antimeridian und Pole.** `localFrame` klemmt die Breite auf
-±85,051°, rechnet Längengrade modulo 360 und trägt eine Bbox über den
-Antimeridian; `bboxSpanM` misst den kurzen Weg und lehnt Bboxen > 180° mit
-`RangeError` ab; `tilesForBbox` läuft bei `west > east` einmal um die Welt
-und wiederholt am Weltrand nicht die erste Spalte. Tests: Bbox
-`[179.9, -1, -179.9, 1]` → 4 Kacheln, x ∈ {0, 31}; Welt-Bbox z2 → 16
-Kacheln, x ∈ {0,1,2,3}; Frame-Roundtrip über den Antimeridian.
+**I-5 — Antimeridian und Pole.** `normalizeBbox` validiert und normalisiert:
+Breite innerhalb ±85,051°, Längenspanne ≤ 180°, `west > east` als Crossing,
+unverpackte Längengrade werden gewrappt. `localFrame`, `bboxSpanM` und
+`tilesForBbox` benutzen dieselbe Funktion, `tilesForBbox` läuft bei Crossing
+einmal um die Welt. Tests: Bbox `[179.9, -1, -179.9, 1]` → 4 Kacheln,
+x ∈ {0, 31}; unverpackte Bbox `[179.5, 50, 180.4, 51]` liefert dieselben
+Spalten wie `[179.5, 50, -179.6, 51]`; Welt-Bbox und invertierte Bbox werfen
+`RangeError`.
 
 **I-4 — ein Artefakt.** Phase 1 erzeugt nur Vektor-Kacheln mit Höhe plus
 25-m-Terrain. Das DSM entsteht im Worker; DOM1 ist eine optionale spätere
@@ -607,16 +634,75 @@ Verarbeitung löschen, Fortschritt in `progress.json`. 6–8 h auf einem Kern,
 3–5 h mit zwei Workern.
 
 **Variante E (lazy gecachte Server-Kachel)** ist in §3.4 bewertet: 0,2–0,7 s
-pro 2,5-km-Kachel, 2,9–10 Kacheln/s auf 2 vCPU, Cache-Key mit Zeit. Sie ist
-der Fallback für Low-End/SSR/vorerwärmte Gebiete, nicht der Default.
+pro 2,5-km-Kosteneinheit, 2,9–10 Kacheln/s auf 2 vCPU, 1,2–4,1 s für einen
+kalten Viewport, Cache-Key mit Zeit. Sie ist der Fallback für
+Low-End/SSR/vorerwärmte Gebiete, nicht der Default.
 
 **Mitgenommene Minor-Punkte:** Zoom-Tabelle (8 m bei z14) korrigiert,
 4-m-Worker-Wert auf 36 ms vereinheitlicht, Variante-C-Durchsatz auf
-Node-Raten umgestellt, Attributionszeile aus `SHADOW_SOURCES`, `kind` folgt
-dem aktiven Quelltyp, Vektor-/Raster-Legende ergänzt, Gelände-Test prüft
-jetzt die Wirkung statt nur die Existenz.
+Node-Raten umgestellt, Attributionszeile aus `SHADOW_SOURCES`, Vektor-/
+Raster-Legende ergänzt, Gelände-Test prüft jetzt die Wirkung statt nur die
+Existenz.
 
 **Bewusst offen:** Nodata-Füllung (`M-2`), zellenweite `maxHeight`-Schranke
 (`M-3`), exakte Rasterzellgröße (`M-10`), Dachform im Typ (`M-11`),
 `performance.now()` in `computeShadowLayer` (`M-12`). Sie ändern die
 Empfehlung nicht und gehören in die Phase-1-Härtung.
+
+## 12. Politur-Runde 2026-11-21 (Re-Review N-1 bis N-8)
+
+Der Re-Review bestätigt I-1/I-2 und findet nur noch Minor-Punkte. Diese Runde
+schließt die Randfälle und glättet die Zahlen.
+
+**N-3/N-4/N-5 — Bbox-Vertrag.** `normalizeBbox` ist jetzt die einzige Quelle
+für Gültigkeit und Normalisierung:
+
+- Längengrade außerhalb ±180 werden gewrappt, auch `east > 180` (MapLibre
+  liefert das beim Pannen über die Naht). `[179.5, 50, 180.4, 51]` und
+  `[179.5, 50, -179.6, 51]` ergeben dieselben Kacheln.
+- `south > north`, Breiten außerhalb ±85,051° und eine Längenspanne > 180°
+  werfen `RangeError`. Damit liefert `[10, 0, -10, 1]` nicht mehr die ganze
+  Welt, und `[0, 89, 1, 90]` wird nicht mehr still mit `cos(85,05°)` skaliert.
+- Die Konvention „`west > east` = Crossing" steht am Typ `Bbox` und an
+  `ShadowMask.bbox`.
+- `sampleHeightField`, `sampleHeightFieldBilinear` und `resampleTerrain`
+  benutzen `lonFraction` und funktionieren über der Datumsgrenze; Terrain
+  verschwindet dort nicht mehr still auf 0. Ein Fraction-Wert, der
+  mathematisch auf einer Zellgrenze liegt, wird mit 1e-9 gegen
+  Fließkomma-Abrutschen gesichert.
+
+**N-1 — `kind`.** `kind`, `attribution` und `opacity` sind Getter auf der
+registrierten Definition. `setShadowOverlayTiles` macht `kind` auch nach dem
+Registrieren zu `raster`; `setShadowOverlaySources(["bwDgm1"])` ändert die
+Attribution. Test deckt beides.
+
+**N-6 — Zahlen und Quellen.** Ein Artefakt (Vektor + Terrain), LoD1 als
+Phase-1-Höhenquelle, DOM1 nur optional:
+
+| Größe | Wert |
+|---|---|
+| Input NRW | 78,8 GB DGM1 + 91,8 GB LoD1 = 170,6 GB |
+| Kachelpaar | DGM1 ~2,2 MB + LoD1 ~0,7 MB ≈ 2,9 MB |
+| NRW Vektor (1 Zoomstufe) | 2,18 GB |
+| NRW Vektor (z15/z16, 1,5–2,5×) | 3,3–5,5 GB |
+| NRW Terrain 25 m | 109 MB roh, 50–80 MB komprimiert |
+| Deutschland Vektor | 35–58 GB (× 10,48) |
+| Gebäude | 31.133 im Overpass-Fenster, 29.798 im Mosaik |
+
+Der Wiederholungsfaktor 1,5–2,5 ist die einzige ungemessene Größe; Phase 1
+misst ihn. Die 52 GB aus dem Re-Review entsprechen einem Faktor 2,25×; mit
+dem dokumentierten 2,5× sind es 58 GB.
+
+**N-7 — Schrittweiten-Labels.** Node: 1-m-Schritte auf dem 1-m-DSM, auch bei
+4-m-Ausgabe. Browser: `stepM = resolutionM` (2 m/4 m). Die alte Klammer „bei
+2 m Schrittweite" hing an der Node-Zeile und ist gestrichen; die
+Browser-Schrittweite steht jetzt im POC-Protokoll.
+
+**N-8 — Variante E.** Kalter Viewport 1,2–4,1 s (6–12 Kacheln bei 2,9–10
+Kacheln/s), „Daten pro Fenster: keine" gilt nur für den Client, und der
+4-m-Schritt-Trick spart Zeit, kostet aber diagonal ~7 % Schattenzellen.
+
+**N-2 — Churn.** Dokumentiert in §7: der gemeinsame Memo löst bei jedem
+Slider-Schritt alle Overlays neu auf. Mitigation liegt bei B2 (separater
+Effekt, Identitätsprüfung in `upsert`, Memo pro Definition); keine
+B2-Datei wurde geändert.

@@ -75,11 +75,27 @@ describe("tilesForBbox", () => {
     expect(tiles.every((t) => t.x >= 0 && t.x < 32)).toBe(true);
   });
 
-  it("does not repeat the first column on a world bbox", () => {
-    const tiles = tilesForBbox([-180, -85, 180, 85], 2);
-    // 4 columns x 4 rows, not 5 columns.
-    expect(tiles).toHaveLength(16);
-    expect([...new Set(tiles.map((t) => t.x))].sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+  it("wraps an unverpacked bbox east of 180 like the packed one", () => {
+    const unverpackt = tilesForBbox([179.5, 50, 180.4, 51], 14);
+    const verpackt = tilesForBbox([179.5, 50, -179.6, 51], 14);
+    const columns = (tiles: { x: number }[]) =>
+      [...new Set(tiles.map((tile) => tile.x))].sort((a, b) => a - b);
+    expect(columns(unverpackt)).toEqual(columns(verpackt));
+    expect(columns(unverpackt)).toContain(0);
+    expect(columns(unverpackt)).toContain(16383);
+    expect(columns(unverpackt)).not.toContain(16384);
+  });
+
+  it("rejects a bbox that spans the whole world", () => {
+    expect(() => tilesForBbox([-180, -85, 180, 85], 2)).toThrow(RangeError);
+  });
+
+  it("rejects an inverted bbox instead of returning the whole world", () => {
+    expect(() => tilesForBbox([10, 0, -10, 1], 5)).toThrow(RangeError);
+  });
+
+  it("rejects latitudes outside the Web Mercator range", () => {
+    expect(() => tilesForBbox([0, 89, 1, 90], 2)).toThrow(RangeError);
   });
 
   it("documents that lon 180 yields x = n and must be wrapped", () => {

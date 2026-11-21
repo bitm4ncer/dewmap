@@ -26,6 +26,7 @@
  * For code that is not React, `applyShadowLayer(map, result)` in `layer.ts`
  * applies a result immediately.
  */
+import { SHADOW_SOURCES, shadowAttribution, type ShadowSource } from "./attribution";
 
 export type ShadowOverlaySource =
   | { type: "geojson"; data: GeoJSON.FeatureCollection }
@@ -69,6 +70,8 @@ export interface ShadowOverlaySnapshot {
   readonly tiles: readonly string[] | null;
   readonly tileSize: number;
   readonly opacity: number;
+  /** Keys into `SHADOW_SOURCES` used for the attribution line. */
+  readonly sourceIds: readonly string[];
 }
 
 const INITIAL: ShadowOverlaySnapshot = {
@@ -77,6 +80,7 @@ const INITIAL: ShadowOverlaySnapshot = {
   tiles: null,
   tileSize: 512,
   opacity: 0.45,
+  sourceIds: ["nrwDgm1", "nrwLod1", "osmBuildings"],
 };
 
 let snapshot: ShadowOverlaySnapshot = INITIAL;
@@ -125,6 +129,11 @@ export function setShadowOverlayOpacity(opacity: number): void {
   commit({ opacity: Math.max(0, Math.min(1, opacity)) });
 }
 
+/** Choose which data sources appear in the attribution line. */
+export function setShadowOverlaySources(sourceIds: string[]): void {
+  commit({ sourceIds: [...sourceIds] });
+}
+
 /** Test-only: restore the initial state and drop subscribers. */
 export function resetShadowOverlayStore(): void {
   snapshot = INITIAL;
@@ -132,21 +141,34 @@ export function resetShadowOverlayStore(): void {
 }
 
 export function shadowOverlayDefinition(): ShadowOverlayDefinition {
-  return {
+  const definition: ShadowOverlayDefinition = {
     id: SHADOW_OVERLAY_ID,
     label: "Sun & shadow",
     group: "nature",
-    kind: snapshot.tiles ? "raster" : "geojson",
     description:
-      "Cast shadows for a chosen date and time. Buildings and terrain from DGM1/DOM1 and LoD2 (NRW: dl-de/zero-2-0).",
-    attribution: {
-      label: "Geobasis NRW · OpenStreetMap",
-      url: "https://www.opengeodata.nrw.de/produkte/geobasis/hm/dgm1_tiff/dgm1_tiff/",
-    },
-    opacity: snapshot.opacity,
+      "Cast shadows for a chosen date and time. Terrain from DGM1, building heights from LoD1 (LoD2 optional); OSM as fallback. NRW: dl-de/zero-2-0.",
     minzoom: SHADOW_OVERLAY_MIN_ZOOM,
     timeAware: true,
     order: 40,
+    // Getters, not frozen values: the registry stores this object once, so
+    // `kind`, `attribution` and `opacity` must follow the store after tiles,
+    // sources or opacity change. A plain property would stay at its
+    // bootstrap value for the lifetime of the registry entry.
+    get kind() {
+      return snapshot.tiles ? ("raster" as const) : ("geojson" as const);
+    },
+    get attribution() {
+      const sources = snapshot.sourceIds
+        .map((id) => SHADOW_SOURCES[id])
+        .filter((source): source is ShadowSource => Boolean(source));
+      return {
+        label: shadowAttribution(snapshot.sourceIds),
+        url: sources[0]?.url,
+      };
+    },
+    get opacity() {
+      return snapshot.opacity;
+    },
     resolve: (context) => {
       // Read the store at resolve time, so a version bump is enough to make
       // the next resolve return the new data.
@@ -187,4 +209,5 @@ export function shadowOverlayDefinition(): ShadowOverlayDefinition {
       };
     },
   };
+  return definition;
 }

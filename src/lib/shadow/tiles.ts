@@ -6,6 +6,7 @@
  * and no compute at request time.
  */
 import type { Bbox } from "./types";
+import { normalizeBbox } from "./geometry";
 
 export const WEB_MERCATOR_MAX_LAT = 85.05112878;
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
@@ -49,7 +50,7 @@ export function tileResolutionM(z: number, lat: number, tileSize = 256): number 
  * outside `[0, 2^z)`.
  */
 export function tilesForBbox(bbox: Bbox, z: number): TileCoord[] {
-  const [west, south, east, north] = bbox;
+  const [west, south, east, north] = normalizeBbox(bbox);
   const n = 2 ** z;
   const topLeft = lonLatToTile(west, north, z);
   const bottomRight = lonLatToTile(east, south, z);
@@ -60,7 +61,7 @@ export function tilesForBbox(bbox: Bbox, z: number): TileCoord[] {
     // Crossing: the eastern end is numerically smaller; walk forward.
     x1 += n;
   } else {
-    // lon = 180 yields x = n; the bbox ends on the last tile, not on tile 0.
+    // Defensive: lon = 180 would yield x = n; the bbox ends on the last tile.
     x1 = Math.min(x1, n - 1);
   }
   if (x1 < x0) return [];

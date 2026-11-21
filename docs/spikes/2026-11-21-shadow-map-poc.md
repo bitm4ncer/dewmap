@@ -26,7 +26,9 @@ Produktivcode; die Rechenfunktionen sind inzwischen als Modul unter
   - Siebengebirge: 16 Kacheln (4 × 4 km), 39,2 MB.
   - Download Median 163 ms/Kachel; Dekodieren + Mosaik 2,3 s / 2,9 s.
 - Gebäude: OpenStreetMap via Overpass, `way["building"]` + `out geom`.
-  - Düsseldorf 5 × 4 km: 29.798 Gebäude, 28,5 MB JSON, **40,3 s**.
+  - Düsseldorf 5 × 4 km: 31.133 Gebäude im Overpass-Fenster (20,1 km²), davon
+    29.798 im 5 × 4 km Mosaik; 28,5 MB JSON, **40,3 s**. Der POC rendert die
+    29.798, die Storage-Rechnung nutzt die 31.133 (größere Fläche).
   - Siebengebirge 4 × 4 km: 8.181 Gebäude, 6,9 MB JSON, **33,0 s**.
 - Höhen: `height`, sonst `building:levels × 3,2 + 1`, sonst 10 m.
 
@@ -53,8 +55,8 @@ Sonne: NOAA/Meeus, validiert gegen NREL SPA (siehe Design-Dokument, 8,4″).
 | 1 m | 4.000.000 | 2,2 s | 5,4 s | 7,3 s |
 | 4 m Ausgabe, 1-m-Schritte | 250.000 | 0,12 s | 0,32 s | 0,42 s |
 
-Die Zeit hängt fast linear an `Höhe / tan(Elevation)`: bei 61° sind es 35
-Schritte, bei 23° 147 Schritte (bei 2 m Schrittweite).
+Die Node-Läufe benutzen 1-m-Schritte auf dem 1-m-DSM, unabhängig von der
+Ausgabezelle. Die Zeit hängt fast linear an `Höhe / tan(Elevation)`.
 
 ### Browser (Chrome 157, gleiche Maschine)
 
@@ -65,9 +67,12 @@ Schritte, bei 23° 147 Schritte (bei 2 m Schrittweite).
 | Hauptthread, CPU 6× gedrosselt | 2 m | 1.427 ms | 3.093 ms | 4.422 ms |
 | Hauptthread, CPU 6× gedrosselt | 4 m | 234 ms | 613 ms | 858 ms |
 
-`Emulation.setCPUThrottlingRate` wirkt auf den Hauptthread, **nicht** auf
-Worker-Threads (die Worker-Zeiten ändern sich zwischen 1× und 6× nicht). Die
-gedrosselten Hauptthread-Werte sind deshalb der belastbare Handy-Proxy.
+Die Browser-Läufe benutzen `stepM = resolutionM` (2 m bzw. 4 m), also den
+Modul-Default; die 36 ms bei 4 m sind deshalb nicht mit den Node-4-m-Werten
+(1-m-Schritte) zu vergleichen. `Emulation.setCPUThrottlingRate` wirkt auf den
+Hauptthread, **nicht** auf Worker-Threads (die Worker-Zeiten ändern sich
+zwischen 1× und 6× nicht). Die gedrosselten Hauptthread-Werte sind deshalb der
+belastbare Handy-Proxy.
 
 ### Gelände-Horizont
 
