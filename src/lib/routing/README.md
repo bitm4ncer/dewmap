@@ -30,6 +30,11 @@ const plans = await planRoutes({
 | `planValhalla(request)` | Valhalla only. Supports alternates and avoid preferences. |
 | `planMotis(request)` | Public transport journeys. |
 | `geocodeStops(text, signal?, limit?)` | Stop search through Transitous. |
+| `fetchLiveVehicles(query)` | Interpolated vehicle positions for a map window (MOTIS `map/trips`). |
+| `filterLiveVehicles(vehicles, groups)` | Apply the rail/bus/tram/metro/ferry filter. |
+| `mergeVehiclePositions(interpolated, gps)` | One position per trip; a `source: "gps"` feed wins. |
+| `fetchAreaAlerts({ stops })` | Stop-time alerts for a few stops, normalized and TTL-cached. |
+| `normalizeMotisAlert(value, options)` | One alert from MOTIS/GTFS-RT, HTML stripped. |
 | `formatDuration`, `formatDistance`, `formatClock`, `formatRelativeDelay` | Pure UI helpers. |
 | `decodePolyline(encoded, precision?)` | Polyline decoder (Valhalla precision 6, MOTIS precision 7). |
 | `deriveBrouterManeuvers(coordinates, durationS?)` | Geometry -> turn instructions. |
