@@ -2,6 +2,7 @@
 
 import { LayerCard, type LegendSpec, type SwatchSpec } from "./LayerCard";
 import { WeatherPanel } from "./WeatherPanel";
+import { ShadowCard } from "./ShadowCard";
 import {
   AirQualityIcon,
   ForestLossIcon,
@@ -131,6 +132,8 @@ export function BiospherePanel(props: BiospherePanelProps) {
     <div className="flex flex-col gap-3">
       <h2 className="hud-label px-1">Weather</h2>
       <WeatherPanel />
+
+      <ShadowCard />
 
       <div className="flex items-center gap-2 px-1">
         <span className="h-px flex-1 bg-[color:var(--surf-3)]" aria-hidden />
