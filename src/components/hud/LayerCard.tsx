@@ -30,6 +30,8 @@ export interface LayerCardProps {
   footer?: ReactNode;
   /** Hide the opacity row even when the layer is on (e.g. warnings). */
   hideOpacity?: boolean;
+  /** Give the opacity slider a 44 px hit area (new cards; legacy stays slim). */
+  tallSliders?: boolean;
   onToggle: (on: boolean) => void;
   onOpacityChange: (o: number) => void;
 }
@@ -51,6 +53,7 @@ export function LayerCard({
   extras,
   footer,
   hideOpacity = false,
+  tallSliders = false,
   onToggle,
   onOpacityChange,
 }: LayerCardProps) {
@@ -95,7 +98,7 @@ export function LayerCard({
               step={0.05}
               value={opacity}
               onChange={(e) => onOpacityChange(Number(e.target.value))}
-              className="hud-slider flex-1"
+              className={`hud-slider flex-1${tallSliders ? " hud-slider-tall" : ""}`}
               style={{ ["--hud-fill" as string]: `${Math.round(opacity * 100)}%` }}
               aria-label={`${label} opacity`}
             />

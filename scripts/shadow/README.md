@@ -83,10 +83,12 @@ tippecanoe -o buildings.mbtiles --force -l buildings -Z12 -z16 \
 pmtiles convert buildings.mbtiles buildings-duesseldorf-v1.pmtiles
 ```
 
-`--drop-densest-as-needed` keeps the low zooms under the tile size limit; the
-z16 tiles the client actually reads keep every building (22 kB max, 9.1 MB
-total). No labels, no other attributes: `height` and `id` are all the worker
-needs.
+`--drop-densest-as-needed` keeps the low zooms under the tile size limit. The
+z16 tiles the client actually reads lose only **339 sub-pixel polygons**
+(tippecanoe's `tiny_polygons`), z15 433, z14 438, z13 3 441. The big drop is z12
+(245 523 features, 10 159 tiny polygons) where the whole pilot area fits into
+16 tiles. Max tile on z16 is 22 kB, 9.1 MB total. No labels, no other
+attributes: `height` and `id` are all the worker needs.
 
 | zoom | tiles | bytes | max tile |
 |---|---:|---:|---:|

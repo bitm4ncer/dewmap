@@ -67,8 +67,9 @@ Caddy wurde nicht angefasst.
 - Dedupe über `id` (ein Gebäude an einer Kachelgrenze liegt in zwei Kacheln).
 - Geometrie exakt Mercator-invertiert (`tilePointToLngLat`), nicht linear
   interpoliert.
-- Cache pro Kachel (LRU, 64 Einträge) im Hook; `cacheHits`/`bytes` landen in
-  der Statuszeile.
+- Cache pro Kachel (echtes LRU, 64 Einträge: ein Treffer verschiebt den
+  Schlüssel ans Ende, sodass die Eviction den ältesten *unbenutzten* trifft);
+  `cacheHits`/`bytes` landen in der Statuszeile.
 - Fehlerklassen `timeout | network | http | decode | aborted`; Pro-Kachel-
   Timeout 8 s, `withTimeout` bricht auch Quellen ab, die ihr Signal ignorieren.
 - Zoom-Wahl: `mapZoom + 1`, geklemmt auf 14–16, und so weit reduziert, dass
@@ -128,16 +129,28 @@ const shadowVersion = useShadowOverlayVersion();      // + 2 Zeilen (Hook + Komm
 
 Warum PNG statt GeoJSON: Ein Fill-Layer mit Schattenpolygonen wäre bei 7 000
 Gebäuden ein Multi-MB-`setData` pro Slider-Schritt und damit ein Long Task auf
-dem Main Thread. Die Bild-Quelle überträgt 20–60 kB pro Schritt und wird wie
-der vorhandene Radar-Layer gezeichnet. `setShadowOverlayData` bleibt als
+dem Main Thread. Die Bild-Quelle überträgt **gemessene 211–228 kB Data-URL**
+(≈158–171 kB PNG für 538 × 337 Zellen) pro Schritt und wird wie der vorhandene
+Radar-Layer gezeichnet — immer noch eine Größenordnung unter einem
+GeoJSON-`setData` für 7 000 Gebäude. `setShadowOverlayData` bleibt als
 Vektor-Pfad bestehen (Engine + Test).
 
 ### 3.5 Zustand und UI
 
 - `useShadowSettings` (persistiert): nur `offsetMinutes` (±720, 5-min-Raster).
+- „Now" bleibt aktuell: solange kein Offset gesetzt ist, rechnet der Hook auf
+  der nächsten 5-Minuten-Grenze neu (ausgerichtet an der Wanduhr, nicht ab
+  Mount) und beim Zurückkehren in den Tab höchstens einmal pro Minute; die
+  Karte muss sichtbar sein. Ein gesetzter Offset ist ein bewusster Zeitpunkt
+  und wird nie automatisch verschoben. Kein Render-Loop, kein Dauer-Raymarch.
 - `useShadowRuntime` (flüchtig): Phase, Meldung, Zoom, Sonnenstand, Statistik.
   Der Viewport-Bbox wird **nicht** vom Ergebnis überschrieben — sonst würde
   jede Antwort den Render-Effekt erneut auslösen (im Test gefunden, siehe §5).
+- **Sprache:** alle sichtbaren Texte, Statusmeldungen, Slider-Labels und
+  `aria`-Werte sind Englisch (die App ist `lang="en"`); nur Uhrzeit/Datum
+  kommen aus `Europe/Berlin` mit `en-GB`-Formatierung. Lizenznamen
+  („Datenlizenz Deutschland – Zero – 2.0") und die von dl-de/by-2-0
+  vorgeschriebenen Attributionssätze bleiben im Originalwortlaut.
 - `ShadowCard` unter „Weather" in der Nature-Kategorie: Uhrzeit (Europe/Berlin),
   Tageskürzel bei Tageswechsel, Offset, „Now" (44 px), Slider (44 px Hit-Area,
   `aria-label="Shadow time"`, `aria-valuetext` mit Uhrzeit), Opazität, Statistik
@@ -149,30 +162,47 @@ Vektor-Pfad bestehen (Engine + Test).
 
 Aufbau: Produktionsbuild (`next build --webpack`, statisch ausgeliefert auf
 :3006), 1440 × 900, Düsseldorf, Zoomstufe mit 4-m-Raster, 7 341 Gebäude im
-Fenster (538 × 337 Zellen).
+Fenster (538 × 337 Zellen). Die Spannen stammen aus mehreren Läufen auf einer
+geteilten VM-CPU (SwiftShader), nicht aus einem einzelnen best-case.
 
 | Messung | Wert |
 |---|---|
-| Kalte Aktivierung (Cache geleert) | **810 ms** bis zur fertigen Maske |
-| Kachel-Transfer kalt | 27 Range-Requests, **227 kB**, alle `206` |
+| Kalte Aktivierung (Cache geleert) | **0,8–1,1 s** bis zur fertigen Maske |
+| Kachel-Transfer kalt | 27 Range-Requests, **227 129 Byte**, alle `206` |
 | Kachel-Transfer warm (Slider) | **0 Requests**, 0 Byte (Kachel-Cache) |
-| Slider-Schritt warm, Ende-zu-Ende | **402–463 ms** (120 ms Debounce + 100–131 ms Raymarch + PNG/Upload) |
-| Worker-Raymarch (18° Sonne) | 100–135 ms |
-| Worker-Raymarch (8° Sonne) | 148–166 ms |
-| PNG-Kodierung im Worker | 30–144 ms |
+| Slider-Schritt warm, Ende-zu-Ende | **590–691 ms** (120 ms Debounce + 161–216 ms Raymarch + PNG/Upload; in einem weniger belasteten Lauf 402–463 ms) |
+| Worker-Raymarch | 100–216 ms (18° → 4° Sonne; flache Sonne heißt lange Strahlen) |
+| PNG-Kodierung im Worker | 28–109 ms |
 | Long Tasks, Baseline 8 s ohne Schatten | **0** |
-| Long Tasks, erste Aktivierung | **1 × 96–203 ms** (Shader-Kompilierung + erste Textur unter SwiftShader; Streuung über mehrere Läufe) |
+| Long Tasks, erste Aktivierung | **0–203 ms je nach Lauf**: fällt der Raster-Programm-Compile an, ist es ein Task mit 85–203 ms; hat die Basemap vorher schon ein Raster-Programm gebaut (z. B. nach einem Style-Wechsel), 0 |
 | Long Tasks, 6 Slider-Schritte danach | **0** |
-| Long Tasks, Opazität/Style/Zoom/Now | **0** |
+| Long Tasks, Opazität/Zoom/Now | **0** |
+| Long Tasks, Stylewechsel Vector → Hybrid | 0–162 ms, je nach Basemap-Shader; nicht aus dem Schatten-Layer |
 | Console-Errors | 1, davon **0 aus dieser Änderung**: `404` auf ein Protomaps-Basemap-Glyph (`basemaps-assets/fonts/Open Sans Regular,…/0-255.pbf`), tritt beim Laden der Karte vor jeder Schatten-Interaktion auf |
-| Sichtbarkeit (Pixeldiff, 2-px-Raster) | Schatten aus → an: **14,0 %** der Bildpunkte; +1 h → +3 h: **7,7 %**; Opazität 50 → 100 %: **19,7 %**; Vector → Hybrid: **52,2 %** (Basemap) bei weiterhin aktivem Layer |
+| Sichtbarkeit (Pixeldiff, 2-px-Raster) | Schatten aus → an: **18,1 %** der Bildpunkte; +45 min → +90 min: **7,0 %**; Opazität 50 → 100 %: **26,1 %**; Vector → Hybrid: **46,2 %** (Basemap) bei weiterhin aktivem Layer |
 
-Die 96–203 ms beim ersten Einschalten sind MapLibre-Initialisierung des
+Die 85–203 ms beim ersten Einschalten sind MapLibre-Initialisierung des
 Raster-Programms und der Textur in einer Software-GL-Umgebung; sie treten
 einmalig auf, nicht pro Interaktion. Auf echter GPU-Hardware ist dieser Anteil
 nicht messbar.
 
-## 5. Gefundene Fehler und Korrekturen
+## 5. Abweichungen und gefundene Fehler
+
+### 5.1 Abweichungen
+
+- **Auflösung 2–8 m statt 2–4 m.** Die Zoom-Tabelle des Designs endet bei 8 m;
+  bei z14 und einem breiten Viewport (4,3 × 2,7 km) ist das nötig, um unter dem
+  1,2-Mio.-Zellen-Budget zu bleiben (gemessen: 28 286 Gebäude, 274 ms Compute,
+  0 Long Tasks). 4 m wäre dort doppelt so teuer ohne sichtbaren Gewinn, weil
+  ein z14-Pixel 6 m Boden abdeckt. Bewusst so belassen.
+- **PNG-Payload.** Ursprünglich mit 20–60 kB geschätzt; gemessen sind es
+  211–228 kB Data-URL pro Schritt (158–171 kB PNG). Die Architekturentscheidung
+  trägt weiter, die Zahl war zu optimistisch.
+- **Ein Ring pro Gebäude.** Tippecanoe-Clipping kann am Kachelrand Multi-Ringe
+  erzeugen; die Stichprobe (z16, 234 Features) zeigte 0. Für den Pilot
+  akzeptiert, im Daten-README als Grenze notiert.
+
+### 5.2 Gefundene Fehler und Korrekturen
 
 1. **Render-Schleife.** `ready()` schrieb die Ergebnis-Bbox in das
    Viewport-Feld. Neue Array-Identität → Effekt erneut → neuer Worker → neues
@@ -189,6 +219,20 @@ nicht messbar.
 5. **`--use-attribute-for-id`** funktioniert nur mit numerischen IDs; LoD1-IDs
    sind Strings (`DENW20AL…`). Die ID ist deshalb normale Property, Dedupe
    läuft darüber.
+6. **`terminate()` ließ einen warmen Worker leben.** `cancel()` kehrt bei
+   idleem Worker vor dem Teardown zurück, `terminate()` delegierte daran.
+   Jetzt beendet `terminate()` den Thread immer, `cancel()` bleibt warm; ein
+   späterer `run()` startet neu. `onerror` verwirft den Worker ebenfalls,
+   sonst liefe der nächste Schritt in den 12-s-Timeout.
+7. **Timeout wurde als Abbruch verschluckt.** `isAbortError()` zählte
+   `timeout` mit; der Hook kehrte still zurück und der Status blieb auf
+   „resolving shadows…". Jetzt klassifiziert `errors.ts` Abbruch (still) gegen
+   Timeout/Netz/Decode (Meldung), die alte Maske bleibt als ehrlicher
+   Teilstand stehen.
+8. **„Now" fror ein.** Der Zeitpunkt wurde nur beim Effekt-Lauf berechnet.
+   Jetzt: 5-Minuten-Takt an der Wanduhr, Focus/Visibility höchstens einmal pro
+   Minute, nur im Now-Modus und nur bei sichtbarer Seite; die Uhr im Card tickt
+   alle 30 s. Reine Trigger-Logik in `now.ts`, getestet.
 
 ## 6. Grenzen und Rollout
 
@@ -205,7 +249,8 @@ nicht messbar.
   SwiftShader-Umgebung; auf einem Gerät mit GPU sind Upload und Repaint
   deutlich kürzer. Der JS-Anteil des Layers liegt laut CPU-Profil bei ~10 ms pro
   Schritt.
-- **PNG-Data-URLs** kosten pro Schritt 20–60 kB Heap und einen Decode. Ein
+- **PNG-Data-URLs** kosten pro Schritt gemessene 211–228 kB String und einen
+  Decode (bei 181 k Zellen; mit dem Zellbudget skaliert der Payload mit). Ein
   `ImageBitmap`-Transfer würde den Decode sparen, verlangt aber eine Erweiterung
   von `lib/overlays/apply.ts` (B2) über die vereinbarten Andockzeilen hinaus.
 - **Attribution.** dl-de/zero-2.0 verlangt keine Namensnennung; die Karte nennt

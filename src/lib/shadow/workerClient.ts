@@ -6,6 +6,11 @@
  * loop, so a queued "cancel" message would be read only after the very work it
  * was meant to stop. Terminating is the honest abort, and it is cheap (the
  * worker reloads its module once per burst, not per frame).
+ *
+ * `terminate()` is the lifecycle end (unmount, HMR) and always shuts the
+ * thread down, idle or not; the next `run()` starts a fresh worker. There are
+ * no blob URLs to revoke: results travel as data URLs, which the browser
+ * garbage-collects with the image source.
  */
 import { ShadowDataError } from "./buildings";
 import type { ShadowRenderRequest, ShadowWorkerResponse } from "./workerTask";
@@ -52,7 +57,10 @@ export class ShadowWorkerClient {
       resolve(response);
     };
     worker.onerror = (event) => {
+      // A dead worker never answers; keeping it around would make every
+      // following step wait for the 12 s run timeout.
       this.fail(new ShadowDataError("network", event.message || "worker error"));
+      this.teardown();
     };
     this.worker = worker;
     return worker;
@@ -76,9 +84,11 @@ export class ShadowWorkerClient {
   }
 
   /**
-   * Drop the current run. A running worker is terminated (it cannot observe a
-   * cancel mid-march); an idle worker is kept warm, because re-creating it per
-   * slider step costs more than the step itself.
+   * Drop the current run and keep an idle worker warm.
+   *
+   * Only a *running* worker is terminated: it cannot observe a cancel
+   * mid-march, and re-creating the thread on every slider step costs more than
+   * the step itself.
    */
   cancel(): void {
     const pending = this.pending;
@@ -89,8 +99,19 @@ export class ShadowWorkerClient {
     pending.reject(new ShadowDataError("aborted", "aborted"));
   }
 
+  /**
+   * Lifecycle end (unmount, HMR, teardown): always stops the thread, whether a
+   * render is in flight or it is sitting warm. A later `run()` starts a new
+   * worker, so the client stays usable after a terminate.
+   */
   terminate(): void {
-    this.cancel();
+    const pending = this.pending;
+    this.pending = null;
+    this.teardown();
+    if (pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new ShadowDataError("aborted", "terminated"));
+    }
   }
 
   /**

@@ -36,9 +36,14 @@ export class ShadowDataError extends Error {
   }
 }
 
+/**
+ * A real abort (unmount, new viewport, newer slider value). A `timeout` is
+ * deliberately **not** an abort: it is a failure the panel has to report, not
+ * a reason to stay silent in "resolving shadows…".
+ */
 export function isAbortError(error: unknown): boolean {
   return (
-    (error instanceof ShadowDataError && (error.code === "aborted" || error.code === "timeout")) ||
+    (error instanceof ShadowDataError && error.code === "aborted") ||
     (error as { name?: string } | null)?.name === "AbortError"
   );
 }
@@ -240,6 +245,22 @@ export function buildingTilesForBbox(
 }
 
 /**
+ * Mark a cache entry as most recently used.
+ *
+ * A `Map` keeps insertion order, so delete + set is the whole LRU: the first
+ * key is then genuinely the least recently used one. Without this, the eviction
+ * below would be FIFO, which throws away a hot tile just because it arrived
+ * first.
+ */
+export function touchCache<K, V>(cache: Map<K, V>, key: K): V | undefined {
+  const value = cache.get(key);
+  if (value === undefined) return undefined;
+  cache.delete(key);
+  cache.set(key, value);
+  return value;
+}
+
+/**
  * Load and dedupe the buildings covering `bbox`.
  *
  * Dedupe is by archive id: a building that touches a tile border is present
@@ -267,7 +288,7 @@ export async function loadBuildingsForBbox(
   for (const tile of tiles) {
     if (options.signal?.aborted) throw new ShadowDataError("aborted", "aborted");
     const key = `${options.source.url}|${zoom}/${tile.x}/${tile.y}`;
-    let decoded = cache.get(key);
+    let decoded = touchCache(cache, key);
     if (decoded) {
       cacheHits += 1;
     } else {

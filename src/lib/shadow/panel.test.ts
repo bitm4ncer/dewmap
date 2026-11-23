@@ -37,10 +37,11 @@ describe("shadow panel copy", () => {
     expect(formatShadowOffset(-120)).toBe("−2 h");
   });
 
-  it("labels a different day only when it is one", () => {
+  it("labels a different day only when it is one, in English", () => {
     const now = new Date("2026-06-21T10:00:00Z");
     expect(formatShadowDay(now, now)).toBeNull();
-    expect(formatShadowDay(new Date("2026-06-22T05:00:00Z"), now)).not.toBeNull();
+    // 2026-06-22 is a Monday; the app is `lang="en"`, so no "Mo".
+    expect(formatShadowDay(new Date("2026-06-22T05:00:00Z"), now)).toBe("Mon");
   });
 
   it("explains every empty state", () => {
@@ -84,7 +85,7 @@ describe("shadow panel copy", () => {
         equationOfTimeMin: 0,
       },
     });
-    expect(line).toContain("1.234 buildings");
+    expect(line).toContain("1,234 buildings");
     expect(line).toContain("4 m");
     expect(line).toContain("87 ms");
     expect(line).toContain("clipped to pilot");
