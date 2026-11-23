@@ -19,9 +19,12 @@ import {
   type ActiveOverlay,
 } from "@/lib/overlays/apply";
 import { registerWeatherOverlays } from "@/lib/overlays/definitions";
+import { registerShadowOverlay } from "@/lib/shadow/register";
+import { useShadowOverlayVersion } from "@/lib/shadow/useShadowOverlay";
 import { useOverlays, warningAreasOf } from "@/lib/overlays/store";
 
 registerWeatherOverlays();
+registerShadowOverlay();
 
 export function useOverlayLayers(map: MLMap | null): void {
   const enabled = useOverlays((s) => s.enabled);
@@ -29,6 +32,9 @@ export function useOverlayLayers(map: MLMap | null): void {
   const radarFrames = useOverlays((s) => s.radarFrames);
   const radarIndex = useOverlays((s) => s.radarIndex);
   const warnings = useOverlays((s) => s.warnings);
+  // A worker result changes none of the store fields above; this counter is
+  // the rerender trigger for the shadow layer (see src/lib/shadow/overlay.ts).
+  const shadowVersion = useShadowOverlayVersion();
 
   // Resolve the *enabled* set. This is the only dependency of the reconcile
   // effect: any state that changes a layer (frame, opacity, geometry) changes
@@ -51,7 +57,10 @@ export function useOverlayLayers(map: MLMap | null): void {
           warnings: areas,
         }),
       }));
-  }, [enabled, opacity, radarFrames, radarIndex, warnings]);
+    // `shadowVersion` is not read above on purpose: it is the external-store
+    // trigger that re-resolves the shadow layer when a worker result lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, opacity, radarFrames, radarIndex, warnings, shadowVersion]);
 
   useEffect(() => {
     if (!map) return;

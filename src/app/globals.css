@@ -716,6 +716,22 @@ input[type="range"].hud-slider {
   cursor: pointer;
 }
 
+/* A slider that has to be a real touch target (shadow time, 44 px). */
+input[type="range"].hud-slider.hud-slider-tall {
+  height: 44px;
+}
+
+input[type="range"].hud-slider.hud-slider-tall::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+}
+
+input[type="range"].hud-slider.hud-slider-tall::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+}
+
 input[type="range"].hud-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: var(--r-pill);

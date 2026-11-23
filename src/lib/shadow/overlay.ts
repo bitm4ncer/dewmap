@@ -1,21 +1,16 @@
 /**
  * Dock point for the generic overlay registry.
  *
- * The registry lives in `src/lib/overlays/**` and is built on a parallel
- * branch. This module deliberately does not import it: the definition below
- * is structurally compatible with `OverlayDefinition` there.
+ * The registry lives in `src/lib/overlays/**`. This module deliberately does
+ * not import it: the definition below is structurally compatible with
+ * `OverlayDefinition` there, and `register.ts` is the one file that connects
+ * the two.
  *
- * Wiring is two lines in that branch's bootstrap plus one dependency in its
- * hook (see `docs/superpowers/specs/2026-11-21-shadow-map-design.md` §7):
+ * Wiring is three lines in the app:
  *
- *   import { registerOverlay } from "@/lib/overlays";
- *   import { shadowOverlayDefinition } from "@/lib/shadow/overlay";
- *   registerOverlay(shadowOverlayDefinition());
- *
- * and, inside `useOverlayLayers`:
- *
- *   const shadowVersion = useShadowOverlayVersion();
- *   // add `shadowVersion` to the useMemo dependency array
+ *   import { registerShadowOverlay } from "@/lib/shadow/register";
+ *   registerShadowOverlay();                            // in useOverlayLayers
+ *   const shadowVersion = useShadowOverlayVersion();    // + one dependency
  *
  * The version is the trigger. `useOverlayLayers` memoises on
  * `[enabled, opacity, radarFrames, radarIndex, warnings]`; a worker result
@@ -27,10 +22,23 @@
  * applies a result immediately.
  */
 import { SHADOW_SOURCES, shadowAttribution, type ShadowSource } from "./attribution";
+import { PILOT_SOURCE_IDS } from "./pilot";
+import type { Bbox } from "./types";
 
 export type ShadowOverlaySource =
   | { type: "geojson"; data: GeoJSON.FeatureCollection }
-  | { type: "raster"; tiles: string[]; tileSize?: number };
+  | { type: "raster"; tiles: string[]; tileSize?: number }
+  | {
+      /** One georeferenced image, e.g. a rendered shadow PNG for the viewport. */
+      type: "image";
+      url: string;
+      coordinates: [
+        [number, number],
+        [number, number],
+        [number, number],
+        [number, number],
+      ];
+    };
 
 export interface ShadowOverlayLayer {
   type: "fill" | "raster";
@@ -63,12 +71,21 @@ export interface ShadowOverlayDefinition {
 
 export const SHADOW_OVERLAY_ID = "nature-shadow";
 export const SHADOW_OVERLAY_MIN_ZOOM = 14;
+export const SHADOW_OVERLAY_DEFAULT_OPACITY = 0.5;
+
+export interface ShadowOverlayImage {
+  /** Data URL or blob URL of the rendered shadow PNG. */
+  url: string;
+  /** Geographic extent of the image, `[west, south, east, north]`. */
+  bbox: Bbox;
+}
 
 export interface ShadowOverlaySnapshot {
   readonly version: number;
   readonly geojson: GeoJSON.FeatureCollection | null;
   readonly tiles: readonly string[] | null;
   readonly tileSize: number;
+  readonly image: ShadowOverlayImage | null;
   readonly opacity: number;
   /** Keys into `SHADOW_SOURCES` used for the attribution line. */
   readonly sourceIds: readonly string[];
@@ -79,8 +96,9 @@ const INITIAL: ShadowOverlaySnapshot = {
   geojson: null,
   tiles: null,
   tileSize: 512,
-  opacity: 0.45,
-  sourceIds: ["nrwDgm1", "nrwLod1", "osmBuildings"],
+  image: null,
+  opacity: SHADOW_OVERLAY_DEFAULT_OPACITY,
+  sourceIds: PILOT_SOURCE_IDS,
 };
 
 let snapshot: ShadowOverlaySnapshot = INITIAL;
@@ -117,12 +135,23 @@ export function getShadowOverlaySnapshot(): ShadowOverlaySnapshot {
 
 /** Hand the current shadow polygons to the overlay registry. */
 export function setShadowOverlayData(geojson: GeoJSON.FeatureCollection | null): void {
-  commit({ geojson, tiles: null });
+  commit({ geojson, tiles: null, image: null });
 }
 
 /** Hand a precomputed XYZ template to the overlay registry. */
 export function setShadowOverlayTiles(tiles: string[] | null, tileSize = 512): void {
-  commit({ tiles, tileSize, geojson: tiles ? null : snapshot.geojson });
+  commit({ tiles, tileSize, geojson: tiles ? null : snapshot.geojson, image: null });
+}
+
+/**
+ * Hand a single rendered PNG for one bbox to the overlay registry.
+ *
+ * This is what the pilot uses: the worker ray-marches into a mask, encodes it
+ * as PNG off the main thread and posts a data URL. The map then treats it as a
+ * georeferenced image, which costs no main-thread geometry work at all.
+ */
+export function setShadowOverlayImage(image: ShadowOverlayImage | null): void {
+  commit({ image, geojson: null, tiles: null });
 }
 
 export function setShadowOverlayOpacity(opacity: number): void {
@@ -143,10 +172,10 @@ export function resetShadowOverlayStore(): void {
 export function shadowOverlayDefinition(): ShadowOverlayDefinition {
   const definition: ShadowOverlayDefinition = {
     id: SHADOW_OVERLAY_ID,
-    label: "Sun & shadow",
+    label: "Shadows",
     group: "nature",
     description:
-      "Cast shadows for a chosen date and time. Terrain from DGM1, building heights from LoD1 (LoD2 optional); OSM as fallback. NRW: dl-de/zero-2-0.",
+      "Cast building shadows for the chosen time. Düsseldorf pilot, LoD1 block models, buildings only. Geobasis NRW, dl-de/zero-2.0.",
     minzoom: SHADOW_OVERLAY_MIN_ZOOM,
     timeAware: true,
     order: 40,
@@ -155,7 +184,9 @@ export function shadowOverlayDefinition(): ShadowOverlayDefinition {
     // sources or opacity change. A plain property would stay at its
     // bootstrap value for the lifetime of the registry entry.
     get kind() {
-      return snapshot.tiles ? ("raster" as const) : ("geojson" as const);
+      return snapshot.tiles || snapshot.image
+        ? ("raster" as const)
+        : ("geojson" as const);
     },
     get attribution() {
       const sources = snapshot.sourceIds
@@ -174,6 +205,33 @@ export function shadowOverlayDefinition(): ShadowOverlayDefinition {
       // the next resolve return the new data.
       const current = snapshot;
       const opacity = context?.opacity ?? current.opacity;
+      if (current.image) {
+        const [west, south, east, north] = current.image.bbox;
+        return {
+          source: {
+            type: "image",
+            url: current.image.url,
+            // MapLibre expects top-left, top-right, bottom-right, bottom-left.
+            coordinates: [
+              [west, north],
+              [east, north],
+              [east, south],
+              [west, south],
+            ],
+          },
+          layers: [
+            {
+              type: "raster",
+              minzoom: SHADOW_OVERLAY_MIN_ZOOM,
+              paint: {
+                "raster-opacity": opacity,
+                "raster-fade-duration": 0,
+                "raster-resampling": "linear",
+              },
+            },
+          ],
+        };
+      }
       if (current.tiles && current.tiles.length > 0) {
         return {
           source: {
