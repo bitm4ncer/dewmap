@@ -42,8 +42,10 @@ const UPSTREAM_TIMEOUT_MS = 15_000;
 const UPSTREAM_MAX_BYTES = 5 * 1024 * 1024;
 
 const FRAMES_TTL_MS = 60_000;
-const WARNINGS_TTL_MS = 5 * 60_000;
-const WARNINGS_STALE_MS = 30 * 60_000;
+// Env-overridable so the stale-while-revalidate path can be exercised in a
+// local run instead of waiting five minutes.
+const WARNINGS_TTL_MS = Number(process.env.WARNINGS_TTL_MS || 5 * 60_000);
+const WARNINGS_STALE_MS = Number(process.env.WARNINGS_STALE_MS || 30 * 60_000);
 
 const RADAR_MEMORY_LIMIT = 64;
 const RADAR_FILES_LIMIT = 400;
@@ -616,14 +618,16 @@ function refreshWarningsInBackground(nowMs) {
 }
 
 async function warningsPayload(nowMs) {
-  if (warningsState.payload && nowMs - warningsState.fetchedAt < WARNINGS_TTL_MS) {
+  const action = lib.warningsCacheAction(warningsState, nowMs, WARNINGS_TTL_MS);
+
+  if (action === "hit") {
     return { payload: warningsState.payload, cache: "hit" };
   }
-  if (warningsState.payload) {
+  if (action === "refresh") {
     refreshWarningsInBackground(nowMs);
     return { payload: warningsState.payload, cache: "stale" };
   }
-  if (warningsState.inflight) {
+  if (action === "coalesce") {
     return { payload: await warningsState.inflight, cache: "coalesced" };
   }
   const pending = buildWarnings(nowMs)

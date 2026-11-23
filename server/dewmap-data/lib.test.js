@@ -565,3 +565,33 @@ test("semaphore recovers after busy work completes", async () => {
   assert.equal(sem.active, 0);
   assert.equal(await sem.acquire(), true, "the slot is available again");
 });
+
+/* --------------------------------------------------------- cache policy */
+
+test("warningsCacheAction: fresh, stale-refresh, coalesce, build", () => {
+  const ttl = 5 * 60_000;
+  const now = 1_700_000_000_000;
+  assert.equal(
+    lib.warningsCacheAction({ payload: {}, fetchedAt: now - 1000 }, now, ttl),
+    "hit",
+  );
+  assert.equal(
+    lib.warningsCacheAction({ payload: {}, fetchedAt: now - ttl - 1 }, now, ttl),
+    "refresh",
+  );
+  assert.equal(
+    lib.warningsCacheAction({ payload: null, fetchedAt: 0, inflight: {} }, now, ttl),
+    "coalesce",
+  );
+  assert.equal(lib.warningsCacheAction({ payload: null, fetchedAt: 0 }, now, ttl), "build");
+});
+
+test("warningsCacheAction never serves an empty payload as a hit", () => {
+  const now = 1_700_000_000_000;
+  // A payload object of `null` means "nothing cached yet", even if fetchedAt
+  // was touched by a previous attempt.
+  assert.equal(
+    lib.warningsCacheAction({ payload: null, fetchedAt: now, inflight: null }, now, 1000),
+    "build",
+  );
+});

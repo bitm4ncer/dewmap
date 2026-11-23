@@ -429,6 +429,23 @@ function createSemaphore(limit, queueLimit) {
   };
 }
 
+/* -------------------------------------------------------------- cache policy */
+
+/**
+ * What to do with a warnings request: serve fresh, serve stale and refresh in
+ * the background, wait for the run that is already going, or build now.
+ *
+ * Pure so the policy is testable — the HTTP path only maps the answer onto a
+ * response.
+ */
+function warningsCacheAction(state, nowMs, ttlMs) {
+  const hasPayload = Boolean(state?.payload);
+  if (hasPayload && nowMs - (state.fetchedAt ?? 0) < ttlMs) return "hit";
+  if (hasPayload) return "refresh";
+  if (state?.inflight) return "coalesce";
+  return "build";
+}
+
 /* ---------------------------------------------------------------- routing */
 
 const FRAME_PATH = /^\/api\/weather\/radar\/frames\/(\d{8}T\d{4})\.png$/;
@@ -731,6 +748,7 @@ module.exports = {
   isPng,
   frameEtag,
   createSemaphore,
+  warningsCacheAction,
   normalizePath,
   matchRoute,
   missingWarncells,
