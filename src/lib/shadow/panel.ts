@@ -10,9 +10,15 @@ import type { SolarPosition } from "./types";
 /** The pilot's civil time. Shadows follow the place, not the viewer. */
 export const PILOT_TIME_ZONE = "Europe/Berlin";
 
+/**
+ * UI locale. The app is `lang="en"`; only the clock has to be local to the
+ * pilot, so `en-GB` gives a 24-hour clock plus English weekday names.
+ */
+export const PILOT_UI_LOCALE = "en-GB";
+
 export function formatShadowClock(date: Date, timeZone = PILOT_TIME_ZONE): string {
   if (!Number.isFinite(date.getTime())) return "--:--";
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat(PILOT_UI_LOCALE, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -22,7 +28,7 @@ export function formatShadowClock(date: Date, timeZone = PILOT_TIME_ZONE): strin
 
 /** Day label when the slider crosses midnight, e.g. `Fri`. */
 export function formatShadowDay(date: Date, now: Date, timeZone = PILOT_TIME_ZONE): string | null {
-  const format = new Intl.DateTimeFormat("de-DE", { weekday: "short", timeZone });
+  const format = new Intl.DateTimeFormat(PILOT_UI_LOCALE, { weekday: "short", timeZone });
   const day = format.format(date);
   return day === format.format(now) ? null : day;
 }
@@ -73,7 +79,7 @@ export function shadowStatusLine({ phase, message, stats, sun }: ShadowStatusInp
     case "ready": {
       if (!stats) return null;
       const parts = [
-        `${stats.buildings.toLocaleString("de-DE")} buildings`,
+        `${stats.buildings.toLocaleString(PILOT_UI_LOCALE)} buildings`,
         `${stats.resolutionM} m`,
         `${Math.round(stats.computeMs)} ms`,
       ];

@@ -139,7 +139,7 @@ export function ShadowCard() {
       extras={on ? <ShadowControls /> : null}
       footer={
         <p className="text-[11px] leading-snug text-[color:var(--ink-mute)]">
-          Daten:{" "}
+          Data:{" "}
           <a
             href={LOD1_URL}
             target="_blank"
