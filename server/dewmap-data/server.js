@@ -32,7 +32,13 @@ const WFS_ENDPOINT = "https://maps.dwd.de/geoserver/dwd/ows";
 const WARNINGS_ENDPOINT =
   "https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json";
 
-const UPSTREAM_TIMEOUT_MS = 12_000;
+/**
+ * Per-upstream budget. A cold radar render was measured at up to 10.1 s (DWD
+ * GeoServer), so 12 s left almost no head room; 15 s covers it with margin.
+ * The warnings path may spend this twice (warnings.json + WFS), which is why
+ * the client allows 40 s for that endpoint.
+ */
+const UPSTREAM_TIMEOUT_MS = 15_000;
 const UPSTREAM_MAX_BYTES = 5 * 1024 * 1024;
 
 const FRAMES_TTL_MS = 60_000;
@@ -545,7 +551,7 @@ async function buildWarnings(nowMs) {
       const res = await fetchBuffer(WFS_ENDPOINT, {
         method: "POST",
         body: lib.warningsRequest(cql),
-        timeoutMs: 20_000,
+        timeoutMs: 15_000,
       });
       const parsedAreas = JSON.parse(res.buffer.toString("utf8"));
       if (parsedAreas?.type === "FeatureCollection") {
@@ -585,14 +591,39 @@ async function buildWarnings(nowMs) {
   };
 }
 
+/**
+ * Refresh the warnings in the background and return the current payload.
+ *
+ * A cold build can take up to 2 x 15 s upstream. Blocking a request on that
+ * made the client time out for a payload we already had, so anything older
+ * than the TTL is served immediately with `X-Cache: stale` while the rebuild
+ * runs. Only a first-ever request (no payload at all) waits.
+ */
+function refreshWarningsInBackground(nowMs) {
+  if (warningsState.inflight) return;
+  warningsState.inflight = buildWarnings(nowMs)
+    .then(async (payload) => {
+      warningsState = { payload, fetchedAt: Date.now(), inflight: null };
+      await safeWrite(WARNINGS_DIR, WARNINGS_CACHE_FILE, JSON.stringify(payload));
+      return payload;
+    })
+    .catch((error) => {
+      warningsState.inflight = null;
+      log("warnings refresh failed", String(error?.message ?? error));
+      return null;
+    });
+  warningsState.inflight.catch(() => {});
+}
+
 async function warningsPayload(nowMs) {
   if (warningsState.payload && nowMs - warningsState.fetchedAt < WARNINGS_TTL_MS) {
     return { payload: warningsState.payload, cache: "hit" };
   }
+  if (warningsState.payload) {
+    refreshWarningsInBackground(nowMs);
+    return { payload: warningsState.payload, cache: "stale" };
+  }
   if (warningsState.inflight) {
-    if (warningsState.payload) {
-      return { payload: warningsState.payload, cache: "hit" };
-    }
     return { payload: await warningsState.inflight, cache: "coalesced" };
   }
   const pending = buildWarnings(nowMs)
@@ -817,6 +848,9 @@ async function main() {
   });
   await refreshCacheStats();
   await loadWarningsFromDisk();
+  // Warm from the first second instead of waiting for a visitor: the newest
+  // radar slot costs 1-10 s upstream, and the first visitor should not pay it.
+  radarWanted = true;
   const timer = setInterval(tick, 60_000);
   timer.unref?.();
   tick();

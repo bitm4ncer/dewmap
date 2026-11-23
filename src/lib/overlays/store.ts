@@ -31,6 +31,9 @@ interface OverlayState {
   radarFrames: RadarFramesPayload | null;
   radarIndex: number;
   radarPlaying: boolean;
+  /** Whether the PNG for the selected frame actually arrived. */
+  radarImageStatus: LoadStatus;
+  radarImageError: string | null;
 
   warningsStatus: LoadStatus;
   warningsError: string | null;
@@ -46,6 +49,7 @@ interface OverlayState {
   setRadarFrames: (payload: RadarFramesPayload) => void;
   setRadarIndex: (index: number) => void;
   setRadarPlaying: (playing: boolean) => void;
+  setRadarImageStatus: (status: LoadStatus, error?: string | null) => void;
   resetRadarIndex: () => void;
 
   setWarningsStatus: (status: LoadStatus, error?: string | null) => void;
@@ -73,6 +77,8 @@ export const useOverlays = create<OverlayState>()(
       radarFrames: null,
       radarIndex: 0,
       radarPlaying: false,
+      radarImageStatus: "idle",
+      radarImageError: null,
 
       warningsStatus: "idle",
       warningsError: null,
@@ -117,6 +123,11 @@ export const useOverlays = create<OverlayState>()(
           return { radarIndex: Math.max(0, Math.min(max, Math.round(index))) };
         }),
       setRadarPlaying: (playing) => set({ radarPlaying: playing }),
+      setRadarImageStatus: (status, error = null) =>
+        set({
+          radarImageStatus: status,
+          radarImageError: status === "error" ? error : null,
+        }),
       resetRadarIndex: () =>
         set((state) => ({ radarIndex: latestAnalysisIndex(state.radarFrames) })),
 

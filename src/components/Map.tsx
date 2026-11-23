@@ -144,6 +144,7 @@ import { expandIntent } from "@/lib/planner/panelIntent";
 import { OrientationControl } from "./OrientationControl";
 import { RoutesPanel, type RoutesMode } from "./hud/RoutesPanel";
 import { DataSourcesPanel } from "./hud/DataSourcesPanel";
+import { useMapCreditControl } from "./hud/MapCredit";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -2356,6 +2357,7 @@ export function LiveMap({ credentials, onOpenSettings }: Props) {
   useLiveVehiclesLayer(mapInstance);
   useOverlayLayers(mapInstance);
   useWeatherOverlayData();
+  useMapCreditControl(mapInstance);
   const navigation = useNavigationEngine({ mapRef });
   const navActive = useNavigation((s) => s.active);
 

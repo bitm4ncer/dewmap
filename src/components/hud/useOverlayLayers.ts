@@ -53,22 +53,40 @@ export function useOverlayLayers(map: MLMap | null): void {
       }));
   }, [enabled, opacity, radarFrames, radarIndex, warnings]);
 
+  // The latest entries, without making the map listeners depend on them: a
+  // radar frame changes `activeEntries` every 650 ms, and re-registering an
+  // `once("idle")` listener on every frame left a growing pile of closures.
+  const entriesRef = useRef(activeEntries);
+  useEffect(() => {
+    entriesRef.current = activeEntries;
+  }, [activeEntries]);
+
+  // Map lifecycle listeners: registered once per map instance.
   useEffect(() => {
     if (!map) return;
     let cancelled = false;
     const apply = () => {
       if (cancelled) return;
-      reconcileOverlays(map, activeEntries);
+      reconcileOverlays(map, entriesRef.current);
+    };
+    const onIdle = () => {
+      map.off("idle", onIdle);
+      apply();
     };
     if (map.isStyleLoaded()) apply();
+    else map.on("idle", onIdle);
     map.on("style.load", apply);
-    // The initial `style.load` can fire before this effect registers.
-    map.once("idle", apply);
     return () => {
       cancelled = true;
       map.off("style.load", apply);
-      map.off("idle", apply);
+      map.off("idle", onIdle);
     };
+  }, [map]);
+
+  // State changes: reconcile directly, no listener bookkeeping.
+  useEffect(() => {
+    if (!map) return;
+    reconcileOverlays(map, activeEntries);
   }, [map, activeEntries]);
 
   // A closing tab must not leave sources behind for the next style load.

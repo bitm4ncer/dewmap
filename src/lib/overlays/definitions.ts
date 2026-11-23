@@ -16,7 +16,10 @@ export const WARNINGS_OVERLAY_ID = "weather-warnings";
 
 const DWD: OverlayDefinition["attribution"] = {
   label: "Deutscher Wetterdienst (DWD)",
-  url: "https://www.dwd.de/DE/service/copyright/copyright_node.html",
+  short: "DWD",
+  // DWD's copyright subpage moved; the open-data portal carries the
+  // DL-DE-BY-2.0 terms and the attribution rules.
+  url: "https://www.dwd.de/opendata",
 };
 
 export const radarOverlay: OverlayDefinition = {

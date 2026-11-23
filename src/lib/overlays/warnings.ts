@@ -16,10 +16,10 @@ export const SEVERITY_COLORS: Record<number, string> = {
 };
 
 export const SEVERITY_LABELS: Record<number, string> = {
-  1: "Vorabinformation",
-  2: "Wetterwarnung",
-  3: "Markante Warnung",
-  4: "Unwetterwarnung",
+  1: "Advance notice",
+  2: "Weather warning",
+  3: "Severe weather warning",
+  4: "Extreme weather warning",
 };
 
 export function severityColor(level: number): string {
@@ -27,7 +27,7 @@ export function severityColor(level: number): string {
 }
 
 export function severityLabel(level: number): string {
-  return SEVERITY_LABELS[level] ?? "Wetterwarnung";
+  return SEVERITY_LABELS[level] ?? "Weather warning";
 }
 
 /** Short severity scale for the legend: 2 = yellow … 4 = red. */
@@ -61,7 +61,7 @@ export function escapeHtml(value: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
-/** "bis Sa 21.11. · 12:00" / "bis 12:00" when it ends today. */
+/** "until 12:00" on the same day, "until Sat, 21 Nov, 12:00" otherwise. */
 export function validityHint(
   to: string | null,
   now: Date = new Date(),
@@ -69,17 +69,17 @@ export function validityHint(
   if (!to) return "";
   const end = new Date(to);
   if (Number.isNaN(end.getTime())) return "";
-  if (end.getTime() <= now.getTime()) return "abgelaufen";
+  if (end.getTime() <= now.getTime()) return "expired";
   const sameDay = weatherDayKey(end) === weatherDayKey(now);
   if (sameDay) {
-    return `bis ${new Intl.DateTimeFormat("de-DE", {
+    return `until ${new Intl.DateTimeFormat("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
       timeZone: WEATHER_TZ,
     }).format(end)}`;
   }
-  return `bis ${formatDateTime(to)}`;
+  return `until ${formatDateTime(to)}`;
 }
 
 /** Counts per severity for the panel header, 4 → 1. */
@@ -91,12 +91,12 @@ export function severityCounts(
     .filter((entry) => entry.count > 0);
 }
 
-/** Human summary line: "14 Unwetterwarnungen" / "Keine aktiven Warnungen". */
+/** Human summary line, e.g. "14 warnings · extreme level". */
 export function warningsSummary(total: number, maxLevel: number): string {
-  if (total === 0) return "Keine aktiven Warnungen";
-  if (maxLevel >= 4) return `${total} Warnungen · Unwetterstufe erreicht`;
-  if (maxLevel === 3) return `${total} Warnungen · markante Stufe`;
-  return `${total} Warnungen`;
+  if (total === 0) return "No active warnings";
+  if (maxLevel >= 4) return `${total} warnings · extreme level`;
+  if (maxLevel === 3) return `${total} warnings · severe level`;
+  return `${total} warnings`;
 }
 
 /** Popup body for a tapped warning area. */
@@ -111,10 +111,10 @@ export function warningPopupHtml(
     from && to
       ? `${formatDateTime(from)} – ${formatDateTime(to)}`
       : to
-        ? `bis ${formatDateTime(to)}`
+        ? `until ${formatDateTime(to)}`
         : "";
   const count = Number(properties.count ?? 1);
-  const extra = count > 1 ? ` · ${count} Warnungen` : "";
+  const extra = count > 1 ? ` · ${count} warnings` : "";
   return `<div style="max-width:260px;font:12px/1.45 system-ui,sans-serif">
     <div style="display:flex;gap:6px;align-items:center">
       <span style="width:8px;height:8px;border-radius:50%;background:${color};flex:none"></span>
