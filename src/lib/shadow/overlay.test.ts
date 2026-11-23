@@ -4,6 +4,7 @@ import {
   getShadowVersion,
   resetShadowOverlayStore,
   setShadowOverlayData,
+  setShadowOverlayImage,
   setShadowOverlayOpacity,
   setShadowOverlaySources,
   setShadowOverlayTiles,
@@ -97,6 +98,50 @@ describe("shadow overlay store", () => {
     setShadowOverlaySources(["bwDgm1"]);
     expect(definition.attribution.label).toContain("LGL");
     expect(definition.attribution.url).toContain("lgl-bw");
+  });
+
+  it("hands a rendered PNG to the map as a georeferenced image", () => {
+    const definition = shadowOverlayDefinition();
+    setShadowOverlayImage({
+      url: "data:image/png;base64,AAAA",
+      bbox: [6.7, 51.1, 6.8, 51.2],
+    });
+    expect(definition.kind).toBe("raster");
+    const resolved = definition.resolve();
+    expect(resolved?.source).toMatchObject({
+      type: "image",
+      url: "data:image/png;base64,AAAA",
+      // top-left, top-right, bottom-right, bottom-left
+      coordinates: [
+        [6.7, 51.2],
+        [6.8, 51.2],
+        [6.8, 51.1],
+        [6.7, 51.1],
+      ],
+    });
+    expect(resolved?.layers[0]).toMatchObject({ type: "raster", minzoom: 14 });
+    expect(getShadowOverlaySnapshot().image?.bbox).toEqual([6.7, 51.1, 6.8, 51.2]);
+
+    // A new mask replaces the old one without leaking the previous source.
+    setShadowOverlayImage({
+      url: "data:image/png;base64,BBBB",
+      bbox: [6.7, 51.1, 6.8, 51.2],
+    });
+    expect(definition.resolve()?.source).toMatchObject({
+      url: "data:image/png;base64,BBBB",
+    });
+
+    // Switching back to vector data clears the image.
+    setShadowOverlayData(collection("a"));
+    expect(getShadowOverlaySnapshot().image).toBeNull();
+    expect(definition.resolve()?.source).toMatchObject({ type: "geojson" });
+  });
+
+  it("clears the image when the layer is switched off", () => {
+    setShadowOverlayImage({ url: "data:image/png;base64,AAAA", bbox: [6.7, 51.1, 6.8, 51.2] });
+    setShadowOverlayImage(null);
+    expect(shadowOverlayDefinition().resolve()).toBeNull();
+    expect(getShadowOverlaySnapshot().image).toBeNull();
   });
 
   it("clamps opacity", () => {
