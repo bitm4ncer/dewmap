@@ -11,21 +11,18 @@
  * loader, terminates the worker and starts over. The previous mask stays on
  * the map until the new one arrives, so dragging the slider does not flicker.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Map as MLMap } from "maplibre-gl";
 import { useOverlays } from "@/lib/overlays/store";
-import {
-  createPmtilesBuildingSource,
-  isAbortError,
-  loadBuildingsForBbox,
-  ShadowDataError,
-} from "./buildings";
+import { createPmtilesBuildingSource, loadBuildingsForBbox } from "./buildings";
+import { shadowErrorOutcome } from "./errors";
 import { PILOT_SOURCE_IDS, PILOT_TILES_URL } from "./pilot";
 import {
   SHADOW_OVERLAY_ID,
   setShadowOverlayImage,
   setShadowOverlaySources,
 } from "./overlay";
+import { msUntilNextNowBucket, shouldRefreshNow } from "./now";
 import { serializeBuildings } from "./render";
 import { shadowTimeFor, useShadowRuntime, useShadowSettings } from "./state";
 import type { Bbox } from "./types";
@@ -44,20 +41,11 @@ function viewportKey(zoom: number, bbox: Bbox): string {
   return `${zoom.toFixed(2)}|${bbox.map((value) => value.toFixed(5)).join(",")}`;
 }
 
-function shadowErrorMessage(error: unknown): string {
-  if (error instanceof ShadowDataError) {
-    switch (error.code) {
-      case "timeout":
-        return "Shadow render timed out. Try a smaller window.";
-      case "network":
-        return "Building tiles are not reachable.";
-      case "decode":
-        return "Building tiles could not be decoded.";
-      default:
-        return "Shadow render cancelled.";
-    }
-  }
-  return error instanceof Error ? error.message : String(error);
+/** Empty reasons map to their own copy; a generic "no buildings" hides bugs. */
+function emptyMessage(reason: "no-buildings" | "night" | "too-large"): string {
+  if (reason === "night") return "Sun below the horizon — no cast shadows.";
+  if (reason === "too-large") return "This window is too large to render — zoom in.";
+  return "No buildings in this view.";
 }
 
 export function useShadowOverlayData(map: MLMap | null): void {
@@ -67,6 +55,9 @@ export function useShadowOverlayData(map: MLMap | null): void {
   const clientRef = useRef<ShadowWorkerClient | null>(null);
   const cacheRef = useRef(new Map());
   const viewportRef = useRef<string>("");
+  const lastRunAtRef = useRef(0);
+  /** Bumped by the "now" timer and by focus/visibility, never by a render loop. */
+  const [nowTick, setNowTick] = useState(0);
 
   // The viewport lives in the runtime store (the panel needs zoom + phase).
   useEffect(() => {
@@ -98,6 +89,42 @@ export function useShadowOverlayData(map: MLMap | null): void {
 
   const viewport = useShadowRuntime((state) => state.bbox);
   const zoom = useShadowRuntime((state) => state.zoom);
+
+  // "Now" mode follows the clock: recompute on the next 5-minute boundary while
+  // the page is visible, and on returning to the tab (at most once a minute).
+  // A slider offset is a deliberate point in time and never refreshes.
+  useEffect(() => {
+    if (!enabled || offsetMinutes !== 0) return;
+    const visible = () =>
+      typeof document === "undefined" || document.visibilityState === "visible";
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        if (visible()) setNowTick((tick) => tick + 1);
+        schedule();
+      }, msUntilNextNowBucket());
+    };
+    const onWake = () => {
+      if (
+        shouldRefreshNow({
+          enabled,
+          offsetMinutes,
+          visible: visible(),
+          msSinceRender: Date.now() - lastRunAtRef.current,
+        })
+      ) {
+        setNowTick((tick) => tick + 1);
+      }
+    };
+    schedule();
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
+  }, [enabled, offsetMinutes]);
 
   useEffect(() => {
     if (!clientRef.current) clientRef.current = new ShadowWorkerClient();
@@ -136,6 +163,7 @@ export function useShadowOverlayData(map: MLMap | null): void {
     const controller = new AbortController();
     let cancelled = false;
     const time = shadowTimeFor(offsetMinutes);
+    lastRunAtRef.current = Date.now();
     const bbox = plan.bbox;
     const resolutionM = plan.resolutionM;
 
@@ -184,15 +212,13 @@ export function useShadowOverlayData(map: MLMap | null): void {
           });
         } else if (response.type === "empty") {
           setShadowOverlayImage(null);
-          if (response.reason === "night") {
-            useShadowRuntime
-              .getState()
-              .empty("night", "Sun below the horizon — no cast shadows.", response.sun);
-          } else {
-            useShadowRuntime
-              .getState()
-              .empty("empty", "No buildings in this view.", response.sun);
-          }
+          useShadowRuntime
+            .getState()
+            .empty(
+              response.reason === "night" ? "night" : "empty",
+              emptyMessage(response.reason),
+              response.sun,
+            );
         } else {
           useShadowRuntime.getState().fail(
             response.code === "no-canvas"
@@ -201,8 +227,12 @@ export function useShadowOverlayData(map: MLMap | null): void {
           );
         }
       } catch (error) {
-        if (cancelled || isAbortError(error)) return;
-        useShadowRuntime.getState().fail(shadowErrorMessage(error));
+        if (cancelled) return;
+        const outcome = shadowErrorOutcome(error);
+        // A timeout is not an abort: say so and keep the last mask on screen
+        // as a stale-but-honest state.
+        if (outcome.ignore) return;
+        useShadowRuntime.getState().fail(outcome.message ?? "Shadow render failed.");
       }
     };
 
@@ -216,7 +246,7 @@ export function useShadowOverlayData(map: MLMap | null): void {
       clearTimeout(timer);
       client.cancel();
     };
-  }, [enabled, map, viewport, zoom, offsetMinutes]);
+  }, [enabled, map, viewport, zoom, offsetMinutes, nowTick]);
 
   // One-time: attribution follows the data source actually in use.
   useEffect(() => {

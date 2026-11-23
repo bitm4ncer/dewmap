@@ -7,6 +7,7 @@ import {
   loadBuildingsForBbox,
   ShadowDataError,
   tilePointToLngLat,
+  touchCache,
   withTimeout,
   type BuildingTileSource,
 } from "./buildings";
@@ -209,7 +210,9 @@ describe("loadBuildingsForBbox", () => {
     const callsAfterFirst = source.calls;
     const second = await loadBuildingsForBbox(bbox, { source, zoom: 15, cache });
     expect(source.calls).toBe(callsAfterFirst);
-    expect(second.cacheHits).toBeGreaterThanOrEqual(first.tiles.filter(() => true).length - second.missingTiles);
+    // Every tile that decoded on the first run must come from the cache now.
+    expect(second.cacheHits).toBe(first.tiles.length - first.missingTiles);
+    expect(second.missingTiles).toBe(first.missingTiles);
     expect(second.buildings.length).toBeGreaterThan(0);
   });
 
@@ -255,6 +258,24 @@ describe("buildingTilesForBbox", () => {
   it("keeps the requested zoom for a small viewport", () => {
     const { zoom } = buildingTilesForBbox([6.78, 51.229, 6.781, 51.2296], 16, 36);
     expect(zoom).toBe(16);
+  });
+});
+
+describe("cache + abort classification", () => {
+  it("touches the cache so eviction is LRU, not FIFO", () => {
+    const cache = new Map<string, number>();
+    cache.set("a", 1);
+    cache.set("b", 2);
+    cache.set("c", 3);
+    expect(touchCache(cache, "a")).toBe(1);
+    expect([...cache.keys()]).toEqual(["b", "c", "a"]);
+    expect(touchCache(cache, "missing")).toBeUndefined();
+    expect([...cache.keys()]).toEqual(["b", "c", "a"]);
+  });
+
+  it("does not classify a timeout as an abort", () => {
+    expect(isAbortError(new ShadowDataError("timeout", "x"))).toBe(false);
+    expect(isAbortError(new ShadowDataError("aborted", "x"))).toBe(true);
   });
 });
 

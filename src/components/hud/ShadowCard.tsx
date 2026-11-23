@@ -7,6 +7,7 @@
  * the shadow stores. Keeping it that way means the card can unmount (pane
  * closed) without stopping the layer.
  */
+import { useEffect, useState } from "react";
 import { LayerCard } from "./LayerCard";
 import { ClockIcon } from "@/components/ui/icons";
 import {
@@ -34,7 +35,15 @@ function ShadowControls() {
   const phase = useShadowRuntime((state) => state.phase);
   const stats = useShadowRuntime((state) => state.stats);
 
-  const now = new Date();
+  // The card clock ticks every 30 s while it shows "now"; the shadow mask is
+  // only recomputed on the 5-minute boundary in the data hook.
+  const [clockTick, setClockTick] = useState(() => new Date());
+  useEffect(() => {
+    if (offsetMinutes !== 0) return;
+    const id = window.setInterval(() => setClockTick(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, [offsetMinutes]);
+  const now = offsetMinutes === 0 ? clockTick : new Date();
   const time = shadowTimeFor(offsetMinutes, now);
   const clock = formatShadowClock(time);
   const day = formatShadowDay(time, now);
@@ -91,7 +100,7 @@ function ShadowControls() {
         <p className="hud-mono text-[10.5px] text-[color:var(--ink-mute)]">
           {stats.width}×{stats.height} cells ·{" "}
           {stats.tileBytes > 0
-            ? `${(stats.tileBytes / 1024).toFixed(0)} kB tiles`
+            ? `${(stats.tileBytes / 1024).toFixed(0)} kB tiles (uncompressed)`
             : "tiles cached"}
           {stats.encodeMs > 0 ? ` · ${Math.round(stats.encodeMs)} ms encode` : ""}
         </p>
@@ -122,6 +131,7 @@ export function ShadowCard() {
       icon={<ClockIcon size={16} />}
       on={on}
       opacity={opacity}
+      tallSliders
       onToggle={(next) => setEnabled(SHADOW_OVERLAY_ID, next)}
       onOpacityChange={(next) => setOpacity(SHADOW_OVERLAY_ID, next)}
       caption={`Cast building shadows for a chosen time · 2–8 m · visible from zoom ${SHADOW_OVERLAY_MIN_ZOOM} · Düsseldorf`}
