@@ -24,7 +24,7 @@
   <a href="https://bitm4ncer.github.io/dewmap/"><strong>Open the live app →</strong></a>
 </p>
 
-dewmap is a client-side navigation and exploration app. It plans train, bus, tram and ferry journeys; routes hikes, bike rides and drives with elevation; and layers satellite imagery, environmental data and historical maps on top. No backend, no accounts, no tracking — settings, saved places and credentials stay in your browser.
+dewmap is a client-side navigation and exploration app. It plans train, bus, tram and ferry journeys; routes hikes, bike rides and drives with elevation; and layers satellite imagery, weather, environmental data and historical maps on top. No accounts, no tracking — settings, saved places and credentials stay in your browser. A small caching data API at `data.dewmap.app` serves prebuilt transit and shadow tiles and proxies official DWD weather data; it never sees personal data.
 
 ## Screenshots
 
@@ -60,6 +60,8 @@ dewmap is a client-side navigation and exploration app. It plans train, bus, tra
 
 ### Nature
 
+- **Weather** — live DWD rain radar with a 90-minute nowcast and official DWD warnings by district, both overlaid on the map with a time slider.
+- **Shadows** — building shadows for a chosen time, currently a Düsseldorf pilot built from NRW LoD1 data.
 - **NDVI** — vegetation index.
 - **ESA WorldCover** — 11-class land cover.
 - **GBIF** — species occurrences with a taxon filter.
@@ -79,7 +81,7 @@ dewmap is a client-side navigation and exploration app. It plans train, bus, tra
 
 ### App
 
-- **Client-side only** — static export, no backend, no accounts, no analytics.
+- **Client-side app** — static export, no accounts, no analytics; one small caching data API for tiles and official weather feeds.
 - **Installable PWA** — offline app shell and cached chunks.
 - **Bring your own credentials** — Copernicus Data Space OAuth client for Sentinel-2 scenes, stored only in your browser.
 - **Graphite UI** — cool grey surfaces, one pigeon-blue accent, no decorative borders, visible keyboard focus and reduced-motion support.
@@ -101,6 +103,8 @@ dewmap is a client-side navigation and exploration app. It plans train, bus, tra
 | [Sentinel-2 · Copernicus](https://dataspace.copernicus.eu/) | Cloudless annual mosaics and daily true-colour scenes |
 | [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | Near-real-time imagery and atmospheric layers |
 | [OpenRailwayMap](https://www.openrailwaymap.org/) | Rail infrastructure overlay |
+| [DWD](https://www.dwd.de/) | Rain radar, nowcast and official weather warnings |
+| [Geobasis NRW](https://www.opengeodata.nrw.de/produkte/geobasis/) | LoD1 building heights for the shadow pilot (dl-de/zero-2.0) |
 | [Transitous / MOTIS](https://transitous.org/) | Train, tram, bus and ferry routing with real-time delays where published |
 | [DELFI / GTFS.de](https://www.gtfs.de/) | German nationwide scheduled and real-time transit feeds |
 | [Valhalla](https://valhalla.github.io/valhalla/) | Car routing, maneuvers and road attributes |
@@ -175,13 +179,13 @@ Geolocation requires a secure context: HTTPS or `localhost`. On a plain-HTTP LAN
 
 ## Privacy
 
-No backend, no analytics. Settings, planner state and credentials live in `localStorage`. Map tiles, routing requests and data queries go directly from your browser to the providers above.
+No analytics and no accounts. Settings, planner state and credentials live in `localStorage`. Map tiles, routing requests and most data queries go directly from your browser to the providers above. Transit and shadow tiles and the DWD radar/warning proxy are served by `data.dewmap.app`, which caches upstream responses and logs no personal data.
 
 ## Status
 
 The train planner is the focus. dewmap is not yet a drop-in replacement for DB Navigator, the VRR app or Google Maps — coverage and live data depend on the upstream APIs. The dark vector basemap with the Graphite tint is the default; satellite imagery is one tap away.
 
-Next up: broader live-transit coverage and more real-time feeds.
+Next up: broader live-transit and GPS coverage, more weather layers (wind, pressure, air quality, river levels) and a nationwide shadow build.
 
 ## License
 
