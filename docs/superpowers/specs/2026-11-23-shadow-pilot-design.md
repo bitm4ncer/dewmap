@@ -146,6 +146,11 @@ Vektor-Pfad bestehen (Engine + Test).
 - `useShadowRuntime` (flüchtig): Phase, Meldung, Zoom, Sonnenstand, Statistik.
   Der Viewport-Bbox wird **nicht** vom Ergebnis überschrieben — sonst würde
   jede Antwort den Render-Effekt erneut auslösen (im Test gefunden, siehe §5).
+- **Sprache:** alle sichtbaren Texte, Statusmeldungen, Slider-Labels und
+  `aria`-Werte sind Englisch (die App ist `lang="en"`); nur Uhrzeit/Datum
+  kommen aus `Europe/Berlin` mit `en-GB`-Formatierung. Lizenznamen
+  („Datenlizenz Deutschland – Zero – 2.0") und die von dl-de/by-2-0
+  vorgeschriebenen Attributionssätze bleiben im Originalwortlaut.
 - `ShadowCard` unter „Weather" in der Nature-Kategorie: Uhrzeit (Europe/Berlin),
   Tageskürzel bei Tageswechsel, Offset, „Now" (44 px), Slider (44 px Hit-Area,
   `aria-label="Shadow time"`, `aria-valuetext` mit Uhrzeit), Opazität, Statistik
@@ -157,25 +162,26 @@ Vektor-Pfad bestehen (Engine + Test).
 
 Aufbau: Produktionsbuild (`next build --webpack`, statisch ausgeliefert auf
 :3006), 1440 × 900, Düsseldorf, Zoomstufe mit 4-m-Raster, 7 341 Gebäude im
-Fenster (538 × 337 Zellen).
+Fenster (538 × 337 Zellen). Die Spannen stammen aus mehreren Läufen auf einer
+geteilten VM-CPU (SwiftShader), nicht aus einem einzelnen best-case.
 
 | Messung | Wert |
 |---|---|
-| Kalte Aktivierung (Cache geleert) | **810 ms** bis zur fertigen Maske |
-| Kachel-Transfer kalt | 27 Range-Requests, **227 kB**, alle `206` |
+| Kalte Aktivierung (Cache geleert) | **0,8–1,1 s** bis zur fertigen Maske |
+| Kachel-Transfer kalt | 27 Range-Requests, **227 129 Byte**, alle `206` |
 | Kachel-Transfer warm (Slider) | **0 Requests**, 0 Byte (Kachel-Cache) |
-| Slider-Schritt warm, Ende-zu-Ende | **402–463 ms** (120 ms Debounce + 100–131 ms Raymarch + PNG/Upload) |
-| Worker-Raymarch (18° Sonne) | 100–135 ms |
-| Worker-Raymarch (8° Sonne) | 148–166 ms |
-| PNG-Kodierung im Worker | 30–144 ms |
+| Slider-Schritt warm, Ende-zu-Ende | **590–691 ms** (120 ms Debounce + 161–216 ms Raymarch + PNG/Upload; in einem weniger belasteten Lauf 402–463 ms) |
+| Worker-Raymarch | 100–216 ms (18° → 4° Sonne; flache Sonne heißt lange Strahlen) |
+| PNG-Kodierung im Worker | 28–109 ms |
 | Long Tasks, Baseline 8 s ohne Schatten | **0** |
 | Long Tasks, erste Aktivierung | **0–203 ms je nach Lauf**: fällt der Raster-Programm-Compile an, ist es ein Task mit 85–203 ms; hat die Basemap vorher schon ein Raster-Programm gebaut (z. B. nach einem Style-Wechsel), 0 |
 | Long Tasks, 6 Slider-Schritte danach | **0** |
-| Long Tasks, Opazität/Style/Zoom/Now | **0** |
+| Long Tasks, Opazität/Zoom/Now | **0** |
+| Long Tasks, Stylewechsel Vector → Hybrid | 0–162 ms, je nach Basemap-Shader; nicht aus dem Schatten-Layer |
 | Console-Errors | 1, davon **0 aus dieser Änderung**: `404` auf ein Protomaps-Basemap-Glyph (`basemaps-assets/fonts/Open Sans Regular,…/0-255.pbf`), tritt beim Laden der Karte vor jeder Schatten-Interaktion auf |
-| Sichtbarkeit (Pixeldiff, 2-px-Raster) | Schatten aus → an: **14,0 %** der Bildpunkte; +1 h → +3 h: **7,7 %**; Opazität 50 → 100 %: **19,7 %**; Vector → Hybrid: **52,2 %** (Basemap) bei weiterhin aktivem Layer |
+| Sichtbarkeit (Pixeldiff, 2-px-Raster) | Schatten aus → an: **18,1 %** der Bildpunkte; +45 min → +90 min: **7,0 %**; Opazität 50 → 100 %: **26,1 %**; Vector → Hybrid: **46,2 %** (Basemap) bei weiterhin aktivem Layer |
 
-Die 96–203 ms beim ersten Einschalten sind MapLibre-Initialisierung des
+Die 85–203 ms beim ersten Einschalten sind MapLibre-Initialisierung des
 Raster-Programms und der Textur in einer Software-GL-Umgebung; sie treten
 einmalig auf, nicht pro Interaktion. Auf echter GPU-Hardware ist dieser Anteil
 nicht messbar.
