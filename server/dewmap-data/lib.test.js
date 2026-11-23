@@ -416,10 +416,27 @@ test("matchRoute maps every public path to its handler", () => {
   assert.equal(frame.slot, "20261121T1410");
 });
 
+test("matchRoute normalises trailing slashes instead of 404ing", () => {
+  // The HTTP layer passes the raw pathname; `/frames/` is the same endpoint as
+  // `/frames` and must not be a 404.
+  assert.equal(lib.normalizePath("/api/weather/radar/frames/"), "/api/weather/radar/frames");
+  assert.equal(lib.normalizePath("///"), "/");
+  assert.equal(lib.normalizePath(""), "/");
+  assert.equal(lib.normalizePath("/health/"), "/health");
+  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/").kind, "frames");
+  assert.equal(lib.matchRoute("GET", "/health/").kind, "health");
+  assert.equal(lib.matchRoute("GET", "/api/weather/warnings//").kind, "warnings");
+  const frame = lib.matchRoute(
+    "GET",
+    "/api/weather/radar/frames/20261121T1410.png/",
+  );
+  assert.equal(frame.kind, "frame", "a trailing slash does not change the slot");
+  assert.equal(frame.slot, "20261121T1410");
+});
+
 test("matchRoute rejects everything else without touching an upstream", () => {
   assert.equal(lib.matchRoute("POST", "/api/weather/warnings").kind, "method_not_allowed");
   assert.equal(lib.matchRoute("DELETE", "/health").kind, "method_not_allowed");
-  assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/").kind, "not_found");
   assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/20261121T141.png").kind, "not_found");
   assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/20261121T1410").kind, "not_found");
   assert.equal(lib.matchRoute("GET", "/api/weather/radar/frames/..%2F..%2Fhealth.png").kind, "not_found");
@@ -452,14 +469,37 @@ test("missingWarncells lists warned cells the geometry layers do not cover", () 
 /* ------------------------------------------------------------ png limits */
 
 test("stripNoDataPng refuses images above the decode budget", () => {
-  // 2400 x 1800 RGB = 4.32 Mpx: above MAX_PNG_PIXELS (4 Mpx) but still below
+  // 1400 x 1100 RGB = 1.54 Mpx: above MAX_PNG_PIXELS (1.5 Mpx) but still below
   // the raw byte cap, so this exercises the pixel guard specifically.
-  const rows = Array.from({ length: 1800 }, () => Buffer.alloc(2400 * 3));
-  const png = encodePng(2400, 1800, rows, 2);
-  assert.ok(2400 * 1800 > lib.MAX_PNG_PIXELS);
+  const rows = Array.from({ length: 1100 }, () => Buffer.alloc(1400 * 3));
+  const png = encodePng(1400, 1100, rows, 2);
+  assert.ok(1400 * 1100 > lib.MAX_PNG_PIXELS);
   assert.equal(lib.stripNoDataPng(png), png, "returned untouched, not decoded");
-  assert.ok(lib.MAX_PNG_PIXELS <= 4_000_000);
+  assert.ok(lib.MAX_PNG_PIXELS <= 1_500_000);
   assert.ok(lib.MAX_PNG_RAW_BYTES <= 20 * 1024 * 1024);
+});
+
+test("stripNoDataPng still accepts the real DWD frame size", () => {
+  // 1000x974 is what the gateway asks DWD for; it must stay inside the cap.
+  assert.ok(1000 * 974 < lib.MAX_PNG_PIXELS);
+  const wide = Array.from({ length: 974 }, () => {
+    const line = Buffer.alloc(1000 * 4);
+    // First pixel: the no-data wash the post-processor removes.
+    line.writeUInt8(126, 0);
+    line.writeUInt8(126, 1);
+    line.writeUInt8(126, 2);
+    line.writeUInt8(77, 3);
+    // Second pixel: a real radar class that has to survive.
+    line.writeUInt8(51, 4);
+    line.writeUInt8(255, 5);
+    line.writeUInt8(255, 6);
+    line.writeUInt8(255, 7);
+    return line;
+  });
+  const png = encodePng(1000, 974, wide);
+  const out = lib.stripNoDataPng(png);
+  assert.notEqual(out, png, "a full-size frame is still processed");
+  assert.ok(out.length > 0);
 });
 
 test("stripNoDataPng survives a truncated IDAT", () => {

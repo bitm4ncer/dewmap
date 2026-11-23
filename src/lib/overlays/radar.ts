@@ -64,6 +64,42 @@ export function radarFrameUrls(frames: readonly RadarFrame[]): string[] {
   return frames.map((frame) => dataApiUrl(frame.url));
 }
 
+/**
+ * Keyboard step on the radar time slider.
+ *
+ * The slider moves in minutes but the frames sit on an uneven grid, so a
+ * native arrow press (value + 1 minute) would snap straight back to the same
+ * frame. Arrow keys therefore move one *frame*, Home/End jump to the ends, and
+ * PageUp/PageDown skip three. Returns the target frame index, or null when the
+ * key is not ours.
+ */
+export function sliderKeyTarget(
+  key: string,
+  index: number,
+  lastIndex: number,
+): number | null {
+  if (lastIndex < 0) return null;
+  const clamp = (n: number) => Math.max(0, Math.min(lastIndex, n));
+  switch (key) {
+    case "ArrowRight":
+    case "ArrowUp":
+      return clamp(index + 1);
+    case "ArrowLeft":
+    case "ArrowDown":
+      return clamp(index - 1);
+    case "Home":
+      return 0;
+    case "End":
+      return lastIndex;
+    case "PageUp":
+      return clamp(index + 3);
+    case "PageDown":
+      return clamp(index - 3);
+    default:
+      return null;
+  }
+}
+
 /** Whole minutes between a frame and the newest analysis slot. */
 export function frameOffsetMinutes(
   frame: Pick<RadarFrame, "time">,

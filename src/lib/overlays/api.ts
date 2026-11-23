@@ -186,6 +186,8 @@ export interface WarningsPayload {
   areasComplete: boolean;
   /** Warned cells the DWD geometry layers do not cover. */
   areasMissing?: number;
+  /** The WFS itself failed — no geometries at all for this payload. */
+  areasUnavailable?: boolean;
   source: { warnings: string; areas: string };
   attribution: { label: string; url?: string };
 }

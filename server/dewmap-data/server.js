@@ -572,7 +572,11 @@ async function buildWarnings(nowMs) {
     warnings: normalized.warnings,
     areas: lib.joinWarningAreas(normalized.warnings, collection),
     areasComplete: !areasError,
-    areasMissing: lib.missingWarncells(normalized.warnings, collection).length,
+    // "WFS down" and "this warncell has no polygon" are different problems:
+    // only the second one is worth naming per cell.
+    ...(areasError
+      ? { areasUnavailable: true }
+      : { areasMissing: lib.missingWarncells(normalized.warnings, collection).length }),
     source: {
       warnings: "DWD warnapp warnings.json",
       areas: "DWD WFS Warngebiete (Kreise + Gemeinden)",
@@ -742,7 +746,9 @@ const server = http.createServer(async (req, res) => {
   if (!url) return fail(res, 400, "bad_request", errorMessage("bad_request"));
 
   const nowMs = Date.now();
-  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+  // Routing normalises trailing slashes itself (lib.matchRoute), so the raw
+  // pathname is what gets logged and matched.
+  const pathname = url.pathname;
 
   try {
     const route = lib.matchRoute(req.method, pathname);

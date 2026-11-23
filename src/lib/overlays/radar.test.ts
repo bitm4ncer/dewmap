@@ -7,6 +7,7 @@ import {
   frameOffsetMinutes,
   radarCoordinates,
   radarFrameUrls,
+  sliderKeyTarget,
   weatherDayKey,
 } from "./radar";
 
@@ -121,5 +122,43 @@ describe("daylight saving", () => {
     expect(formatClock("2026-10-25T00:30:00.000Z")).toBe("02:30");
     expect(formatClock("2026-10-25T01:30:00.000Z")).toBe("02:30");
     expect(formatClock("2026-10-25T02:30:00.000Z")).toBe("03:30");
+  });
+});
+
+describe("slider keyboard", () => {
+  // 18 frames: indices 0..17, uneven in time but linear in index.
+  const last = 17;
+
+  it("moves exactly one frame per arrow press", () => {
+    expect(sliderKeyTarget("ArrowRight", 5, last)).toBe(6);
+    expect(sliderKeyTarget("ArrowLeft", 5, last)).toBe(4);
+    // Regression: with a minute-step slider the value snapped back to frame 0.
+    expect(sliderKeyTarget("ArrowRight", 0, last)).toBe(1);
+  });
+
+  it("treats up/down like right/left", () => {
+    expect(sliderKeyTarget("ArrowUp", 3, last)).toBe(4);
+    expect(sliderKeyTarget("ArrowDown", 3, last)).toBe(2);
+  });
+
+  it("jumps to both ends and pages by three", () => {
+    expect(sliderKeyTarget("Home", 9, last)).toBe(0);
+    expect(sliderKeyTarget("End", 0, last)).toBe(last);
+    expect(sliderKeyTarget("PageUp", 2, last)).toBe(5);
+    expect(sliderKeyTarget("PageDown", 9, last)).toBe(6);
+  });
+
+  it("clamps instead of running past the ends", () => {
+    expect(sliderKeyTarget("ArrowRight", last, last)).toBe(last);
+    expect(sliderKeyTarget("ArrowLeft", 0, last)).toBe(0);
+    expect(sliderKeyTarget("PageUp", last, last)).toBe(last);
+    expect(sliderKeyTarget("PageDown", 1, last)).toBe(0);
+  });
+
+  it("ignores keys that are not navigation", () => {
+    for (const key of ["Tab", "a", "Enter", " ", "Shift"]) {
+      expect(sliderKeyTarget(key, 5, last)).toBeNull();
+    }
+    expect(sliderKeyTarget("ArrowRight", 0, -1)).toBeNull();
   });
 });

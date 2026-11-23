@@ -19,6 +19,10 @@ deployment target. Edit here, then copy over (see below).
 There is no generic proxy: the three upstream hosts are hard-coded, the only
 variable is a strictly validated radar slot (`now-6h … now+3h`, 5-minute grid).
 
+Trailing slashes are normalised inside the routing table (`lib.normalizePath`),
+so `/health/` and `/api/weather/radar/frames/` behave exactly like their
+slash-free forms.
+
 ## Files
 
 - `server.js` — HTTP server, fetch/cache/normalise/warm.

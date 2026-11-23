@@ -12,6 +12,7 @@ import {
   RADAR_LEGEND_LABELS,
   formatClock,
   frameHint,
+  sliderKeyTarget,
 } from "@/lib/overlays/radar";
 import { RADAR_OVERLAY_ID, WARNINGS_OVERLAY_ID } from "@/lib/overlays/definitions";
 import { latestAnalysisIndex, useOverlays } from "@/lib/overlays/store";
@@ -76,6 +77,18 @@ function RadarControls() {
   const nowPct = maxOffset ? (anchorOffset / maxOffset) * 100 : 0;
   const fillPct = maxOffset ? (currentOffset / maxOffset) * 100 : 0;
 
+  /**
+   * Keyboard: one frame per arrow press. Without this the native slider moves
+   * by a single minute, snaps back to the same frame and the thumb looks dead.
+   */
+  const onSliderKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const target = sliderKeyTarget(event.key, clamped, list.length - 1);
+    if (target === null) return;
+    event.preventDefault();
+    setPlaying(false);
+    setIndex(target);
+  };
+
   /** Snap a minute value onto the frame that is closest in time. */
   const selectByOffset = (value: number) => {
     let best = 0;
@@ -122,6 +135,7 @@ function RadarControls() {
               setPlaying(false);
               selectByOffset(Number(e.target.value));
             }}
+            onKeyDown={onSliderKeyDown}
             className="hud-slider w-full"
             style={{ ["--hud-fill" as string]: `${fillPct}%` }}
             aria-label="Radar-Zeitpunkt"
@@ -259,10 +273,16 @@ function WarningList() {
           +{hidden} weitere Warnungen
         </p>
       )}
-      {(payload.areasMissing ?? 0) > 0 && (
+      {payload.areasUnavailable ? (
         <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
-          {payload.areasMissing} Warnzellen ohne Gebietsfläche (Kombi- oder Seezellen)
+          Gebietsgrenzen derzeit nicht abrufbar
         </p>
+      ) : (
+        (payload.areasMissing ?? 0) > 0 && (
+          <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
+            {payload.areasMissing} Warnzellen ohne Gebietsfläche (Kombi- oder Seezellen)
+          </p>
+        )
       )}
     </div>
   );
