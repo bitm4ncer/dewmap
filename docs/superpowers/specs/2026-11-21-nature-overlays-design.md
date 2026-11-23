@@ -66,8 +66,11 @@ auf transparent und kodiert neu:
 
 - Grau: `max−min ≤ 12` und `100 < max < 160` und Alpha < 200,
 - Grenzen: `maxOutputLength = height·(stride+1) + 1024` beim `inflateSync`,
-  maximal 4 Mio. Pixel und 20 MB Rohpuffer — der 1000×974-Frame liegt bei
-  0,97 Mio. Pixel, alles darüber wird unverändert durchgereicht statt dekodiert,
+  maximal 1,5 Mio. Pixel und 20 MB Rohpuffer — der 1000×974-Frame liegt bei
+  0,97 Mio. Pixel, alles darüber wird unverändert durchgereicht statt dekodiert.
+  Am Cap kostet ein Decode ~130 ms Event-Loop und ~36 MB; 1,5 Mpx lässt Luft für
+  ein etwas größeres Komposit (DWD erweitert 2026-11-24 den Scanradius) und
+  blockiert den Loop trotzdem nicht für Sekunden.
 - Magenta: `g < 115`, `r > 150`, `b > 120`, `|r−b| < 45` — trifft die
   DWD-Klassen nicht (`#cc0098`, `#6600cb`, `#e5004c` haben andere Kanäle).
 
@@ -87,7 +90,9 @@ statt die Ebene zu brechen.
 
 **Entscheidung:** Gateway normalisiert `warnings.json` **und** joint die
 Geometrien der *aktuell aktiven* Warnzellen aus dem WFS zu einer
-FeatureCollection. Kein 17-MB-Komplett-Download aller Gemeinden, sondern nur die
+FeatureCollection. Zwei getrennte Kennzahlen: `areasUnavailable: true`, wenn der
+WFS-Abruf selbst scheitert (dann gibt es gar keine Flächen), und `areasMissing`,
+wenn einzelne Warnzellen keine Geometrie haben (Kombi-/Seezellen). Kein 17-MB-Komplett-Download aller Gemeinden, sondern nur die
 Zellen, die gerade eine Warnung tragen (heute: 373 → 201 KB gzip).
 
 Die Warnzellen-IDs aus `warnings.json` matchen `WARNCELLID` in beiden
@@ -274,6 +279,11 @@ und Buttons mit ≥ 44 px Trefferfläche. Bestehende Karten bleiben unverändert
 `{slot}` = `YYYYMMDDTHHMM` (UTC). Nur Werte auf dem 5-Minuten-Raster im Fenster
 `now − 6 h … now + 3 h` werden angenommen — alles andere ist `400`. Damit kann
 der Cache nicht durch beliebige Zeitstempel aufgebläht werden.
+
+Trailing Slashes werden **in** der Routing-Tabelle (`lib.normalizePath`)
+normalisiert, nicht in der HTTP-Schicht: `/health/`, `/api/weather/radar/frames/`
+und `/…/20261121T1410.png/` sind dieselben Endpunkte wie ohne Slash. Die Regel
+liegt damit im getesteten Code, nicht in einer ungetesteten Zeile davor.
 
 ### 4.2 Upstream-Allowlist
 

@@ -14,7 +14,7 @@ const SLOT_MS = 5 * 60_000;
  * (inflated + re-encoded) plus the compression window have to fit next to the
  * ~20 MB base RSS in a 128 MB container.
  */
-const MAX_PNG_PIXELS = 4_000_000;
+const MAX_PNG_PIXELS = 1_500_000;
 const MAX_PNG_RAW_BYTES = 20 * 1024 * 1024;
 
 /** DWD radar composite RV over Germany, in web mercator metres. */
@@ -436,17 +436,28 @@ const FRAME_PATH = /^\/api\/weather\/radar\/frames\/(\d{8}T\d{4})\.png$/;
 /**
  * Pure request routing, so the paths that decide "what does this request do"
  * can be tested without an HTTP server. `server.js` only executes the verdict.
+ *
+ * Trailing slashes are normalised here and not in the HTTP layer: `/health/`
+ * and `/api/weather/radar/frames/` are the same endpoint, and the rule that
+ * decides this is part of what the tests cover.
  */
+function normalizePath(pathname) {
+  if (typeof pathname !== "string" || pathname.length === 0) return "/";
+  const trimmed = pathname.replace(/\/+$/, "");
+  return trimmed.length === 0 ? "/" : trimmed;
+}
+
 function matchRoute(method, pathname) {
   if (method !== "GET" && method !== "HEAD") {
     return { kind: "method_not_allowed" };
   }
-  if (pathname === "/health") return { kind: "health" };
-  if (pathname === "/api/status") return { kind: "status" };
-  if (pathname === "/api/weather/radar/frames") return { kind: "frames" };
-  const frame = pathname.match(FRAME_PATH);
+  const path = normalizePath(pathname);
+  if (path === "/health") return { kind: "health" };
+  if (path === "/api/status") return { kind: "status" };
+  if (path === "/api/weather/radar/frames") return { kind: "frames" };
+  const frame = path.match(FRAME_PATH);
   if (frame) return { kind: "frame", slot: frame[1] };
-  if (pathname === "/api/weather/warnings") return { kind: "warnings" };
+  if (path === "/api/weather/warnings") return { kind: "warnings" };
   return { kind: "not_found" };
 }
 
@@ -595,8 +606,9 @@ function stripNoDataPng(buffer) {
   const interlace = ihdr.data[12];
   if (bitDepth !== 8 || interlace !== 0) return buffer;
   if (colorType !== 6 && colorType !== 2) return buffer;
-  // 1000x974 (the DWD frame) is 0.97 Mpx; four times that is plenty of head
-  // room and keeps decoded + re-encoded buffers well inside 128 MB.
+  // A DWD frame is 1000x974 = 0.97 Mpx. 1.5 Mpx leaves head room for a slightly
+  // larger composite but keeps a hostile input from blocking the event loop for
+  // long: right at the cap a decode costs ~130 ms and ~36 MB.
   if (width === 0 || height === 0 || width * height > MAX_PNG_PIXELS) {
     return buffer;
   }
@@ -719,6 +731,7 @@ module.exports = {
   isPng,
   frameEtag,
   createSemaphore,
+  normalizePath,
   matchRoute,
   missingWarncells,
   MAX_PNG_PIXELS,
