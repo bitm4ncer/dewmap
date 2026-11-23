@@ -9,6 +9,7 @@ import {
   formatAlertPeriod,
 } from "@/lib/planner/transitFormat";
 import { useTransit } from "@/lib/planner/transitStore";
+import { liveDataSaverNotice } from "@/lib/planner/liveDataPolicy";
 import { HudPanel } from "@/components/hud/HudPanel";
 
 const GROUP_FILTERS: { key: LiveModeGroup; label: string }[] = [
@@ -45,6 +46,7 @@ function lineBadgeStyle(color: string, textColor: string) {
  */
 export function LiveTransitBar() {
   const liveVehicles = useTransit((s) => s.liveVehicles);
+  const liveDataSaver = useTransit((s) => s.liveDataSaver);
   const setLiveVehicles = useTransit((s) => s.setLiveVehicles);
   const groups = useTransit((s) => s.liveVehicleGroups);
   const setGroups = useTransit((s) => s.setLiveVehicleGroups);
@@ -89,8 +91,11 @@ export function LiveTransitBar() {
 
   // N3: one concise live region for state changes only. The time/count text
   // below updates every poll and stays out of aria-live.
+  const dataSaverNotice = liveDataSaverNotice(liveDataSaver, liveVehicles);
   const announcement = !liveVehicles
-    ? "Live vehicles off."
+    ? liveDataSaver
+      ? "Data Saver is on. Live vehicles are off."
+      : "Live vehicles off."
     : error
       ? `Live vehicles error. ${error}`
       : zoomLow
@@ -167,6 +172,24 @@ export function LiveTransitBar() {
         <p className="sr-only" aria-live="polite">
           {announcement}
         </p>
+
+        {dataSaverNotice && (
+          <div className="mt-1 flex items-center justify-between gap-2 rounded-[10px] bg-[color:var(--surf-2)] p-2">
+            <span className="text-[11px] text-[color:var(--ink-dim)]">
+              {dataSaverNotice}
+            </span>
+            {!liveVehicles && (
+              <button
+                type="button"
+                className="ui-badge !min-h-9 !px-2 shrink-0"
+                data-tone="accent"
+                onClick={() => setLiveVehicles(true)}
+              >
+                Turn on
+              </button>
+            )}
+          </div>
+        )}
 
         {filterNotice && (
           <p className="mt-1 text-[11px] text-[color:var(--warn)]" role="status">

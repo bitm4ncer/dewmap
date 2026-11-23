@@ -11,8 +11,18 @@ import type {
 import type { PlannerPhase } from "./carStore";
 import { bestJourneyId, type JourneySort } from "./transitFormat";
 import { migrateLegacyStorage } from "../legacyStorage";
+import {
+  liveVehiclesDefault,
+  readLiveDataEnvironment,
+} from "./liveDataPolicy";
 
 migrateLegacyStorage();
+
+/**
+ * Read once at module load. SSR has no navigator (saveData false); the
+ * client module gets the real value before the first live-vehicle effect.
+ */
+const LIVE_DATA_ENV = readLiveDataEnvironment();
 
 export interface TransitPlace {
   name: string;
@@ -46,10 +56,12 @@ interface TransitState {
   accessible: boolean;
   bike: boolean;
   autoRefresh: boolean;
-  /** Derived: true unless the user explicitly opted out. */
+  /** Derived: true unless the user opted out or the browser saves data. */
   liveVehicles: boolean;
   /** Explicit opt-out. Persisted; the only durable "off" signal. */
   liveVehiclesOptOut: boolean;
+  /** Browser Data Saver, read once at module load (not persisted). */
+  liveDataSaver: boolean;
   /** Mode groups to show; empty means all. */
   liveVehicleGroups: LiveModeGroup[];
   liveVehicleCount: number;
@@ -211,9 +223,10 @@ const initialState = {
   accessible: false,
   bike: false,
   autoRefresh: false,
-  /* On by default: live vehicles must be visible without hunting for them. */
-  liveVehicles: true,
+  /* On by default, but never against the browser's Save-Data request. */
+  liveVehicles: liveVehiclesDefault(false, LIVE_DATA_ENV.saveData),
   liveVehiclesOptOut: false,
+  liveDataSaver: LIVE_DATA_ENV.saveData,
   liveVehicleGroups: [] as LiveModeGroup[],
   liveVehicleCount: 0,
   liveVehiclesUpdatedAt: null as number | null,
@@ -462,6 +475,7 @@ export const useTransit = create<TransitState>()(
           recents: s.recents,
           liveVehicles: s.liveVehicles,
           liveVehiclesOptOut: s.liveVehiclesOptOut,
+          liveDataSaver: s.liveDataSaver,
           liveVehicleGroups: s.liveVehicleGroups,
         })),
     }),
@@ -533,11 +547,12 @@ export const useTransit = create<TransitState>()(
           bike: typeof p.bike === "boolean" ? p.bike : current.bike,
           autoRefresh:
             typeof p.autoRefresh === "boolean" ? p.autoRefresh : current.autoRefresh,
-          liveVehicles:
-            typeof p.liveVehiclesOptOut === "boolean"
-              ? !p.liveVehiclesOptOut
-              : true,
+          liveVehicles: liveVehiclesDefault(
+            p.liveVehiclesOptOut === true,
+            LIVE_DATA_ENV.saveData,
+          ),
           liveVehiclesOptOut: p.liveVehiclesOptOut === true,
+          liveDataSaver: LIVE_DATA_ENV.saveData,
           liveVehicleGroups: validLiveGroups(p.liveVehicleGroups),
           liveVehicleCount: 0,
           liveVehiclesUpdatedAt: null,

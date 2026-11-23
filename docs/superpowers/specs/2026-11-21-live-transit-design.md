@@ -63,7 +63,7 @@ missing trips).
 
 | Call | Interval | Cost |
 | --- | --- | --- |
-| `map/trips` | 45 s base, jitter ±10 %; 60 s above ~250 KB, 90 s above ~400 KB (estimated from the decoded body length, observed raw/gzip ratio 9.2) | ~9 MB/h at the app's z12 window (~116 KB/poll), ~18 MB/h for a 33×35 km window |
+| `map/trips` | 45 s base, jitter ±10 %; 60 s above ~250 KB, 90 s above ~400 KB (estimated from the decoded body length, observed raw/gzip ratio 9.2); no polling under Save-Data or while the tab is hidden | ~9 MB/h at the app's z12 window (~116 KB/poll), ~18 MB/h for a 33×35 km window; 0 for Save-Data users |
 | `stoptimes` (area alerts) | at most 3 stops every 5 min, plus an immediate refresh after the view moves 4 km | ~1.5 MB/h while watching; `n` applies per platform, so a parent station can return ~190 stop times (~36 KB gzip) |
 | `/plan` | only on user search | unchanged |
 
@@ -78,6 +78,15 @@ keeps the existing 429 → `retryAfter` backoff, backs off to 60 s on other
 errors, pauses when the tab is hidden, and adds jitter so many clients do not
 poll in lockstep. Auto-refresh of searches remains opt-in (the documented
 720 `/plan` per day budget).
+
+A separate "no map interaction for 10 minutes and the Routes pane is closed"
+gate was considered and deliberately not added: the vehicle layer and the
+LIVE pill are map-wide, so a closed pane does not mean the vehicles are
+invisible. Freezing a visible layer after an idle period would look like a
+broken live feed, and the idle timestamp is a poor proxy (watching the map
+without moving it is normal). Save-Data, explicit opt-out, hidden tabs and
+the 45 s/backoff cadence are the gates; a server gateway remains the durable
+answer for request volume.
 
 ## Approaches considered
 
@@ -101,7 +110,13 @@ poll in lockstep. Auto-refresh of searches remains opt-in (the documented
 
 - A persistent `LiveTransitBar` sits directly under the transit header /
   summary, outside the collapsible form and outside "Route options".
-- Live vehicles default to **on**. `liveVehiclesOptOut` is persisted and only
+- Live vehicles default to **on**, except when the browser asks to save data
+  (`navigator.connection.saveData === true`). Then the store starts off, the
+  layer never polls, and the live bar explains "Data Saver is on — live
+  vehicles are off" with a manual "Turn on" action for the current session.
+  The choice is not persisted against Save-Data: a reload respects the
+  browser preference again.
+- `liveVehiclesOptOut` is persisted and only
   written when the user flips the switch, so an explicit "off" sticks across
   reloads from this version on. The old schema had no interaction marker, so
   a pre-v3 stored `false` cannot be distinguished from "never touched"; the

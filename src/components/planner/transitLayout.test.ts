@@ -38,6 +38,15 @@ describe("transit panel layout", () => {
     );
   });
 
+  it("surfaces the Save-Data default in the live bar", () => {
+    const bar = readFileSync(
+      new URL("./LiveTransitBar.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(bar).toContain("liveDataSaverNotice");
+    expect(bar).toContain("Turn on");
+  });
+
   it("keeps every filter chip reachable and explains empty filters", () => {
     const bar = readFileSync(
       new URL("./LiveTransitBar.tsx", import.meta.url),
