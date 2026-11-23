@@ -10,8 +10,20 @@ interface Source {
 const SOURCES: Source[] = [
   {
     name: "OpenStreetMap",
-    detail: "Basemap data, POIs, hiking and cycling infrastructure.",
+    detail: "Basemap data, POIs, hiking and cycling infrastructure (ODbL).",
     href: "https://www.openstreetmap.org/copyright",
+  },
+  {
+    name: "Deutscher Wetterdienst (DWD)",
+    detail:
+      "Rain radar (RV composite, 5-minute analysis and 90-minute nowcast) and official weather warnings by district and municipality. Served through our own data gateway, not directly from dwd.de. Licence: DL-DE-BY 2.0 — attribution: Deutscher Wetterdienst.",
+    href: "https://www.dwd.de/opendata",
+  },
+  {
+    name: "Geobasis NRW",
+    detail:
+      "Building shadow pilot: LoD1 city model and DGM1 elevation model of North Rhine-Westphalia, rendered locally in a web worker. Licence: dl-de/zero 2.0 — attribution: Geobasis NRW.",
+    href: "https://www.opengeodata.nrw.de/produkte/geobasis/3dg/lod1/",
   },
   {
     name: "Esri / Maxar",
@@ -20,13 +32,39 @@ const SOURCES: Source[] = [
   },
   {
     name: "Sentinel-2 · Copernicus",
-    detail: "Cloudless annual mosaics and daily true-colour scenes.",
+    detail:
+      "Cloudless annual mosaics and daily true-colour scenes; Sentinel-5P NO₂ via NASA GIBS. Free and open (Copernicus Data Space), attribution required.",
     href: "https://dataspace.copernicus.eu/",
   },
   {
     name: "NASA GIBS",
-    detail: "Near-real-time imagery and atmospheric layers.",
+    detail:
+      "Near-real-time imagery, NDVI and NO₂ layers, plus the GPM IMERG precipitation frames (NASA EOSDIS, open data).",
     href: "https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api",
+  },
+  {
+    name: "ESA WorldCover",
+    detail:
+      "Global 10 m land cover (2021) for the Nature panel, licensed CC BY 4.0 — attribution: ESA WorldCover project.",
+    href: "https://esa-worldcover.org/",
+  },
+  {
+    name: "GBIF",
+    detail:
+      "Global biodiversity observations aggregated into density tiles for the species overlay (CC BY 4.0 for most records, per-dataset licences apply).",
+    href: "https://www.gbif.org/",
+  },
+  {
+    name: "Global Forest Watch · UMD",
+    detail:
+      "Forest-loss alerts (GLAD) and the Hansen tree-cover-loss product for the forest overlay (CC BY 4.0).",
+    href: "https://www.globalforestwatch.org/",
+  },
+  {
+    name: "EEA Natura 2000",
+    detail:
+      "European protected areas (Habitats and Birds directives) as an EEA web map service.",
+    href: "https://www.eea.europa.eu/en/datahub/datahubitem-view/32ff2f92-0f4a-4d1a-9b3d-2f2f4dab6e42",
   },
   {
     name: "OpenRailwayMap",

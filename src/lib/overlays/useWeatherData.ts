@@ -16,6 +16,7 @@ import {
   overlayErrorMessage,
 } from "./api";
 import { RADAR_OVERLAY_ID, WARNINGS_OVERLAY_ID } from "./definitions";
+import { dataApiUrl } from "./api";
 import { radarFrameUrls } from "./radar";
 import { useOverlays } from "./store";
 
@@ -51,6 +52,8 @@ export function useRadarFrames(): void {
         setRadarFrames(payload);
       } catch (error) {
         if (!alive || isAbortError(error)) return;
+        // Keep serving the frames we already have: the panel turns this into
+        // "as of HH:MM · refresh failed" instead of hiding them.
         setRadarStatus("error", overlayErrorMessage(error));
       } finally {
         controller = null;
@@ -108,6 +111,49 @@ export function useWeatherWarnings(): void {
   }, [enabled]);
 }
 
+/**
+ * Track the PNG of the selected frame.
+ *
+ * MapLibre's image source swallows a failed tile silently — the layer just
+ * stays on the previous frame. A plain image preload gives us a definite
+ * answer (and warms the cache the map will read from), so the panel can say
+ * "image unavailable" instead of pretending everything is fine.
+ */
+export function useRadarImageStatus(): void {
+  const enabled = useOverlays((s) => s.enabled[RADAR_OVERLAY_ID] ?? false);
+  const frames = useOverlays((s) => s.radarFrames);
+  const index = useOverlays((s) => s.radarIndex);
+
+  useEffect(() => {
+    if (!enabled || !frames) return;
+    const frame = frames.frames[Math.min(index, frames.frames.length - 1)];
+    if (!frame) return;
+    const url = dataApiUrl(frame.url);
+    const { setRadarImageStatus } = useOverlays.getState();
+    let alive = true;
+    setRadarImageStatus("loading");
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (alive) setRadarImageStatus("ready");
+    };
+    image.onerror = () => {
+      if (alive) {
+        setRadarImageStatus(
+          "error",
+          "Radar image could not be loaded for this frame.",
+        );
+      }
+    };
+    image.src = url;
+    return () => {
+      alive = false;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [enabled, frames, index]);
+}
+
 /** Frames already handed to the browser cache, per session. */
 const prefetched = new Set<string>();
 
@@ -157,4 +203,5 @@ export function useWeatherOverlayData(): void {
   useRadarFrames();
   useWeatherWarnings();
   useRadarPlayback();
+  useRadarImageStatus();
 }

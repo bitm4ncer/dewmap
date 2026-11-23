@@ -44,10 +44,10 @@ describe("frame offsets", () => {
 
 describe("frame hints", () => {
   it("labels past, now and nowcast", () => {
-    expect(frameHint(frame("2026-11-21T03:55:00.000Z"), anchor)).toBe("vor 55 Min");
-    expect(frameHint(frame(anchor), anchor)).toBe("Jetzt");
+    expect(frameHint(frame("2026-11-21T03:55:00.000Z"), anchor)).toBe("55 min ago");
+    expect(frameHint(frame(anchor), anchor)).toBe("Now");
     expect(frameHint(frame("2026-11-21T06:20:00.000Z", "forecast"), anchor)).toBe(
-      "Nowcast +90 Min",
+      "Forecast +90 min",
     );
   });
 });

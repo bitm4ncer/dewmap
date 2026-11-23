@@ -14,8 +14,14 @@ import {
   frameHint,
   sliderKeyTarget,
 } from "@/lib/overlays/radar";
-import { RADAR_OVERLAY_ID, WARNINGS_OVERLAY_ID } from "@/lib/overlays/definitions";
+import {
+  RADAR_OVERLAY_ID,
+  WARNINGS_OVERLAY_ID,
+  radarOverlay,
+  warningsOverlay,
+} from "@/lib/overlays/definitions";
 import { latestAnalysisIndex, useOverlays } from "@/lib/overlays/store";
+import { radarStatusLine, warningsStatusLine } from "@/lib/overlays/status";
 import {
   severityColor,
   severityCounts,
@@ -33,7 +39,7 @@ function Attribution({
   label: string;
   url?: string;
 }) {
-  const text = `Daten: ${label}`;
+  const text = `Source: ${label}`;
   return (
     <p className="text-[11px] leading-snug text-[color:var(--ink-mute)]">
       {url ? (
@@ -67,7 +73,7 @@ function RadarControls() {
 
   // The frame list is not evenly spaced (5-minute analysis, 15-minute nowcast),
   // so the slider runs on real minutes, not on frame indices. Without this the
-  // "Jetzt" marker would sit at 65 % while the actual now is at 38 % of the
+  // "Now" marker would sit at 65 % while the actual now is at 38 % of the
   // time range.
   const startMs = Date.parse(list[0].time);
   const offsets = list.map((f) => Math.round((Date.parse(f.time) - startMs) / 60_000));
@@ -109,7 +115,7 @@ function RadarControls() {
         <button
           type="button"
           onClick={() => setPlaying(!playing)}
-          aria-label={playing ? "Radar-Animation pausieren" : "Radar-Animation abspielen"}
+          aria-label={playing ? "Pause radar animation" : "Play radar animation"}
           aria-pressed={playing}
           data-playing={playing}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[color:var(--surf-2)] text-[color:var(--ink)] transition-colors hover:bg-[color:var(--surf-3)] data-[playing=true]:bg-[color:var(--accent-soft)] data-[playing=true]:text-[color:var(--accent)]"
@@ -138,7 +144,7 @@ function RadarControls() {
             onKeyDown={onSliderKeyDown}
             className="hud-slider w-full"
             style={{ ["--hud-fill" as string]: `${fillPct}%` }}
-            aria-label="Radar-Zeitpunkt"
+            aria-label="Radar time"
             aria-valuetext={`${formatClock(frame.time)}, ${frameHint(frame, frames.anchor)}`}
           />
         </div>
@@ -151,7 +157,7 @@ function RadarControls() {
           className="absolute -translate-x-1/2"
           style={{ left: `${nowPct}%` }}
         >
-          Jetzt
+          Now
         </span>
         <span className="absolute right-0">
           {frameHint(list[list.length - 1], frames.anchor)}
@@ -167,20 +173,19 @@ function RadarCard() {
   const status = useOverlays((s) => s.radarStatus);
   const error = useOverlays((s) => s.radarError);
   const frames = useOverlays((s) => s.radarFrames);
+  const imageStatus = useOverlays((s) => s.radarImageStatus);
+  const imageError = useOverlays((s) => s.radarImageError);
   const setEnabled = useOverlays((s) => s.setEnabled);
   const setOpacity = useOverlays((s) => s.setOpacity);
 
-  const statusLine = !on
-    ? null
-    : status === "loading" && !frames
-      ? "resolving radar frames…"
-      : status === "error"
-        ? error ?? "Radar nicht erreichbar."
-        : frames
-          ? `${frames.frames.filter((f) => f.kind === "analysis").length} Analyse- und ${
-              frames.frames.filter((f) => f.kind === "forecast").length
-            } Nowcast-Frames · ${formatClock(frames.generated)} geladen`
-          : null;
+  const statusLine = radarStatusLine({
+    enabled: on,
+    status,
+    error,
+    frames,
+    imageStatus,
+    imageError,
+  });
 
   return (
     <LayerCard
@@ -202,8 +207,8 @@ function RadarCard() {
       }}
       footer={
         <Attribution
-          label="Deutscher Wetterdienst (DWD), Radar RV"
-          url="https://www.dwd.de"
+          label="Deutscher Wetterdienst (DWD), radar RV"
+          url={radarOverlay.attribution.url}
         />
       }
     />
@@ -219,7 +224,7 @@ function WarningList() {
   if (payload.total === 0) {
     return (
       <p className="text-[12px] text-[color:var(--ink-dim)]">
-        Aktuell keine amtlichen Warnungen für Deutschland.
+        No official warnings for Germany right now.
       </p>
     );
   }
@@ -270,17 +275,18 @@ function WarningList() {
       </ul>
       {hidden > 0 && (
         <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
-          +{hidden} weitere Warnungen
+          +{hidden} more warnings
         </p>
       )}
       {payload.areasUnavailable ? (
         <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
-          Gebietsgrenzen derzeit nicht abrufbar
+          Warning areas are unavailable right now
         </p>
       ) : (
         (payload.areasMissing ?? 0) > 0 && (
           <p className="hud-mono text-[11px] text-[color:var(--ink-mute)]">
-            {payload.areasMissing} Warnzellen ohne Gebietsfläche (Kombi- oder Seezellen)
+            {payload.areasMissing} warning cells without a map area (combined or
+            sea cells)
           </p>
         )
       )}
@@ -296,17 +302,19 @@ function WarningsCard() {
   const setEnabled = useOverlays((s) => s.setEnabled);
   const setOpacity = useOverlays((s) => s.setOpacity);
 
-  const statusLine = !on
-    ? null
-    : status === "loading" && !payload
-      ? "resolving warnings…"
-      : status === "error"
-        ? error ?? "Warnungen nicht erreichbar."
-        : payload
-          ? `${warningsSummary(payload.total, payload.maxLevel)} · Stand ${formatClock(
-              payload.issuedAt ?? payload.generated,
-            )}${payload.areasComplete ? "" : " · Gebietsgrenzen unvollständig"}`
-          : null;
+  const summary = payload
+    ? `${warningsSummary(payload.total, payload.maxLevel)} · as of ${formatClock(
+        payload.issuedAt ?? payload.generated,
+      )}${payload.areasComplete ? "" : " · warning areas incomplete"}`
+    : null;
+
+  const statusLine = warningsStatusLine({
+    enabled: on,
+    status,
+    error,
+    payload,
+    summary,
+  });
 
   return (
     <LayerCard
@@ -322,8 +330,8 @@ function WarningsCard() {
       extras={on ? <WarningList /> : null}
       footer={
         <Attribution
-          label="Deutscher Wetterdienst (DWD), Warnungen"
-          url="https://www.dwd.de"
+          label="Deutscher Wetterdienst (DWD), warnings"
+          url={warningsOverlay.attribution.url}
         />
       }
     />

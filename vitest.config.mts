@@ -3,8 +3,8 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    // Same alias as tsconfig (`@/*` → `src/*`), so modules that use it can be
-    // imported by tests instead of being untestable.
+    // Same alias as tsconfig (`@/*` → `src/*`), so tests can import modules
+    // and components that use it.
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },

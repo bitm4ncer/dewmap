@@ -100,6 +100,30 @@ function sourceTiles(map: MLMap, sourceId: string): string | null {
   return Array.isArray(source?.tiles) ? (source.tiles[0] ?? null) : null;
 }
 
+/**
+ * Last GeoJSON payload written per map + source. The warnings collection is a
+ * 1.3 MB object that stays identical between radar frames; re-sending it on
+ * every reconcile would copy it through the worker on every playback step.
+ */
+const lastData = new WeakMap<object, Map<string, unknown>>();
+
+function lastDataFor(map: MLMap, sourceId: string): unknown {
+  return lastData.get(map)?.get(sourceId);
+}
+
+function rememberData(map: MLMap, sourceId: string, data: unknown): void {
+  let perMap = lastData.get(map);
+  if (!perMap) {
+    perMap = new Map();
+    lastData.set(map, perMap);
+  }
+  perMap.set(sourceId, data);
+}
+
+function forgetData(map: MLMap, sourceId: string): void {
+  lastData.get(map)?.delete(sourceId);
+}
+
 function removeSourceLayers(map: MLMap, id: string): void {
   const sourceId = overlaySourceId(id);
   const layers = map.getStyle()?.layers ?? [];
@@ -117,6 +141,7 @@ function removeSourceLayers(map: MLMap, id: string): void {
   } catch {
     /* same */
   }
+  forgetData(map, sourceId);
 }
 
 /** Replace only the parts that changed. Idempotent. */
@@ -142,12 +167,16 @@ function upsert(
 
   if (resolved.source.type === "geojson") {
     if (existing) {
-      const withData = existing as unknown as {
-        setData?: (data: unknown) => void;
-      };
-      withData.setData?.(resolved.source.data);
+      if (lastDataFor(map, sourceId) !== resolved.source.data) {
+        const withData = existing as unknown as {
+          setData?: (data: unknown) => void;
+        };
+        withData.setData?.(resolved.source.data);
+        rememberData(map, sourceId, resolved.source.data);
+      }
     } else {
       map.addSource(sourceId, spec());
+      rememberData(map, sourceId, resolved.source.data);
     }
   } else if (resolved.source.type === "image") {
     if (!existing) {

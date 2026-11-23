@@ -46,18 +46,18 @@ export function overlayErrorMessage(error: unknown): string {
   if (error instanceof OverlayApiError) {
     switch (error.code) {
       case "timeout":
-        return "Quelle antwortet nicht. Neuer Versuch in wenigen Minuten.";
+        return "The source did not answer in time. Retrying in a few minutes.";
       case "offline":
-        return "Keine Verbindung zur Datenquelle.";
+        return "Cannot reach the data source.";
       case "bad_response":
-        return "Quelle liefert unerwartete Daten.";
+        return "The source returned unexpected data.";
       case "upstream":
-        return "Quelle ist gerade nicht erreichbar.";
+        return "The source is unavailable right now.";
       default:
-        return "Abgebrochen.";
+        return "Cancelled.";
     }
   }
-  return "Quelle ist gerade nicht erreichbar.";
+  return "The source is unavailable right now.";
 }
 
 interface RequestOptions {
@@ -133,12 +133,16 @@ function isFrame(value: unknown): value is RadarFrame {
   );
 }
 
+/**
+ * The frame list is computed by the gateway without an upstream call, so a
+ * short budget is fine; the *image* is fetched by MapLibre, not through here.
+ */
 export async function fetchRadarFrames(
   options?: RequestOptions,
 ): Promise<RadarFramesPayload> {
   const payload = await getJson<RadarFramesPayload>(
     "/api/weather/radar/frames",
-    options,
+    { timeoutMs: 15_000, ...options },
   );
   if (
     !payload ||
@@ -195,9 +199,13 @@ export interface WarningsPayload {
 export async function fetchWarnings(
   options?: RequestOptions,
 ): Promise<WarningsPayload> {
+  // Worst case on the gateway is a cold build: 15 s for warnings.json plus
+  // 15 s for the warncell geometries. The client has to outlast that, or the
+  // first visitor after a restart sees a timeout for a request that would
+  // have succeeded.
   const payload = await getJson<WarningsPayload>(
     "/api/weather/warnings",
-    options,
+    { timeoutMs: 40_000, ...options },
   );
   if (
     !payload ||

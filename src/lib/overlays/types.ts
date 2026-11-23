@@ -18,6 +18,8 @@ export type OverlayKind = "raster" | "vector" | "geojson";
 
 export interface OverlayAttribution {
   label: string;
+  /** Compact form for the on-map credit line, e.g. "DWD". */
+  short?: string;
   url?: string;
 }
 

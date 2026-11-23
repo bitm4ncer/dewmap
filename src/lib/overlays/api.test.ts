@@ -165,13 +165,13 @@ describe("error helpers", () => {
     expect(isAbortError(new Error("x"))).toBe(false);
   });
 
-  it("maps codes to readable German copy", () => {
+  it("maps codes to readable English copy", () => {
     expect(overlayErrorMessage(new OverlayApiError("timeout", ""))).toMatch(
-      /antwortet nicht/,
+      /did not answer in time/,
     );
     expect(overlayErrorMessage(new OverlayApiError("bad_response", ""))).toMatch(
-      /unerwartete Daten/,
+      /unexpected data/,
     );
-    expect(overlayErrorMessage(new Error("boom"))).toMatch(/nicht erreichbar/);
+    expect(overlayErrorMessage(new Error("boom"))).toMatch(/unavailable/);
   });
 });

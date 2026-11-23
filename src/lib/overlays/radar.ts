@@ -112,17 +112,18 @@ export function frameOffsetMinutes(
 }
 
 /**
- * Short German hint under the time slider: `vor 55 Min`, `Jetzt`,
- * `Nowcast +15 Min`.
+ * Short hint under the time slider: `55 min ago`, `Now`, `Forecast +15 min`.
+ * "Now" is the anchor frame (DWD publishes with a ~10 min lag), not the wall
+ * clock — the surrounding copy says so.
  */
 export function frameHint(
   frame: Pick<RadarFrame, "time" | "kind">,
   anchorIso: string,
 ): string {
   const offset = frameOffsetMinutes(frame, anchorIso);
-  if (offset === 0) return "Jetzt";
-  if (offset < 0) return `vor ${Math.abs(offset)} Min`;
-  return `Nowcast +${offset} Min`;
+  if (offset === 0) return "Now";
+  if (offset < 0) return `${Math.abs(offset)} min ago`;
+  return `Forecast +${offset} min`;
 }
 
 /**
@@ -136,7 +137,7 @@ export const WEATHER_TZ = "Europe/Berlin";
 export function formatClock(iso: string, timeZone: string = WEATHER_TZ): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "--:--";
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -144,17 +145,17 @@ export function formatClock(iso: string, timeZone: string = WEATHER_TZ): string 
   }).format(new Date(ms));
 }
 
-/** `Sa 21.11. · 14:30` for warning validity ranges. */
+/** `Sat, 21 Nov, 14:30` for warning validity ranges. */
 export function formatDateTime(
   iso: string,
   timeZone: string = WEATHER_TZ,
 ): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "-";
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat("en-GB", {
     weekday: "short",
     day: "2-digit",
-    month: "2-digit",
+    month: "short",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

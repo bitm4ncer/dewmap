@@ -196,9 +196,12 @@ Zoom-Limit — Polygone skalieren verlustfrei.
   Damit liegt das Radar über Flächen/Linien, aber **unter** Beschriftungen und POIs.
 - Attributions-Hinweis: MapLibre akzeptiert `attribution` nur an `raster`- und
   `geojson`-Sources — eine `image`-Source mit `attribution` lehnt der
-  Style-Validator komplett ab (Quelle wird nicht angelegt). Radarframes tragen
-  ihre Quellenangabe deshalb ausschließlich im Panel; die Warnungen zusätzlich
-  im MapLibre-Attributionscontrol.
+  Style-Validator komplett ab (Quelle wird nicht angelegt). Deshalb gibt es für
+  Image-Ebenen einen eigenen `MapLibre`-Control (`MapCredit`) im Bottom-Right-
+  Stack: er nennt jede aktive Image-Ebene („Rain radar: DWD", später „Shadows:
+  Geobasis NRW"), erbt die bestehenden Panel-/Mobile-Positionierungsregeln und
+  listet nur Ebenen, die sich nicht selbst creditten können — keine Dopplung
+  mit dem Attributionscontrol. Die Warnungen (GeoJSON) bleiben dort.
 - Wechselt eine Definition den Quelltyp (`geojson` ↔ `image` ↔ `raster`), wird
   die Source neu aufgebaut — MapLibre kann eine Source nicht umtypisieren, und
   `setData` auf einer Image-Source ist ein stummer No-op.
@@ -256,6 +259,10 @@ im gleichen `HudPanel`-Muster wie die bestehenden:
    Stelle setzen (65 % statt 38 %).
 2. **Weather warnings** — Schalter, Zähler je Stufe, Liste der aktiven Warnungen
    (Stufe, Ereignis, Gebiet, Gültigkeit), Attribution.
+
+Beide Karten zeigen bei fehlgeschlagener Aktualisierung weiter ihre Daten
+(„… · refresh failed") statt eines reinen Fehlers — Status-Vorrang liegt in
+`src/lib/overlays/status.ts` und ist unit-getestet.
 
 Zeitangaben laufen bewusst in `Europe/Berlin`: DWD-Zeitstempel und
 Warnfenster („bis 09:00") meinen deutsche Ortszeit, unabhängig davon, wo der
@@ -332,6 +339,20 @@ gecacht.
   Browser-Cache (18 × ~40 KB), damit die Animation nicht ruckelt. Ohne Play
   wird genau ein Frame geladen. Die URLs laufen dabei durch `dataApiUrl()`
   (Gateway-Origin), nie gegen die App-Origin.
+- **Zeitbudgets (gemessen):** kaltes Radar-Rendering 1,6–10,1 s (Maximum aus
+  Review und eigener Messung: 10,15 s), kalter Warnungsaufbau 0,6–9,6 s
+  (`warnings.json` + WFS). Deshalb: Upstream-Timeout 15 s je Quelle,
+  Client-Budget 15 s für `/frames` (rein berechnet) und 40 s für `/warnings`
+  (2 × 15 s + Verarbeitung). Warnungen liefern nach Ablauf der 5-Minuten-TTL
+  **sofort** die letzte Fassung (`X-Cache: stale`) und bauen im Hintergrund neu;
+  nur die allererste Anfrage wartet.
+- **Radar-Bildfehler:** MapLibre schluckt fehlgeschlagene Image-Tiles still. Ein
+  `<img>`-Preload des gewählten Frames liefert ein eindeutiges Signal und wärmt
+  zugleich den Cache; bei Fehler (z. B. Gateway-504) zeigt die Karte
+  „Radar image could not be loaded for this frame." plus die Frame-Info.
+- **Sprache:** UI-Copy ist Englisch (die App ist `lang="en"`); DWD-Ereignis- und
+  Gebietsnamen bleiben deutsch, weil sie Daten sind. Uhrzeiten bleiben
+  `Europe/Berlin`.
 
 ### 4.4 Fehler-Normalisierung
 

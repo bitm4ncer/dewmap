@@ -3065,6 +3065,41 @@ select {
     left: auto !important;
     align-items: flex-end;
   }
+  [data-panel-open="true"] .map-credit {
+    right: calc(var(--panel-w) + 24px);
+  }
+}
+
+/* Credit line for image overlays (radar, future shadow raster). It is a
+   MapLibre control in the bottom-right stack, so it inherits the positioning
+   and visibility rules of `.maplibregl-ctrl-bottom-right` above. */
+.map-credit {
+  max-width: min(460px, 55vw);
+  margin-top: 4px;
+  padding: 3px 8px;
+  margin-bottom: 2px;
+  border-radius: var(--r-pill);
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(1.08);
+  color: var(--ink-dim);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-align: right;
+  pointer-events: auto;
+}
+.map-credit[hidden] { display: none; }
+.map-credit-name { color: var(--ink-mute); }
+.map-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--surf-3);
+  text-underline-offset: 2px;
+}
+.map-credit a:hover { color: var(--accent); }
+
+@media (max-width: 767px) {
+  .map-credit { text-align: left; }
 }
 
 

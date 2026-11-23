@@ -18,9 +18,11 @@ function fakeMap(layers: { id: string; type: string }[] = []) {
     sources: {} as Record<string, unknown>,
   };
   const paint = new Map<string, Record<string, unknown>>();
+  const setDataCalls: unknown[] = [];
   const map = {
     style,
     paint,
+    setDataCalls,
     getStyle: () => style,
     isStyleLoaded: () => true,
     getLayer: (id: string) => style.layers.find((l) => l.id === id),
@@ -31,6 +33,7 @@ function fakeMap(layers: { id: string; type: string }[] = []) {
             url: (style.sources[id] as { url?: string }).url,
             tiles: (style.sources[id] as { tiles?: string[] }).tiles,
             setData: (data: unknown) => {
+              setDataCalls.push(data);
               (style.sources[id] as { data?: unknown }).data = data;
             },
             updateImage: (options: { url: string }) => {
@@ -58,6 +61,7 @@ function fakeMap(layers: { id: string; type: string }[] = []) {
   return map as unknown as MLMap & {
     style: typeof style;
     paint: Map<string, Record<string, unknown>>;
+    setDataCalls: unknown[];
   };
 }
 
@@ -193,6 +197,58 @@ describe("reconcileOverlays", () => {
     ]);
     expect(map.getLayer("overlay:a:0")?.type).toBe("line");
     expect(map.getLayer("overlay:a:1")).toBeUndefined();
+  });
+
+  it("only pushes GeoJSON data when the reference actually changed", () => {
+    const map = fakeMap();
+    const def = definition("warnings");
+    const areas = empty;
+    const entry = { definition: def, resolved: geojson(areas) };
+
+    reconcileOverlays(map, [entry]);
+    // addSource carries the data; no setData round-trip is needed.
+    expect(map.setDataCalls).toHaveLength(0);
+
+    // A radar frame re-reconciles with the identical warnings collection.
+    reconcileOverlays(map, [{ definition: def, resolved: geojson(areas) }]);
+    reconcileOverlays(map, [{ definition: def, resolved: geojson(areas) }]);
+    expect(map.setDataCalls).toHaveLength(0);
+
+    const fresh: GeoJSON.FeatureCollection = {
+      type: "FeatureCollection",
+      features: [],
+    };
+    reconcileOverlays(map, [{ definition: def, resolved: geojson(fresh) }]);
+    expect(map.setDataCalls).toEqual([fresh]);
+  });
+
+  it("pushes data again after the source was rebuilt", () => {
+    const map = fakeMap();
+    const def = definition("warnings");
+    const areas = empty;
+    reconcileOverlays(map, [{ definition: def, resolved: geojson(areas) }]);
+    // Force a rebuild by switching the source type back and forth.
+    reconcileOverlays(map, [
+      {
+        definition: def,
+        resolved: {
+          source: {
+            type: "image",
+            url: "https://a/1.png",
+            coordinates: [
+              [1, 56],
+              [19, 56],
+              [19, 45],
+              [1, 45],
+            ],
+          },
+          layers: [{ type: "raster" }],
+        },
+      },
+    ]);
+    reconcileOverlays(map, [{ definition: def, resolved: geojson(areas) }]);
+    expect(map.getStyle().sources["overlay:warnings"]).toBeTruthy();
+    expect(map.getLayer("overlay:warnings:0")?.type).toBe("fill");
   });
 
   it("rebuilds the overlay when a definition changes its source type", () => {
