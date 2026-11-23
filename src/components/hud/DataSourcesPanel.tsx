@@ -23,7 +23,7 @@ const SOURCES: Source[] = [
     name: "Geobasis NRW",
     detail:
       "Building shadow pilot: LoD1 city model and DGM1 elevation model of North Rhine-Westphalia, rendered locally in a web worker. Licence: dl-de/zero 2.0 — attribution: Geobasis NRW.",
-    href: "https://www.opengeodata.nrw.de/produkte/geobasis/3dg/lod1/",
+    href: "https://www.opengeodata.nrw.de/produkte/geobasis/3dg/",
   },
   {
     name: "Esri / Maxar",
@@ -64,7 +64,7 @@ const SOURCES: Source[] = [
     name: "EEA Natura 2000",
     detail:
       "European protected areas (Habitats and Birds directives) as an EEA web map service.",
-    href: "https://www.eea.europa.eu/en/datahub/datahubitem-view/32ff2f92-0f4a-4d1a-9b3d-2f2f4dab6e42",
+    href: "https://www.eea.europa.eu/en/datahub",
   },
   {
     name: "OpenRailwayMap",

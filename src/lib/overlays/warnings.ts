@@ -118,7 +118,7 @@ export function warningPopupHtml(
   return `<div style="max-width:260px;font:12px/1.45 system-ui,sans-serif">
     <div style="display:flex;gap:6px;align-items:center">
       <span style="width:8px;height:8px;border-radius:50%;background:${color};flex:none"></span>
-      <strong>${escapeHtml(properties.label ?? severityLabel(level))}${escapeHtml(extra)}</strong>
+      <strong>${escapeHtml(severityLabel(level))}${escapeHtml(extra)}</strong>
     </div>
     <div style="margin-top:3px">${escapeHtml(properties.headline ?? properties.event ?? "")}</div>
     <div style="color:var(--ink-mute)">${escapeHtml(properties.area ?? "")}</div>
